@@ -64,7 +64,6 @@ export default function SpaceCanvas() {
       const pulse = Math.sin(now * star.tw + star.phase) * 0.5 + 0.5;
       const alpha = star.a * (0.4 + pulse * 0.6);
       const color = star.color === 'cyan' ? '52,239,255' : star.color === 'purple' ? '180,80,255' : '255,255,255';
-
       ctx.beginPath();
       ctx.fillStyle = `rgba(${color},${alpha})`;
       ctx.shadowColor = `rgba(${color},${alpha})`;
@@ -84,12 +83,10 @@ export default function SpaceCanvas() {
       const tailX = m.x - ux * m.len;
       const tailY = m.y - uy * m.len;
       const main = m.purple ? '180,80,255' : '52,239,255';
-
       const gradient = ctx.createLinearGradient(tailX, tailY, m.x, m.y);
       gradient.addColorStop(0, `rgba(${main},0)`);
       gradient.addColorStop(0.55, `rgba(${main},${0.54 * fade})`);
       gradient.addColorStop(1, `rgba(255,255,255,${fade})`);
-
       ctx.strokeStyle = gradient;
       ctx.lineWidth = m.lineWidth;
       ctx.lineCap = 'round';
@@ -104,24 +101,19 @@ export default function SpaceCanvas() {
 
     function loop(now) {
       ctx.clearRect(0, 0, width, height);
-
       const nebula = ctx.createRadialGradient(width * 0.65, height * 0.46, 10, width * 0.65, height * 0.46, width * 0.48);
       nebula.addColorStop(0, 'rgba(126,67,255,.14)');
       nebula.addColorStop(1, 'rgba(126,67,255,0)');
       ctx.fillStyle = nebula;
       ctx.fillRect(0, 0, width, height);
-
       stars.forEach((star) => drawStar(star, now));
-
       if (now - lastMeteor > nextMeteor) spawnMeteor(now);
-
       meteors.forEach((m) => {
         m.x += m.vx;
         m.y += m.vy;
         m.life += 1;
         drawMeteor(m);
       });
-
       meteors = meteors.filter((m) => m.life < m.maxLife && m.x > -280 && m.x < width + 280 && m.y < height + 200);
       animationId = requestAnimationFrame(loop);
     }
