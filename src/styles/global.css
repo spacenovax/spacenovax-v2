@@ -799,3 +799,251 @@ button {
     font-size: 10px;
   }
 }
+
+
+/* V2 Polish 01: mobile balance, spacing, animation upgrades */
+.hero-card {
+  height: 620px;
+}
+
+.balance-block h2 {
+  font-size: clamp(42px, 7.8vw, 68px);
+  max-width: 620px;
+  letter-spacing: -2px;
+}
+
+.phase-pill {
+  right: 34px;
+  top: 32px;
+}
+
+.today-card {
+  bottom: 88px;
+  transform: translateX(-50%) scale(.92);
+}
+
+.boost-card {
+  bottom: 20px;
+}
+
+.ship-wrap {
+  animation: shipFloatPremium 5.2s ease-in-out infinite;
+}
+
+.ship-svg {
+  animation: shipGlowPulse 3.8s ease-in-out infinite alternate;
+}
+
+.planet-main {
+  animation: planetDrift 12s ease-in-out infinite alternate;
+}
+
+.planet-small {
+  animation: smallPlanetFloat 8s ease-in-out infinite alternate;
+}
+
+.balance-block h2 {
+  animation: balanceGlow 2.6s ease-in-out infinite alternate;
+}
+
+.today-card {
+  animation: todayPulse 3.4s ease-in-out infinite alternate;
+}
+
+.genesis-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.genesis-btn::after {
+  content: "";
+  position: absolute;
+  inset: -80%;
+  background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.28) 50%, transparent 65%);
+  transform: translateX(-70%) rotate(12deg);
+  animation: btnSweep 4.5s ease-in-out infinite;
+}
+
+@keyframes shipFloatPremium {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-15deg) perspective(900px) rotateX(9deg) rotateY(-8deg) translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateX(-50%) rotate(-15deg) perspective(900px) rotateX(9deg) rotateY(-8deg) translateY(-10px) translateX(6px);
+  }
+}
+
+@keyframes shipGlowPulse {
+  from { filter: drop-shadow(0 0 22px #34efff) drop-shadow(0 0 22px #7e43ff); }
+  to { filter: drop-shadow(0 0 35px #34efff) drop-shadow(0 0 34px #7e43ff); }
+}
+
+@keyframes planetDrift {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(-10px) scale(1.04); }
+}
+
+@keyframes smallPlanetFloat {
+  from { transform: translate(0, 0); opacity: .55; }
+  to { transform: translate(10px, -14px); opacity: .9; }
+}
+
+@keyframes balanceGlow {
+  from { text-shadow: 0 0 8px rgba(255,255,255,.18); }
+  to { text-shadow: 0 0 24px rgba(255,255,255,.38), 0 0 22px rgba(52,239,255,.12); }
+}
+
+@keyframes todayPulse {
+  from { box-shadow: 0 0 12px rgba(126,67,255,.22); }
+  to { box-shadow: 0 0 28px rgba(126,67,255,.48), 0 0 18px rgba(52,239,255,.22); }
+}
+
+@keyframes btnSweep {
+  0%, 55% { transform: translateX(-75%) rotate(12deg); opacity: 0; }
+  70% { opacity: 1; }
+  100% { transform: translateX(75%) rotate(12deg); opacity: 0; }
+}
+
+/* Mobile polish */
+@media (max-width: 768px) {
+  .hero-card {
+    height: 625px;
+    padding: 34px 30px;
+  }
+
+  .balance-block h2 {
+    font-size: 47px;
+    max-width: 360px;
+    letter-spacing: -1.6px;
+  }
+
+  .balance-block h3 {
+    font-size: 35px;
+    margin-top: 10px;
+  }
+
+  .label {
+    font-size: 13px;
+    letter-spacing: 7px;
+    max-width: 250px;
+  }
+
+  .phase-pill {
+    top: 28px;
+    right: 28px;
+    padding: 10px 15px;
+    font-size: 17px;
+    border-radius: 16px;
+  }
+
+  .phase-pill i {
+    width: 22px;
+    height: 22px;
+    border-width: 6px;
+  }
+
+  .usd {
+    font-size: 18px;
+    padding: 11px 20px;
+  }
+
+  .ship-wrap {
+    top: 285px;
+    width: 318px;
+  }
+
+  .today-card {
+    bottom: 88px;
+    transform: translateX(-50%) scale(.86);
+  }
+
+  .boost-card {
+    bottom: 18px;
+    left: 28px;
+    right: 28px;
+  }
+
+  .reward-one {
+    top: 360px;
+    left: 174px;
+    opacity: .56;
+  }
+
+  .reward-two {
+    top: 342px;
+    right: 68px;
+    opacity: .60;
+  }
+}
+
+@media (max-width: 430px) {
+  .hero-card {
+    height: 612px;
+    padding: 32px 28px;
+  }
+
+  .balance-block h2 {
+    font-size: 44px;
+    max-width: 315px;
+  }
+
+  .balance-block h3 {
+    font-size: 34px;
+  }
+
+  .phase-pill {
+    top: 68px;
+    right: 26px;
+    transform: scale(.86);
+    transform-origin: top right;
+  }
+
+  .ship-wrap {
+    top: 286px;
+    width: 300px;
+  }
+
+  .planet-main {
+    bottom: 210px;
+  }
+
+  .today-card {
+    bottom: 90px;
+  }
+
+  .boost-card {
+    bottom: 20px;
+  }
+
+  .boost-card div {
+    padding: 14px 6px;
+  }
+
+  .boost-card small {
+    font-size: 12px;
+  }
+
+  .boost-card b {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 370px) {
+  .balance-block h2 {
+    font-size: 39px;
+  }
+
+  .balance-block h3 {
+    font-size: 30px;
+  }
+
+  .phase-pill {
+    top: 66px;
+    right: 20px;
+    transform: scale(.78);
+  }
+
+  .ship-wrap {
+    width: 280px;
+  }
+}

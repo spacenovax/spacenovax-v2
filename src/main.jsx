@@ -237,13 +237,28 @@ function Ship() {
   );
 }
 
+
+function AnimatedBalance() {
+  const [balance, setBalance] = React.useState(15250.000000);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setBalance((value) => value + 0.000018 + Math.random() * 0.000012);
+    }, 1800);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return <>{balance.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}</>;
+}
+
 function MiningHero() {
   return (
     <section className="hero-card glass">
       <SpaceCanvas />
       <div className="balance-block">
         <div className="label">TOTAL BALANCE</div>
-        <h2>15,250.000000</h2>
+        <h2><AnimatedBalance /></h2>
         <h3>SPNX Points</h3>
         <span className="usd">≈ $18.43 USD</span>
       </div>

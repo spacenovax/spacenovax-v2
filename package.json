@@ -1,7 +1,7 @@
 {
-  "name": "spacenovax-v2",
-  "version": "2.0.0",
-  "description": "SpaceNovaX V2 Telegram Mining Mini App",
+  "name": "spacenovax-v2-polish-01",
+  "version": "2.1.0",
+  "description": "SpaceNovaX V2 Polish 01 - mobile balance and animation upgrade",
   "type": "module",
   "scripts": {
     "start": "node server.js",

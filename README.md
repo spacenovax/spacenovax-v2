@@ -1,26 +1,20 @@
-# SpaceNovaX V2 Clean
+# SpaceNovaX V2 Polish 01
 
-완전히 새로 정리한 SpaceNovaX V2 프로젝트입니다.
+V2 배포 후 첫 디자인 개선 버전입니다.
 
-## 특징
-- React + Vite 구조
-- Header 컴포넌트 1개만 존재
-- PC/모바일 반응형 헤더
-- Genesis Launch 버튼 겹침 없음
-- Canvas 기반 별/유성 효과
-- 우주선 애니메이션
-- 채굴 UI
-- Render 배포 가능
-
-## GitHub 업로드
-1. 이 ZIP을 압축 해제
-2. spacenovax-v2 저장소에 전체 파일 업로드
-3. Commit changes
+## 개선 내용
+- 모바일에서 TOTAL BALANCE 숫자가 Phase 1과 겹치는 문제 개선
+- 숫자 크기 10~15% 축소
+- Today's Mining 카드와 하단 통계 겹침 완화
+- 채굴 잔액 실시간 증가 애니메이션 추가
+- 우주선 부드러운 흔들림 강화
+- 행성 움직임 추가
+- Genesis Launch 버튼 빛 스윕 효과 추가
+- 기존 React + Vite 구조 유지
 
 ## Render 설정
-- Build Command: npm install && npm run build
-- Start Command: npm start
+Build Command:
+npm install && npm run build
 
-## 로컬 실행
-npm install
-npm run dev
+Start Command:
+npm start

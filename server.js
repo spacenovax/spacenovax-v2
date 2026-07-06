@@ -11,15 +11,15 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, project: 'SpaceNovaX V2', version: '2.0.0' });
+  res.json({ ok: true, project: 'SpaceNovaX V2', version: '2.1.0' });
 });
 
 app.use(express.static(path.join(__dirname, 'dist')));
 
-app.use((req, res) => {
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V2 running on port ${PORT}`);
+  console.log(`SpaceNovaX V2 Polish 01 running on port ${PORT}`);
 });
