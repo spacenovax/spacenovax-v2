@@ -153,7 +153,7 @@ function publicUser(user) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, project: 'SpaceNovaX V3 Ultimate Mobile UI', version: '3.0.0' });
+  res.json({ ok: true, project: 'SpaceNovaX V3.1 Working Tabs', version: '3.1.0' });
 });
 
 app.post('/api/session', (req, res) => {
@@ -255,5 +255,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V3 Ultimate Mobile UI running on port ${PORT}`);
+  console.log(`SpaceNovaX V3.1 Working Tabs running on port ${PORT}`);
 });

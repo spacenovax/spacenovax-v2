@@ -1,18 +1,23 @@
 const navItems = [
-  { icon: '🏠', label: 'Home' },
-  { icon: '⛏️', label: 'Mining' },
-  { icon: '⭐', label: 'Missions' },
-  { icon: '👥', label: 'Friends' },
-  { icon: '🏆', label: 'Ranking' },
-  { icon: '👛', label: 'Wallet' },
-  { icon: '•••', label: 'More' },
+  { key: 'home', icon: '🏠', label: 'Home' },
+  { key: 'mining', icon: '⛏️', label: 'Mining' },
+  { key: 'missions', icon: '⭐', label: 'Missions' },
+  { key: 'friends', icon: '👥', label: 'Friends' },
+  { key: 'ranking', icon: '🏆', label: 'Ranking' },
+  { key: 'wallet', icon: '👛', label: 'Wallet' },
+  { key: 'more', icon: '•••', label: 'More' },
 ];
 
-export default function BottomNav() {
+export default function BottomNav({ activeTab, onChange }) {
   return (
     <nav className="bottom-nav">
-      {navItems.map((item, index) => (
-        <button key={item.label} className={index === 0 ? 'active' : ''}>
+      {navItems.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          className={activeTab === item.key ? 'active' : ''}
+          onClick={() => onChange(item.key)}
+        >
           <span>{item.icon}</span>
           <b>{item.label}</b>
         </button>

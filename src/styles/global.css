@@ -833,3 +833,205 @@ button { font-family: inherit; }
     font-size: 9px;
   }
 }
+
+
+/* V3.1 Working Tabs + mobile overlap fix */
+.page-card {
+  min-height: 420px;
+  border-radius: 30px;
+  padding: 28px;
+  margin-bottom: 18px;
+}
+
+.page-card h2 {
+  margin: 0 0 12px;
+  font-size: 34px;
+}
+
+.page-card p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.page-stats {
+  display: grid;
+  gap: 12px;
+}
+
+.page-stats div,
+.invite-box,
+.wallet-balance,
+.rank-list div {
+  border: 1px solid rgba(52,239,255,.18);
+  background: rgba(3,7,18,.45);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.page-stats small,
+.invite-box small,
+.wallet-balance small {
+  display: block;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.page-stats b,
+.invite-box b,
+.wallet-balance b {
+  color: #fff;
+  font-size: 22px;
+  word-break: break-word;
+}
+
+.mission-list,
+.more-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.mission-list button,
+.more-grid button,
+.connect-wallet {
+  border: 1px solid rgba(126,67,255,.55);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(52,239,255,.14), rgba(126,67,255,.28));
+  color: white;
+  font-weight: 900;
+  text-align: left;
+}
+
+.rank-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rank-list div {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.rank-list b {
+  color: var(--cyan);
+}
+
+.rank-list strong {
+  color: white;
+}
+
+.wallet-balance {
+  margin-bottom: 14px;
+}
+
+.connect-wallet {
+  width: 100%;
+  text-align: center;
+}
+
+.sub-text {
+  font-size: 13px;
+}
+
+/* stronger mobile layout fix */
+@media (max-width: 768px) {
+  .hero-top {
+    display: block;
+  }
+
+  .phase-pill {
+    position: absolute !important;
+    top: 22px !important;
+    right: 22px !important;
+    transform: scale(.72) !important;
+    transform-origin: top right !important;
+    margin-top: 0 !important;
+  }
+
+  .balance-block h2 {
+    font-size: 31px !important;
+    max-width: 230px !important;
+    letter-spacing: -0.6px !important;
+  }
+
+  .label {
+    letter-spacing: 4px !important;
+  }
+
+  .balance-block h3 {
+    font-size: 28px !important;
+    margin-top: 8px !important;
+  }
+
+  .today-card {
+    bottom: 136px !important;
+    transform: translateX(-50%) scale(.74) !important;
+  }
+
+  .ship-wrap {
+    top: 292px !important;
+    width: 320px !important;
+  }
+
+  .boost-card {
+    bottom: 76px !important;
+  }
+
+  .mining-action {
+    bottom: 16px !important;
+  }
+
+  .page-card {
+    min-height: calc(100vh - 220px);
+    border-radius: 28px;
+    padding: 24px 20px;
+  }
+
+  .page-card h2 {
+    font-size: 28px;
+  }
+
+  .rank-list div {
+    grid-template-columns: 32px 1fr;
+  }
+
+  .rank-list strong {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 430px) {
+  .balance-block h2 {
+    font-size: 30px !important;
+    max-width: 218px !important;
+  }
+
+  .phase-pill {
+    top: 20px !important;
+    right: 18px !important;
+    transform: scale(.68) !important;
+  }
+
+  .ship-wrap {
+    top: 286px !important;
+    width: 300px !important;
+  }
+
+  .today-card {
+    bottom: 136px !important;
+  }
+}
+
+@media (max-width: 370px) {
+  .balance-block h2 {
+    font-size: 27px !important;
+    max-width: 195px !important;
+  }
+
+  .phase-pill {
+    transform: scale(.6) !important;
+  }
+}

@@ -7,6 +7,7 @@ import ExplorerCard from './components/ExplorerCard.jsx';
 import MiningHero from './components/MiningHero.jsx';
 import MiningPanel from './components/MiningPanel.jsx';
 import BottomNav from './components/BottomNav.jsx';
+import TabPage from './components/TabPage.jsx';
 
 function getTelegramUser() {
   const tg = window.Telegram?.WebApp;
@@ -23,6 +24,7 @@ function App() {
   const [notice, setNotice] = useState('Connecting SpaceNovaX...');
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(Date.now());
+  const [activeTab, setActiveTab] = useState('home');
 
   const telegramUser = useMemo(() => getTelegramUser(), []);
 
@@ -114,11 +116,17 @@ function App() {
       <main className="app">
         <Header user={user} />
         <div className="notice">{notice}</div>
-        <ExplorerCard user={user} />
-        <MiningHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
-        <MiningPanel user={user} />
+        {activeTab === 'home' && (
+          <>
+            <ExplorerCard user={user} />
+            <MiningHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
+            <MiningPanel user={user} />
+          </>
+        )}
+
+        <TabPage tab={activeTab} user={user} notice={notice} />
       </main>
-      <BottomNav />
+      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
     </div>
   );
 }
