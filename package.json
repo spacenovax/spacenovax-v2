@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v2-complete",
-  "version": "2.2.0",
+  "name": "spacenovax-v2-final-render-ready",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,5 @@
     "react": "latest",
     "react-dom": "latest",
     "express": "latest"
-  },
-  "devDependencies": {}
+  }
 }
