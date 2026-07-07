@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v8-platform-hotfix",
-  "version": "8.0.1",
+  "name": "spacenovax-v9-ultimate",
+  "version": "9.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V8 Platform Hotfix - React mount fixed"
+  "description": "SpaceNovaX V9 Ultimate - unified mining, missions, wallet, referral, game, KYC, conversion"
 }

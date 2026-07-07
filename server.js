@@ -61,7 +61,7 @@ function readData() {
     { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
     { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
-    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
+    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 20, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
     { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
   ];
   const missionMapV73 = Object.fromEntries((data.missions || []).map((m) => [m.id, m]));
@@ -81,7 +81,7 @@ function readData() {
     { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
     { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
-    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
+    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 20, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
     { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
   ];
   const existingMissions = Object.fromEntries((data.missions || []).map((m) => [m.id, m]));
@@ -788,7 +788,7 @@ function v8EnsureMissions(data) {
     { id: 'x', icon: '𝕏', title: 'X Twitter', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
     { id: 'discord', icon: '💬', title: 'Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
-    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
+    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 20, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
     { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
   ];
 }
@@ -826,6 +826,161 @@ app.post('/api/missions/claim', (req, res) => {
   user.updatedAt = Date.now();
   data.events.push({ type: 'mission_claim', userId: user.id, missionId: mission.id, reward, at: Date.now() });
   writeData(data);
+  res.json({ ok: true, reward, user: publicUser(data, user) });
+});
+
+
+// V8.2 Game reward daily cap: max 20 SPNX per day
+app.post('/api/game/reward', (req, res) => {
+  const data = readData();
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const today = new Date(Date.now()).toISOString().slice(0, 10);
+  const requested = Math.max(0, Number(req.body?.reward || 0));
+  const score = Math.max(0, Number(req.body?.score || 0));
+
+  user.gameReward ||= { date: today, earnedToday: 0, bestScore: 0 };
+  if (user.gameReward.date !== today) {
+    user.gameReward = { date: today, earnedToday: 0, bestScore: user.gameReward.bestScore || 0 };
+  }
+
+  const remaining = Math.max(0, 20 - Number(user.gameReward.earnedToday || 0));
+  const reward = Math.min(requested, remaining);
+
+  if (reward <= 0) {
+    user.gameReward.bestScore = Math.max(Number(user.gameReward.bestScore || 0), score);
+    writeData(data);
+    return res.json({ ok: true, reward: 0, message: 'Daily game reward cap reached.', user: publicUser(data, user) });
+  }
+
+  user.balance = Number(user.balance || 0) + reward;
+  user.gameReward.earnedToday = Number(user.gameReward.earnedToday || 0) + reward;
+  user.gameReward.bestScore = Math.max(Number(user.gameReward.bestScore || 0), score);
+  user.updatedAt = Date.now();
+
+  data.events.push({ type: 'game_reward', userId: user.id, reward, score, date: today, at: Date.now() });
+  writeData(data);
+
+  res.json({ ok: true, reward, user: publicUser(data, user) });
+});
+
+
+// V8.2 Token conversion request: 1 Point = 1 SPNX, KYC/admin review required
+app.post('/api/conversion/request', (req, res) => {
+  const data = readData();
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const amount = Math.max(0, Number(req.body?.amount || user.balance || 0));
+
+  if (!user.solanaWallet) return res.status(400).json({ ok: false, message: 'Solana wallet required.' });
+  if (!amount || amount > Number(user.balance || 0)) return res.status(400).json({ ok: false, message: 'Invalid conversion amount.' });
+
+  data.convertRequests ||= [];
+  const request = {
+    id: 'cv-' + Math.random().toString(16).slice(2, 10),
+    userId: user.id,
+    wallet: user.solanaWallet,
+    amount,
+    rate: '1:1',
+    status: 'pending_kyc_review',
+    createdAt: Date.now()
+  };
+  data.convertRequests.push(request);
+  data.events.push({ type: 'conversion_request', userId: user.id, amount, wallet: user.solanaWallet, at: Date.now() });
+  writeData(data);
+
+  res.json({ ok: true, request });
+});
+
+
+// V9 Ultimate KYC API
+app.post('/api/kyc/submit', (req, res) => {
+  const data = readData();
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  user.kyc = {
+    status: 'pending',
+    name: String(req.body?.name || ''),
+    country: String(req.body?.country || ''),
+    note: String(req.body?.note || ''),
+    submittedAt: Date.now()
+  };
+  user.updatedAt = Date.now();
+  data.events.push({ type: 'kyc_submitted', userId: user.id, at: Date.now() });
+  writeData(data);
+  res.json({ ok: true, user: publicUser(data, user) });
+});
+
+// V9 Ultimate Wallet API
+app.post('/api/wallet/save', (req, res) => {
+  const data = readData();
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const wallet = String(req.body?.wallet || '').trim();
+
+  if (!wallet || wallet.length < 32 || wallet.length > 48) {
+    return res.status(400).json({ ok: false, message: 'Invalid Solana wallet address length.' });
+  }
+
+  const duplicate = Object.values(data.users || {}).find((u) => u.id !== user.id && String(u.solanaWallet || '').trim() === wallet);
+  if (duplicate) return res.status(400).json({ ok: false, message: 'This wallet is already registered to another account.' });
+
+  user.solanaWallet = wallet;
+  user.walletUpdatedAt = Date.now();
+  user.updatedAt = Date.now();
+  data.events.push({ type: 'wallet_registered', userId: user.id, wallet, at: Date.now() });
+  writeData(data);
+  res.json({ ok: true, user: publicUser(data, user) });
+});
+
+// V9 Ultimate Token Conversion API
+app.post('/api/conversion/request', (req, res) => {
+  const data = readData();
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const amount = Math.max(0, Number(req.body?.amount || user.balance || 0));
+
+  if (!user.solanaWallet) return res.status(400).json({ ok: false, message: 'Solana wallet required.' });
+  if (!amount || amount > Number(user.balance || 0)) return res.status(400).json({ ok: false, message: 'Invalid conversion amount.' });
+
+  data.convertRequests ||= [];
+  const request = {
+    id: 'cv-' + Math.random().toString(16).slice(2, 10),
+    userId: user.id,
+    wallet: user.solanaWallet,
+    amount,
+    rate: '1:1',
+    status: 'pending_kyc_review',
+    createdAt: Date.now()
+  };
+  data.convertRequests.push(request);
+  data.events.push({ type: 'conversion_request', userId: user.id, amount, wallet: user.solanaWallet, at: Date.now() });
+  writeData(data);
+  res.json({ ok: true, request });
+});
+
+// V9 Ultimate Game Reward API: max 20 SPNX/day
+app.post('/api/game/reward', (req, res) => {
+  const data = readData();
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const today = new Date(Date.now()).toISOString().slice(0, 10);
+  const requested = Math.max(0, Number(req.body?.reward || 0));
+  const score = Math.max(0, Number(req.body?.score || 0));
+
+  user.gameReward ||= { date: today, earnedToday: 0, bestScore: 0 };
+  if (user.gameReward.date !== today) {
+    user.gameReward = { date: today, earnedToday: 0, bestScore: user.gameReward.bestScore || 0 };
+  }
+
+  const remaining = Math.max(0, 20 - Number(user.gameReward.earnedToday || 0));
+  const reward = Math.min(requested, remaining);
+
+  if (reward > 0) {
+    user.balance = Number(user.balance || 0) + reward;
+    user.gameReward.earnedToday = Number(user.gameReward.earnedToday || 0) + reward;
+  }
+
+  user.gameReward.bestScore = Math.max(Number(user.gameReward.bestScore || 0), score);
+  user.updatedAt = Date.now();
+
+  data.events.push({ type: 'game_reward', userId: user.id, reward, score, date: today, at: Date.now() });
+  writeData(data);
+
   res.json({ ok: true, reward, user: publicUser(data, user) });
 });
 
