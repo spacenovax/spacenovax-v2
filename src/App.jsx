@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './styles/global.css';
 
 const OFFICIAL_LINKS = {
@@ -283,33 +283,321 @@ function KycPage({ user, setUser }) {
   );
 }
 
+
+function NovaArcadeCanvas({ onReward, dailyRemaining }) {
+  const canvasRef = useRef(null);
+  const stateRef = useRef({
+    running: true,
+    score: 0,
+    crystals: 0,
+    shipX: 0.5,
+    targetX: 0.5,
+    lastRewardScore: 0,
+    objects: [],
+    stars: [],
+    frame: 0,
+  });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const state = stateRef.current;
+    let raf = 0;
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!state.stars.length) {
+        state.stars = Array.from({ length: 160 }, (_, i) => ({
+          x: (i * 71 + 13) % rect.width,
+          y: (i * 47 + 19) % rect.height,
+          s: 0.6 + ((i * 17) % 20) / 10,
+          a: 0.35 + ((i * 9) % 60) / 100,
+          v: 0.15 + ((i * 5) % 20) / 40,
+        }));
+      }
+    }
+
+    function spawn(w) {
+      const typeRoll = Math.random();
+      const type = typeRoll < 0.58 ? 'crystal' : typeRoll < 0.86 ? 'asteroid' : 'boost';
+      state.objects.push({
+        type,
+        x: 30 + Math.random() * (w - 60),
+        y: -40,
+        r: type === 'asteroid' ? 22 + Math.random() * 18 : type === 'boost' ? 18 : 16,
+        vy: type === 'asteroid' ? 1.5 + Math.random() * 1.5 : 1.2 + Math.random() * 1.1,
+        spin: Math.random() * Math.PI,
+      });
+    }
+
+    function drawShip(x, y, t) {
+      ctx.save();
+      ctx.translate(x, y + Math.sin(t / 28) * 4);
+      ctx.shadowColor = '#34efff';
+      ctx.shadowBlur = 30;
+
+      // engine flame
+      const flame = 62 + Math.sin(t / 4) * 20;
+      const grad = ctx.createLinearGradient(0, 32, 0, 32 + flame);
+      grad.addColorStop(0, 'rgba(255,255,255,.95)');
+      grad.addColorStop(.25, 'rgba(52,239,255,.85)');
+      grad.addColorStop(.62, 'rgba(91,104,255,.55)');
+      grad.addColorStop(1, 'rgba(255,60,231,0)');
+      ctx.fillStyle = grad;
+      [-28, 0, 28].forEach((dx) => {
+        ctx.beginPath();
+        ctx.moveTo(dx - 9, 28);
+        ctx.lineTo(dx + 9, 28);
+        ctx.lineTo(dx, 32 + flame);
+        ctx.closePath();
+        ctx.fill();
+      });
+
+      // wings
+      const wingGrad = ctx.createLinearGradient(-120, -10, 120, 20);
+      wingGrad.addColorStop(0, '#f8fbff');
+      wingGrad.addColorStop(.45, '#7c8fa8');
+      wingGrad.addColorStop(1, '#f8fbff');
+      ctx.fillStyle = wingGrad;
+      ctx.beginPath();
+      ctx.moveTo(-18, 6);
+      ctx.lineTo(-128, 52);
+      ctx.lineTo(-82, 0);
+      ctx.lineTo(-22, -18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(18, 6);
+      ctx.lineTo(128, 52);
+      ctx.lineTo(82, 0);
+      ctx.lineTo(22, -18);
+      ctx.closePath();
+      ctx.fill();
+
+      // body
+      const bodyGrad = ctx.createLinearGradient(-30, -80, 36, 64);
+      bodyGrad.addColorStop(0, '#ffffff');
+      bodyGrad.addColorStop(.35, '#cbd8e8');
+      bodyGrad.addColorStop(.6, '#41536b');
+      bodyGrad.addColorStop(1, '#f8fbff');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, -98);
+      ctx.bezierCurveTo(42, -40, 48, 26, 0, 72);
+      ctx.bezierCurveTo(-48, 26, -42, -40, 0, -98);
+      ctx.closePath();
+      ctx.fill();
+
+      // cockpit
+      const cockGrad = ctx.createRadialGradient(0, -38, 4, 0, -30, 42);
+      cockGrad.addColorStop(0, '#6ffaff');
+      cockGrad.addColorStop(.38, '#12315c');
+      cockGrad.addColorStop(1, '#020617');
+      ctx.fillStyle = cockGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -34, 20, 42, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // engines
+      [-30, 0, 30].forEach((dx) => {
+        const eg = ctx.createRadialGradient(dx, 28, 2, dx, 28, 18);
+        eg.addColorStop(0, '#fff');
+        eg.addColorStop(.3, '#34efff');
+        eg.addColorStop(.65, '#7e43ff');
+        eg.addColorStop(1, '#020617');
+        ctx.fillStyle = eg;
+        ctx.beginPath();
+        ctx.arc(dx, 28, 18, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    function draw() {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const t = state.frame++;
+      ctx.clearRect(0, 0, w, h);
+
+      // deep space
+      const bg = ctx.createRadialGradient(w * .55, h * .45, 10, w * .5, h * .45, h * .75);
+      bg.addColorStop(0, '#172968');
+      bg.addColorStop(.35, '#070b22');
+      bg.addColorStop(1, '#02030b');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+
+      // nebula
+      ctx.save();
+      ctx.globalAlpha = .35;
+      const ng = ctx.createRadialGradient(w * .35, h * .35, 20, w * .35, h * .35, w * .55);
+      ng.addColorStop(0, '#7e43ff');
+      ng.addColorStop(.4, '#123cff');
+      ng.addColorStop(1, 'transparent');
+      ctx.fillStyle = ng;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+
+      // stars no tiled pattern
+      state.stars.forEach((s) => {
+        s.y += s.v;
+        if (s.y > h) { s.y = -4; s.x = Math.random() * w; }
+        ctx.globalAlpha = s.a * (0.55 + Math.sin((t + s.x) / 28) * 0.45);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+
+      if (t % 34 === 0) spawn(w);
+      state.objects.forEach((o) => {
+        o.y += o.vy;
+        o.spin += 0.04;
+
+        if (o.type === 'asteroid') {
+          ctx.save();
+          ctx.translate(o.x, o.y);
+          ctx.rotate(o.spin);
+          ctx.shadowColor = '#ff7a2f';
+          ctx.shadowBlur = 14;
+          const g = ctx.createRadialGradient(-6, -8, 3, 0, 0, o.r);
+          g.addColorStop(0, '#d8d8d8');
+          g.addColorStop(.55, '#383843');
+          g.addColorStop(1, '#08080d');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          for (let i = 0; i < 9; i++) {
+            const a = (Math.PI * 2 / 9) * i;
+            const rr = o.r * (0.72 + ((i * 13) % 30) / 100);
+            ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        } else if (o.type === 'boost') {
+          ctx.font = '30px system-ui';
+          ctx.shadowColor = '#ffd66e';
+          ctx.shadowBlur = 20;
+          ctx.fillText('⚡', o.x - 14, o.y + 12);
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.font = '28px system-ui';
+          ctx.shadowColor = '#8b5cff';
+          ctx.shadowBlur = 18;
+          ctx.fillText('💎', o.x - 14, o.y + 10);
+          ctx.shadowBlur = 0;
+        }
+      });
+      state.objects = state.objects.filter((o) => o.y < h + 60);
+
+      // smooth ship movement
+      state.shipX += (state.targetX - state.shipX) * 0.08;
+      const shipX = w * state.shipX;
+      const shipY = h - 135;
+      drawShip(shipX, shipY, t);
+
+      // collection zone
+      for (const o of state.objects) {
+        const dx = o.x - shipX;
+        const dy = o.y - shipY;
+        const hit = Math.sqrt(dx * dx + dy * dy) < (o.r + 42);
+        if (hit && o.type !== 'asteroid') {
+          o.y = h + 100;
+          state.score += o.type === 'boost' ? 25 : 10;
+          state.crystals += o.type === 'boost' ? 0 : 1;
+          if (state.score - state.lastRewardScore >= 30 && dailyRemaining > 0) {
+            state.lastRewardScore = state.score;
+            onReward(Math.min(5, dailyRemaining));
+          }
+        }
+      }
+
+      // HUD
+      ctx.fillStyle = 'rgba(2,5,20,.62)';
+      ctx.strokeStyle = 'rgba(52,239,255,.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(12, 12, 150, 52, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#34efff';
+      ctx.font = '700 14px system-ui';
+      ctx.fillText('SCORE', 28, 32);
+      ctx.fillStyle = '#fff';
+      ctx.font = '900 22px system-ui';
+      ctx.fillText(String(state.score), 28, 56);
+
+      raf = requestAnimationFrame(draw);
+    }
+
+    resize();
+    const onResize = () => { state.stars = []; resize(); };
+    const onMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+      state.targetX = Math.max(0.12, Math.min(0.88, (clientX - rect.left) / rect.width));
+    };
+    window.addEventListener('resize', onResize);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchmove', onMove, { passive: true });
+    draw();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onResize);
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('touchmove', onMove);
+    };
+  }, [dailyRemaining, onReward]);
+
+  return <canvas className="arcade-canvas" ref={canvasRef} />;
+}
+
 function GamePage({ user, setUser }) {
   const today = new Date().toISOString().slice(0, 10);
   const gs = user.gameReward || { date: today, earnedToday: 0, bestScore: 0 };
   const earned = gs.date === today ? Number(gs.earnedToday || 0) : 0;
   const remaining = Math.max(0, 20 - earned);
   const [score, setScore] = useState(0);
-  const [notice, setNotice] = useState('Nova-X1 Arcade · 하루 최대 20 SPNX Point');
-  async function collect() {
-    const next = score + 10;
-    setScore(next);
-    if (remaining <= 0) { setNotice('오늘 게임 보상 20 SPNX를 모두 받았습니다. 랭킹은 계속 기록됩니다.'); return; }
-    const reward = Math.min(5, remaining);
-    try { const data = await api('/api/game/reward', { method: 'POST', body: JSON.stringify({ score: next, reward }) }); if (data.user) setUser(data.user); setNotice(`💎 Crystal collected! +${reward} SPNX`); } catch { setNotice(`Preview reward: +${reward} SPNX · 서버 연결 후 실제 지급됩니다.`); }
+  const [notice, setNotice] = useState('Nova-X1 Live Arcade · 하루 최대 20 SPNX Point');
+
+  async function rewardGame(reward) {
+    if (remaining <= 0) {
+      setNotice('오늘 게임 보상 20 SPNX를 모두 받았습니다. 랭킹은 계속 기록됩니다.');
+      return;
+    }
+    try {
+      const nextScore = score + 30;
+      setScore(nextScore);
+      const data = await api('/api/game/reward', { method: 'POST', body: JSON.stringify({ score: nextScore, reward }) });
+      if (data.user) setUser(data.user);
+      setNotice(`💎 Live Arcade reward! +${data.reward} SPNX`);
+    } catch {
+      setNotice(`Preview reward: +${reward} SPNX · 서버 연결 후 실제 지급됩니다.`);
+    }
   }
+
   return (
     <section className="page premium-card content-card game-page">
-      <h2>🎮 Nova-X1 Arcade</h2><p>{notice}</p>
-      <div className="grid"><div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div><div><small>Remaining</small><b>{remaining} SPNX</b></div></div>
-      <div className="arcade-stage">
-        <StarField count={90} />
-        <span className="game-meteor gm1" /><span className="game-meteor gm2" />
-        <span className="asteroid a1" /><span className="asteroid a2" /><span className="asteroid a3" />
-        <span className="crystal c1">💎</span><span className="crystal c2">💎</span><span className="crystal c3">💎</span><span className="boost">⚡</span>
-        <CinematicShip active game />
-        <button className="control left">‹</button><button className="control right">›</button>
+      <h2>🎮 Nova-X1 Live Arcade</h2>
+      <p>{notice}</p>
+      <div className="grid">
+        <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
+        <div><small>Remaining</small><b>{remaining} SPNX</b></div>
       </div>
-      <div className="two-buttons"><button onClick={collect}>💎 Collect Crystal</button><button onClick={() => { setScore(0); setNotice('Game reset. Try again.'); }}>Reset</button></div>
+      <div className="arcade-live">
+        <NovaArcadeCanvas onReward={rewardGame} dailyRemaining={remaining} />
+      </div>
+      <div className="game-help">
+        <span>🖱️ 마우스/손가락으로 우주선을 좌우 이동</span>
+        <span>💎 크리스탈 수집 · ☄️ 운석 회피 · ⚡ 부스터 획득</span>
+      </div>
       <div className="rank-row"><b>Score</b><span>SPNX Crystal</span><strong>{score}</strong></div>
     </section>
   );

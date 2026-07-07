@@ -15,3 +15,52 @@
 @keyframes fadeIn{from{opacity:.4;transform:translateY(4px)}to{opacity:1}}@keyframes twinkle{0%,100%{opacity:.22;transform:scale(.8)}50%{opacity:1;transform:scale(1.24)}}@keyframes meteor{0%,84%{opacity:0;transform:translate(0,0) rotate(-28deg)}86%{opacity:1}100%{opacity:0;transform:translate(-420px,180px) rotate(-28deg)}}@keyframes shipFloat{0%,100%{transform:translateX(-50%) translateY(-6px) rotate(-.35deg)}50%{transform:translateX(-50%) translateY(10px) rotate(.3deg)}}@keyframes shipAura{from{opacity:.45;transform:translate(-50%,-50%) scale(.96)}to{opacity:.78;transform:translate(-50%,-50%) scale(1.05)}}@keyframes energyPulse{from{height:118px;opacity:.62;filter:blur(4px) drop-shadow(0 0 16px #34efff)}to{height:168px;opacity:.95;filter:blur(2px) drop-shadow(0 0 28px #34efff)}}@keyframes pop{0%{opacity:0;transform:translateY(16px)}25%{opacity:1}100%{opacity:0;transform:translateY(-34px)}}@keyframes claim{from{filter:brightness(1)}to{filter:brightness(1.35);box-shadow:0 0 30px rgba(255,60,231,.75)}}@keyframes coverGlow{0%{transform:translateX(-35%)}100%{transform:translateX(35%)}}@keyframes crystalFloat{0%,100%{transform:translateY(-5px) scale(1)}50%{transform:translateY(8px) scale(1.08)}}
 
 @media(max-width:420px){.app-shell{padding:10px 9px 104px}.app-header h1{font-size:24px}.phase-pill{font-size:12px}.profile-card{grid-template-columns:54px 1fr}.exp-bar{grid-column:1/-1}.hero-cinema{min-height:790px;padding:18px 14px}.balance-block strong{font-size:40px}.balance-block h2{font-size:34px}.ship-wrap{top:205px;width:660px;height:370px;transform:translateX(-50%) scale(.76)}@keyframes shipFloat{0%,100%{transform:translateX(-50%) scale(.76) translateY(-6px) rotate(-.35deg)}50%{transform:translateX(-50%) scale(.76) translateY(10px) rotate(.3deg)}}.mining-glass{margin-top:405px;grid-template-columns:1fr}.stat-strip small{font-size:11px}.grid{grid-template-columns:1fr}.conversion-grid div:last-child{grid-column:auto}.mission-row{grid-template-columns:1fr}.mission-row em{width:max-content}.two-buttons{grid-template-columns:1fr}.bottom-nav small{display:none}.bottom-nav{border-radius:18px}.arcade-stage{height:500px}.game-ship{top:210px;width:600px;height:350px;transform:translateX(-50%) scale(.62)}}
+
+/* V11 Canvas Arcade Upgrade */
+.arcade-stage{display:none!important}
+.arcade-live{
+  position:relative;
+  height:560px;
+  overflow:hidden;
+  border:1px solid rgba(52,239,255,.26);
+  border-radius:26px;
+  background:#020513;
+  box-shadow:0 0 34px rgba(52,239,255,.16), inset 0 0 38px rgba(126,67,255,.08);
+}
+.arcade-canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  touch-action:none;
+  cursor:none;
+}
+.game-help{
+  display:grid;
+  gap:8px;
+  margin:12px 0;
+  color:#d7ddff;
+  font-weight:800;
+}
+.game-help span{
+  border:1px solid rgba(52,239,255,.18);
+  border-radius:14px;
+  padding:10px 12px;
+  background:rgba(3,7,18,.38);
+}
+.game-page .rank-row strong{
+  color:#34efff;
+}
+.hero-cinema{
+  min-height:820px;
+}
+.ship-wrap{
+  top:185px;
+}
+.mining-glass{
+  margin-top:445px;
+}
+@media(max-width:420px){
+  .arcade-live{height:520px}
+  .hero-cinema{min-height:810px}
+  .mining-glass{margin-top:420px}
+}

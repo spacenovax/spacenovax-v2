@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v10-ultimate",
-  "version": "10.0.0",
+  "name": "spacenovax-v11-canvas-arcade",
+  "version": "11.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V10 Ultimate - premium cinematic home and arcade"
+  "description": "SpaceNovaX V11 Canvas Arcade and cinematic polish"
 }

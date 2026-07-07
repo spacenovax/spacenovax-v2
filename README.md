@@ -1,19 +1,17 @@
-# SpaceNovaX V10 Ultimate
+# SpaceNovaX V11 Canvas Arcade
 
-Home과 Game을 프리미엄 시네마틱 방향으로 재구성한 버전입니다.
+V10에서 게임이 아직 테스트 화면처럼 보이던 문제를 개선한 버전입니다.
 
 ## 핵심 개선
-- CSS 반복 별 패턴 제거
-- DOM 기반 랜덤 별 레이어 적용
-- 바둑판 현상 제거 목적
-- Home 시네마틱 배경 개선
-- Nova-X1 이미지급 SVG 우주선 사용
-- Game 화면을 아케이드 스테이지 형태로 개선
-- 크리스탈/운석/부스터/컨트롤 UI 추가
-- 게임 보상 하루 최대 20 SPNX 유지
-- Mission 보상 정책 유지
-- Solana Wallet/KYC/Token Conversion 유지
+- Game 화면을 Canvas 기반 Live Arcade로 변경
+- 마우스/손가락으로 Nova-X1 좌우 이동
+- 랜덤 별, 운석, 크리스탈, 부스터 실시간 생성
+- 운석 회피/크리스탈 수집 구조
+- 점수 HUD 표시
+- 하루 게임 보상 최대 20 SPNX 유지
+- Home 시네마틱 개선 유지
+- Mission/Wallet/KYC/Conversion/Friends/Ranking 유지
 
 ## 적용
-GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.
-서버 분리 구조라면 server.js 변경분은 spacenovax-server-v2에도 반영해야 합니다.
+GitHub spacenovax-v2에 전체 덮어쓰기.
+Render spacenovax-v2에서 Clear build cache & deploy.
