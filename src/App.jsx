@@ -3,15 +3,11 @@ import { createRoot } from 'react-dom/client';
 import './styles/global.css';
 
 import Header from './components/Header.jsx';
-import FinalHomeHero from './components/FinalHomeHero.jsx';
 import ExplorerCard from './components/ExplorerCard.jsx';
-import MiningHero from './components/MiningHero.jsx';
-import MiningPanel from './components/MiningPanel.jsx';
-import MiningEngine from './components/MiningEngine.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import TabPage from './components/TabPage.jsx';
 import AdminPage from './components/AdminPage.jsx';
-import MissionCenter from './components/MissionCenter.jsx';
+import CinematicHome from './components/CinematicHome.jsx';
 
 function getTelegramUser() {
   const tg = window.Telegram?.WebApp;
@@ -97,8 +93,9 @@ function App() {
     <div className="app-shell">
       <main className="app">
         <Header user={user} />
-        <FinalHomeHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
-<MissionCenter onUserUpdate={setUser} />
+        
+
+<CinematicHome user={user} onStart={startMining} onClaim={claimMining} loading={loading} onUserUpdate={setUser} />
 <div className="notice">{isAdminRoute ? 'Admin mode connected to live server APIs.' : notice}</div>
 
         {isAdminRoute ? (
@@ -108,7 +105,7 @@ function App() {
             {activeTab === 'home' && (
               <>
                 <ExplorerCard user={user} />
-                <MiningHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
+                
                 
               </>
             )}

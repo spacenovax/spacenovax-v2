@@ -55,6 +55,26 @@ function readData() {
   data.settings ||= {};
 
   data.missions ||= [];
+  const officialMissionsV73 = [
+    { id: 'website', icon: '🌐', title: 'Visit SpaceNovaX Website', type: 'one_time', reward: 100, url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
+    { id: 'telegram', icon: '📢', title: 'Join Telegram', type: 'one_time', reward: 300, url: 'https://t.me/spacesnovax', action: 'JOIN', enabled: true },
+    { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
+    { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
+    { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
+    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
+    { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
+  ];
+  const missionMapV73 = Object.fromEntries((data.missions || []).map((m) => [m.id, m]));
+  data.missions = officialMissionsV73.map((m) => ({
+    ...m,
+    ...(missionMapV73[m.id] || {}),
+    url: missionMapV73[m.id]?.url || m.url,
+    reward: Number(missionMapV73[m.id]?.reward ?? m.reward),
+    enabled: missionMapV73[m.id]?.enabled ?? m.enabled
+  }));
+
+
+  data.missions ||= [];
   const officialMissions = [
     { id: 'website', icon: '🌐', title: 'Visit SpaceNovaX Website', type: 'one_time', reward: 100, url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
     { id: 'telegram', icon: '📢', title: 'Join Telegram', type: 'one_time', reward: 300, url: 'https://t.me/spacesnovax', action: 'JOIN', enabled: true },

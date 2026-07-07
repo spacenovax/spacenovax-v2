@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v7-2-mission-onetime-links",
-  "version": "7.2.0",
+  "name": "spacenovax-v7-3-cinematic-home-fixed",
+  "version": "7.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V7.2 One-Time Mission Links"
+  "description": "SpaceNovaX V7.3 Cinematic Home Fixed - no duplicate sections"
 }
