@@ -1,317 +1,404 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const distPath = path.join(__dirname, 'dist');
-const indexPath = path.join(distPath, 'index.html');
-const dataPath = path.join(__dirname, 'server', 'data.json');
+const DATA_FILE = path.join(__dirname, 'spacenovax-data.json');
 
-const MINING_DURATION_MS = 24 * 60 * 60 * 1000;
-const BASE_DAILY_REWARD = 30;
+const MINING_DURATION = 24 * 60 * 60 * 1000;
+const BASE_MINING_REWARD = 30;
 
-app.use(express.json({ limit: '1mb' }));
+const DEFAULT_MISSIONS = [
+  { id: 'website', title: 'Visit SpaceNovaX Website', icon: '🌐', reward: 100, type: 'one-time', url: 'https://spacenovax.com', enabled: true },
+  { id: 'telegram', title: 'Join Telegram', icon: '✈️', reward: 300, type: 'one-time', url: 'https://t.me/', enabled: true },
+  { id: 'discord', title: 'Join Discord', icon: '💬', reward: 300, type: 'one-time', url: 'https://discord.com/', enabled: true },
+  { id: 'x_follow', title: 'Follow X', icon: '𝕏', reward: 300, type: 'one-time', url: 'https://x.com/', enabled: true },
+  { id: 'youtube_sub', title: 'Subscribe YouTube', icon: '📺', reward: 300, type: 'one-time', url: 'https://youtube.com/', enabled: true },
+  { id: 'youtube_like', title: 'YouTube Like', icon: '👍', reward: 100, type: 'one-time', url: 'https://youtube.com/', enabled: true },
+  { id: 'daily_checkin', title: 'Daily Check-in', icon: '🎁', reward: 20, type: 'daily', url: '', enabled: true }
+];
 
-function loadData() {
-  if (!fs.existsSync(dataPath)) {
-    return { users: {}, events: [] };
-  }
-
-  try {
-    return JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-  } catch {
-    return { users: {}, events: [] };
-  }
+function now() {
+  return Date.now();
 }
 
-function saveData(data) {
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+function readData() {
+  if (!fs.existsSync(DATA_FILE)) {
+    const initial = {
+      users: {},
+      events: [],
+      missions: DEFAULT_MISSIONS,
+      settings: {
+        convertEnabled: false,
+        pointToTokenRate: 1,
+        minConvert: 5000,
+        fleetMaxBonus: 20,
+        activeFleetDays: 7,
+        totalSupply: 10000000000,
+        miningPool: 3500000000
+      }
+    };
+    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
+    return initial;
+  }
+
+  const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+  data.users ||= {};
+  data.events ||= [];
+  data.missions ||= DEFAULT_MISSIONS;
+  data.settings ||= {};
+  return data;
 }
 
-function makeGuest() {
+function writeData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+function makeGuestUser() {
   return {
-    id: 'guest_' + crypto.randomBytes(6).toString('hex'),
-    firstName: 'Space Explorer',
+    id: `guest-${crypto.randomBytes(4).toString('hex')}`,
+    telegramId: null,
     username: 'guest',
-    photoUrl: '',
-    isGuest: true,
+    firstName: 'Space Explorer',
+    lastName: '',
+    isGuest: true
   };
 }
 
-function normalizeTelegramUser(body = {}) {
-  const tg = body.telegramUser || body.user || {};
-  const id = String(tg.id || body.userId || '').trim();
-
-  if (!id) return makeGuest();
-
+function normalizeTelegramUser(raw) {
+  if (!raw?.id) return makeGuestUser();
   return {
-    id,
-    firstName: tg.first_name || tg.firstName || 'Space Explorer',
-    lastName: tg.last_name || tg.lastName || '',
-    username: tg.username || '',
-    photoUrl: tg.photo_url || tg.photoUrl || '',
-    isGuest: false,
+    id: `tg-${raw.id}`,
+    telegramId: String(raw.id),
+    username: raw.username || '',
+    firstName: raw.first_name || raw.firstName || 'Space Explorer',
+    lastName: raw.last_name || '',
+    isGuest: false
   };
 }
 
-function ensureUser(data, profile) {
-  const now = Date.now();
-  const existing = data.users[profile.id];
+function fleetBonusPercent(activeFleet) {
+  if (activeFleet >= 100) return 20;
+  if (activeFleet >= 50) return 15;
+  if (activeFleet >= 30) return 10;
+  if (activeFleet >= 20) return 8;
+  if (activeFleet >= 10) return 5;
+  if (activeFleet >= 5) return 3;
+  if (activeFleet >= 1) return 1;
+  return 0;
+}
 
-  if (!existing) {
-    data.users[profile.id] = {
-      id: profile.id,
-      firstName: profile.firstName,
-      lastName: profile.lastName || '',
-      username: profile.username || '',
-      photoUrl: profile.photoUrl || '',
-      isGuest: profile.isGuest,
+function fleetGrade(activeFleet) {
+  if (activeFleet >= 100) return 'Diamond Fleet';
+  if (activeFleet >= 50) return 'Gold Fleet';
+  if (activeFleet >= 30) return 'Silver Fleet';
+  if (activeFleet >= 10) return 'Bronze Fleet';
+  return 'Explorer Fleet';
+}
+
+function getActiveFleetCount(data, userId) {
+  const cutoff = now() - 7 * 24 * 60 * 60 * 1000;
+  return Object.values(data.users).filter((u) => u.referredBy === userId && (u.lastMiningAt || 0) >= cutoff).length;
+}
+
+function miningPhase(data) {
+  const used = Object.values(data.users).reduce((sum, user) => sum + Number(user.totalMined || 0), 0);
+  const pool = data.settings?.miningPool || 3500000000;
+  const ratio = pool > 0 ? used / pool : 0;
+
+  if (ratio >= 0.8) return { phase: 5, reward: 6, used, pool, ratio };
+  if (ratio >= 0.6) return { phase: 4, reward: 12, used, pool, ratio };
+  if (ratio >= 0.4) return { phase: 3, reward: 18, used, pool, ratio };
+  if (ratio >= 0.2) return { phase: 2, reward: 24, used, pool, ratio };
+  return { phase: 1, reward: BASE_MINING_REWARD, used, pool, ratio };
+}
+
+function ensureUser(data, telegramUser, referralCode = '') {
+  const tUser = normalizeTelegramUser(telegramUser);
+  const userId = tUser.id;
+
+  if (!data.users[userId]) {
+    const referrer = referralCode && data.users[referralCode] ? referralCode : null;
+    data.users[userId] = {
+      ...tUser,
       balance: 15250,
       totalMined: 0,
-      level: 7,
       exp: 850,
-      miners: 86,
-      power: 2.8,
-      speed: 1.25,
-      mining: {
-        active: false,
-        startedAt: null,
-        endsAt: null,
-        claimedAt: null,
-        pendingReward: 0
-      },
-      createdAt: now,
-      updatedAt: now
+      level: 7,
+      rankTitle: 'Captain',
+      mining: null,
+      missions: {},
+      referredBy: referrer,
+      referrals: [],
+      solanaWallet: '',
+      createdAt: now(),
+      updatedAt: now(),
+      lastMiningAt: 0
     };
+
+    if (referrer) {
+      data.users[referrer].referrals ||= [];
+      if (!data.users[referrer].referrals.includes(userId)) data.users[referrer].referrals.push(userId);
+    }
+
+    data.events.push({ type: 'user_created', userId, referredBy: referrer, at: now() });
   } else {
-    existing.firstName = profile.firstName || existing.firstName;
-    existing.lastName = profile.lastName || existing.lastName || '';
-    existing.username = profile.username || existing.username || '';
-    existing.photoUrl = profile.photoUrl || existing.photoUrl || '';
-    existing.updatedAt = now;
+    data.users[userId] = { ...data.users[userId], ...tUser, updatedAt: now() };
   }
 
-  return data.users[profile.id];
+  return data.users[userId];
 }
 
-function calculateMining(user) {
-  const now = Date.now();
-  const mining = user.mining || {};
+function calculateMining(data, user) {
+  const phase = miningPhase(data);
+  const activeFleet = getActiveFleetCount(data, user.id);
+  const bonus = fleetBonusPercent(activeFleet);
+  const reward = Number((phase.reward * (1 + bonus / 100)).toFixed(6));
 
-  if (!mining.active || !mining.startedAt || !mining.endsAt) {
-    return {
-      active: false,
-      progress: 0,
-      remainingMs: 0,
-      minedSoFar: 0,
-      claimable: false,
-      reward: BASE_DAILY_REWARD,
-    };
+  if (!user.mining?.active) {
+    return { active: false, reward, baseReward: phase.reward, fleetBonus: bonus, activeFleet, phase: phase.phase, remainingMs: MINING_DURATION, progress: 0, minedSoFar: 0, claimable: false };
   }
 
-  const duration = mining.endsAt - mining.startedAt;
-  const elapsed = Math.max(0, Math.min(now - mining.startedAt, duration));
-  const progress = duration > 0 ? elapsed / duration : 0;
-  const reward = mining.pendingReward || BASE_DAILY_REWARD;
-  const minedSoFar = reward * progress;
-  const remainingMs = Math.max(0, mining.endsAt - now);
-  const claimable = now >= mining.endsAt;
+  const startedAt = user.mining.startedAt;
+  const endsAt = startedAt + MINING_DURATION;
+  const remainingMs = Math.max(0, endsAt - now());
+  const progress = Math.min(1, Math.max(0, (now() - startedAt) / MINING_DURATION));
+  const minedSoFar = Number((reward * progress).toFixed(6));
 
   return {
-    active: true,
-    progress,
+    active: remainingMs > 0,
+    startedAt,
+    endsAt,
     remainingMs,
+    progress,
     minedSoFar,
-    claimable,
     reward,
+    baseReward: phase.reward,
+    fleetBonus: bonus,
+    activeFleet,
+    phase: phase.phase,
+    claimable: remainingMs <= 0
   };
 }
 
-function publicUser(user) {
+function publicUser(data, user) {
+  const activeFleet = getActiveFleetCount(data, user.id);
+  const bonus = fleetBonusPercent(activeFleet);
+
   return {
     id: user.id,
-    firstName: user.firstName,
+    telegramId: user.telegramId,
     username: user.username,
-    photoUrl: user.photoUrl,
+    firstName: user.firstName,
     isGuest: user.isGuest,
-    balance: user.balance,
-    totalMined: user.totalMined,
-    level: user.level,
+    balance: Number(user.balance || 0),
+    totalMined: Number(user.totalMined || 0),
     exp: user.exp,
-    miners: user.miners,
-    power: user.power,
-    speed: user.speed,
-    mining: calculateMining(user),
+    level: user.level,
+    rankTitle: user.rankTitle,
+    missions: user.missions || {},
+    referredBy: user.referredBy,
+    referrals: user.referrals || [],
+    activeFleet,
+    fleetBonus: bonus,
+    fleetGrade: fleetGrade(activeFleet),
+    mining: calculateMining(data, user),
+    solanaWallet: user.solanaWallet || ''
   };
 }
 
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, project: 'SpaceNovaX V5.1 Admin Connected', version: '5.1.0' });
-});
+function getSessionUser(req, data) {
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || req.query?.ref || '');
+  return user;
+}
+
+app.use(express.json({ limit: '2mb' }));
 
 app.post('/api/session', (req, res) => {
-  const data = loadData();
-  const profile = normalizeTelegramUser(req.body);
-  const user = ensureUser(data, profile);
-
-  data.events.push({ type: 'session', userId: user.id, at: Date.now() });
-  saveData(data);
-
-  res.json({ ok: true, user: publicUser(user) });
+  const data = readData();
+  const user = getSessionUser(req, data);
+  data.events.push({ type: 'session', userId: user.id, at: now() });
+  writeData(data);
+  res.json({ ok: true, user: publicUser(data, user) });
 });
 
 app.post('/api/mining/start', (req, res) => {
-  const data = loadData();
-  const profile = normalizeTelegramUser(req.body);
-  const user = ensureUser(data, profile);
-  const status = calculateMining(user);
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const status = calculateMining(data, user);
 
-  if (status.active && !status.claimable) {
-    saveData(data);
-    return res.json({ ok: true, user: publicUser(user), message: 'Mining already active' });
-  }
+  if (status.active) return res.json({ ok: true, message: 'Mining already active.', user: publicUser(data, user) });
 
-  const reward = BASE_DAILY_REWARD * user.speed;
-  user.mining = {
-    active: true,
-    startedAt: Date.now(),
-    endsAt: Date.now() + MINING_DURATION_MS,
-    claimedAt: null,
-    pendingReward: reward
-  };
-  user.updatedAt = Date.now();
+  user.mining = { active: true, startedAt: now() };
+  user.lastMiningAt = now();
+  data.events.push({ type: 'mining_start', userId: user.id, at: now() });
+  writeData(data);
 
-  data.events.push({ type: 'mining_start', userId: user.id, reward, at: Date.now() });
-  saveData(data);
-
-  res.json({ ok: true, user: publicUser(user), message: 'Mining started' });
+  res.json({ ok: true, message: 'Mining started.', user: publicUser(data, user) });
 });
 
 app.post('/api/mining/claim', (req, res) => {
-  const data = loadData();
-  const profile = normalizeTelegramUser(req.body);
-  const user = ensureUser(data, profile);
-  const status = calculateMining(user);
-
-  if (!status.active) {
-    saveData(data);
-    return res.status(400).json({ ok: false, message: 'No active mining session' });
-  }
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const status = calculateMining(data, user);
 
   if (!status.claimable) {
-    saveData(data);
-    return res.status(400).json({ ok: false, message: 'Mining is not finished yet', user: publicUser(user) });
+    return res.status(400).json({ ok: false, message: 'Mining is not ready to claim yet.' });
   }
 
-  user.balance += status.reward;
-  user.totalMined += status.reward;
-  user.exp = Math.min(1000, user.exp + 15);
-  user.mining = {
-    active: false,
-    startedAt: null,
-    endsAt: null,
-    claimedAt: Date.now(),
-    pendingReward: 0
-  };
-  user.updatedAt = Date.now();
+  const amount = Number(status.reward || 0);
+  user.balance = Number(user.balance || 0) + amount;
+  user.totalMined = Number(user.totalMined || 0) + amount;
+  user.mining = null;
+  user.lastMiningAt = now();
+  user.updatedAt = now();
 
-  data.events.push({ type: 'mining_claim', userId: user.id, reward: status.reward, at: Date.now() });
-  saveData(data);
+  data.events.push({ type: 'mining_claim', userId: user.id, amount, at: now() });
+  writeData(data);
 
-  res.json({ ok: true, user: publicUser(user), message: `Claimed ${status.reward.toFixed(6)} SPNX` });
+  res.json({ ok: true, message: `Claimed ${amount} SPNX Point.`, user: publicUser(data, user) });
 });
 
-app.get('/api/leaderboard', (req, res) => {
-  const data = loadData();
+app.get('/api/missions', (req, res) => {
+  const data = readData();
+  res.json({ ok: true, missions: data.missions.filter((m) => m.enabled !== false) });
+});
+
+app.post('/api/missions/claim', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const missionId = req.body?.missionId;
+  const mission = data.missions.find((m) => m.id === missionId && m.enabled !== false);
+
+  if (!mission) return res.status(404).json({ ok: false, message: 'Mission not found.' });
+
+  user.missions ||= {};
+  const record = user.missions[missionId];
+
+  if (mission.type === 'one-time' && record?.claimed) {
+    return res.status(400).json({ ok: false, message: 'Already claimed.' });
+  }
+
+  if (mission.type === 'daily' && record?.claimedAt && now() - record.claimedAt < 24 * 60 * 60 * 1000) {
+    return res.status(400).json({ ok: false, message: 'Daily reward already claimed.' });
+  }
+
+  user.balance = Number(user.balance || 0) + Number(mission.reward || 0);
+  user.missions[missionId] = { claimed: true, claimedAt: now(), reward: mission.reward };
+  user.updatedAt = now();
+
+  data.events.push({ type: 'mission_claim', userId: user.id, missionId, amount: mission.reward, at: now() });
+  writeData(data);
+
+  res.json({ ok: true, message: `${mission.reward} SPNX Point claimed.`, user: publicUser(data, user) });
+});
+
+app.get('/api/ranking', (req, res) => {
+  const data = readData();
   const users = Object.values(data.users)
-    .sort((a, b) => b.balance - a.balance)
-    .slice(0, 30)
-    .map((u, index) => ({
-      rank: index + 1,
-      firstName: u.firstName,
-      username: u.username,
-      balance: u.balance,
-      totalMined: u.totalMined
-    }));
+    .map((u) => publicUser(data, u))
+    .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0));
 
-  res.json({ ok: true, users });
+  res.json({ ok: true, top: users.slice(0, 100), totalUsers: users.length });
 });
 
+app.post('/api/ranking/me', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const users = Object.values(data.users)
+    .map((u) => ({ id: u.id, balance: Number(u.balance || 0) }))
+    .sort((a, b) => b.balance - a.balance);
+
+  const rank = users.findIndex((u) => u.id === user.id) + 1;
+  res.json({ ok: true, rank, totalUsers: users.length, user: publicUser(data, user) });
+});
+
+app.post('/api/wallet/save', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const wallet = String(req.body?.wallet || '').trim();
+
+  if (wallet.length < 32) return res.status(400).json({ ok: false, message: 'Invalid Solana wallet address.' });
+
+  user.solanaWallet = wallet;
+  user.updatedAt = now();
+  data.events.push({ type: 'wallet_saved', userId: user.id, wallet, at: now() });
+  writeData(data);
+
+  res.json({ ok: true, user: publicUser(data, user) });
+});
 
 app.get('/api/admin/stats', (req, res) => {
-  const data = loadData();
+  const data = readData();
   const users = Object.values(data.users || {});
   const events = data.events || [];
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const dayAgo = now() - 24 * 60 * 60 * 1000;
   const today = events.filter((event) => event.at >= dayAgo);
   const totalBalance = users.reduce((sum, user) => sum + Number(user.balance || 0), 0);
-  const activeMining = users.filter((user) => calculateMining(user).active).length;
+  const activeMining = users.filter((user) => calculateMining(data, user).active).length;
+  const phase = miningPhase(data);
 
-  res.json({
-    ok: true,
-    stats: {
-      totalUsers: users.length,
-      activeMining,
-      totalBalance,
-      todaySessions: today.filter((event) => event.type === 'session').length,
-      todayMiningStarts: today.filter((event) => event.type === 'mining_start').length,
-      todayClaims: today.filter((event) => event.type === 'mining_claim').length,
-      totalEvents: events.length
-    }
-  });
+  res.json({ ok: true, stats: {
+    totalUsers: users.length,
+    activeMining,
+    totalBalance,
+    todaySessions: today.filter((event) => event.type === 'session').length,
+    todayMiningStarts: today.filter((event) => event.type === 'mining_start').length,
+    todayClaims: today.filter((event) => event.type === 'mining_claim').length,
+    todayMissions: today.filter((event) => event.type === 'mission_claim').length,
+    totalEvents: events.length,
+    phase: phase.phase,
+    miningPoolUsed: phase.used,
+    miningPoolRatio: phase.ratio
+  }});
 });
 
 app.get('/api/admin/users', (req, res) => {
-  const data = loadData();
+  const data = readData();
   const users = Object.values(data.users || {})
     .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))
-    .slice(0, 100)
-    .map((user) => publicUser(user));
-
+    .slice(0, 200)
+    .map((user) => publicUser(data, user));
   res.json({ ok: true, users });
 });
 
+app.get('/api/admin/missions', (req, res) => {
+  const data = readData();
+  res.json({ ok: true, missions: data.missions });
+});
+
 app.post('/api/admin/points', (req, res) => {
-  const data = loadData();
+  const data = readData();
   const userId = String(req.body?.userId || '');
   const amount = Number(req.body?.amount || 0);
   const reason = req.body?.reason || 'manual';
 
-  if (!userId || !Number.isFinite(amount)) {
-    return res.status(400).json({ ok: false, message: 'userId and amount are required' });
-  }
+  if (!userId || !Number.isFinite(amount)) return res.status(400).json({ ok: false, message: 'userId and amount are required' });
 
   const user = data.users?.[userId];
-  if (!user) {
-    return res.status(404).json({ ok: false, message: 'User not found' });
-  }
+  if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
 
   user.balance = Number(user.balance || 0) + amount;
-  user.updatedAt = Date.now();
-  data.events.push({ type: 'admin_points', userId, amount, reason, at: Date.now() });
-  saveData(data);
+  user.updatedAt = now();
+  data.events.push({ type: 'admin_points', userId, amount, reason, at: now() });
+  writeData(data);
 
-  res.json({ ok: true, user: publicUser(user) });
+  res.json({ ok: true, user: publicUser(data, user) });
 });
 
-
+const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
 app.use((req, res) => {
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(500).send('Build not found. Run npm run build first.');
-  }
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V5.1 Admin Connected running on port ${PORT}`);
+  console.log(`SpaceNovaX V6 Mission Fleet DB running on port ${PORT}`);
 });

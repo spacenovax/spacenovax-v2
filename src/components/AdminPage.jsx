@@ -48,7 +48,7 @@ export default function AdminPage() {
     <section className="admin-page glass">
       <div className="admin-head">
         <div>
-          <h2>🛠 SpaceNovaX Admin</h2>
+          <h2>🛠 SpaceNovaX Admin V6</h2>
           <p>{notice}</p>
         </div>
         <button type="button" onClick={loadAdmin}>Refresh</button>
@@ -61,6 +61,9 @@ export default function AdminPage() {
         <div><small>Today Sessions</small><b>{stats?.todaySessions ?? '-'}</b></div>
         <div><small>Mining Starts</small><b>{stats?.todayMiningStarts ?? '-'}</b></div>
         <div><small>Claims</small><b>{stats?.todayClaims ?? '-'}</b></div>
+        <div><small>Mission Claims</small><b>{stats?.todayMissions ?? '-'}</b></div>
+        <div><small>Mining Phase</small><b>Phase {stats?.phase ?? '-'}</b></div>
+        <div><small>Pool Used</small><b>{((stats?.miningPoolRatio || 0) * 100).toFixed(4)}%</b></div>
       </div>
 
       <form className="admin-form" onSubmit={givePoints}>
@@ -72,11 +75,15 @@ export default function AdminPage() {
       </form>
 
       <div className="admin-users">
-        <h3>Top Users</h3>
+        <h3>Users / Top Miners</h3>
         {users.length === 0 && <p className="admin-empty">아직 사용자가 없습니다. 앱에서 접속하면 자동 생성됩니다.</p>}
-        {users.map((user) => (
+        {users.map((user, idx) => (
           <div className="admin-user-row" key={user.id}>
-            <div><b>{user.firstName}</b><small>{user.id}</small></div>
+            <div>
+              <b>#{idx + 1} {user.firstName}</b>
+              <small>{user.id}</small>
+              <small>Fleet {user.activeFleet} · Bonus +{user.fleetBonus}% · {user.fleetGrade}</small>
+            </div>
             <strong>{fmt(user.balance)} SPNX</strong>
           </div>
         ))}

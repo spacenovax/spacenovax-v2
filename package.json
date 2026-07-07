@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v5-1-admin-connected",
-  "version": "5.1.0",
+  "name": "spacenovax-v6-mission-fleet-db",
+  "version": "6.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,5 +15,6 @@
     "react": "latest",
     "react-dom": "latest",
     "express": "latest"
-  }
+  },
+  "description": "SpaceNovaX V6 Mission Fleet DB"
 }

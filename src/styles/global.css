@@ -1074,3 +1074,15 @@ button { font-family: inherit; }
 .admin-user-row small{display:block;margin-top:4px;color:var(--muted);font-size:11px}
 .admin-user-row strong{color:var(--cyan);white-space:nowrap}
 @media(max-width:768px){.admin-page{padding:22px 18px}.admin-head{display:grid}.admin-stats{grid-template-columns:1fr 1fr}.admin-stats b{font-size:18px}.admin-user-row{display:grid}}
+
+/* V6 Mission Fleet DB */
+.official-logo{width:82px;height:82px;border-radius:50%;object-fit:cover;box-shadow:0 0 34px rgba(52,239,255,.55)}
+.mission-list button{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mission-list button:disabled{opacity:.55;cursor:not-allowed}
+.my-rank-card{border:1px solid rgba(52,239,255,.22);background:rgba(3,7,18,.55);border-radius:20px;padding:18px;margin:16px 0}
+.my-rank-card small{display:block;color:var(--muted);margin-bottom:4px}
+.my-rank-card b{display:block;font-size:34px;color:var(--cyan)}
+.my-rank-card span{color:white}
+.wallet-input{width:100%;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px 16px;background:rgba(0,0,0,.35);color:white;margin-bottom:12px;outline:none}
+@media(max-width:768px){.official-logo{width:70px;height:70px}}
+@media(max-width:370px){.official-logo{width:60px;height:60px}}
