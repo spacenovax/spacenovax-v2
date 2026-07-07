@@ -1117,3 +1117,9 @@ button { font-family: inherit; }
 .risk-summary div{border:1px solid rgba(52,239,255,.18);background:rgba(3,7,18,.45);border-radius:18px;padding:16px}
 .risk-summary small{display:block;color:var(--muted);margin-bottom:6px}.risk-summary b{font-size:26px}
 @media(max-width:768px){.admin-search{display:grid}.admin-user-side{justify-items:start}.risk-summary{grid-template-columns:1fr}}
+
+/* V7 Ultimate Core */
+.small-input{width:110px;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:10px;background:rgba(0,0,0,.35);color:white}
+.check-row{display:flex;align-items:center;gap:10px;color:white;font-weight:900}
+.admin-json{border:1px solid rgba(52,239,255,.18);border-radius:18px;padding:14px;background:rgba(0,0,0,.35);color:rgba(235,240,255,.82);white-space:pre-wrap;word-break:break-word}
+.admin-users h4{margin:18px 0 6px;color:var(--cyan)}

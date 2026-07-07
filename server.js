@@ -53,6 +53,8 @@ function readData() {
   data.events ||= [];
   data.missions ||= DEFAULT_MISSIONS;
   data.settings ||= {};
+  data.convertRequests ||= [];
+  data.distributions ||= [];
   return data;
 }
 
@@ -603,6 +605,96 @@ app.get('/api/admin/live-monitor', requireAdmin, (req, res) => {
   }});
 });
 
+
+app.post('/api/convert/request', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const amount = Number(req.body?.amount || 0);
+  if (!data.settings?.convertEnabled) return res.status(400).json({ ok: false, message: 'Convert is not active before listing.' });
+  if (!user.solanaWallet) return res.status(400).json({ ok: false, message: 'Solana wallet required.' });
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, message: 'Invalid amount.' });
+  if (amount < Number(data.settings?.minConvert || 5000)) return res.status(400).json({ ok: false, message: 'Minimum convert amount not reached.' });
+  if (amount > Number(user.balance || 0)) return res.status(400).json({ ok: false, message: 'Insufficient SPNX Point.' });
+  data.convertRequests ||= [];
+  const request = { id: `cv-${crypto.randomBytes(6).toString('hex')}`, userId: user.id, amount, wallet: user.solanaWallet, status: 'pending', createdAt: now(), updatedAt: now() };
+  data.convertRequests.push(request);
+  data.events.push({ type: 'convert_request', userId: user.id, amount, at: now() });
+  writeData(data);
+  res.json({ ok: true, request });
+});
+
+app.get('/api/admin/settings', requireAdmin, (req, res) => {
+  const data = readData();
+  res.json({ ok: true, settings: data.settings || {} });
+});
+
+app.post('/api/admin/settings/update', requireAdmin, (req, res) => {
+  const data = readData();
+  data.settings ||= {};
+  ['convertEnabled','minConvert','pointToTokenRate','fleetMaxBonus','activeFleetDays'].forEach((key) => {
+    if (req.body?.[key] !== undefined) data.settings[key] = req.body[key];
+  });
+  data.events.push({ type: 'admin_settings_update', adminId: req.admin.id, settings: data.settings, at: now() });
+  writeData(data);
+  res.json({ ok: true, settings: data.settings });
+});
+
+app.get('/api/admin/convert-queue', requireAdmin, (req, res) => {
+  const data = readData();
+  const queue = (data.convertRequests || []).map((request) => ({ ...request, user: data.users?.[request.userId] ? publicAdminUser(data, data.users[request.userId]) : null })).reverse();
+  res.json({ ok: true, queue });
+});
+
+app.post('/api/admin/convert/update', requireAdmin, (req, res) => {
+  const data = readData();
+  const id = String(req.body?.id || '');
+  const status = String(req.body?.status || '');
+  const txHash = String(req.body?.txHash || '').trim();
+  const request = (data.convertRequests || []).find((r) => r.id === id);
+  if (!request) return res.status(404).json({ ok: false, message: 'Convert request not found' });
+  if (!['approved','rejected','completed','failed'].includes(status)) return res.status(400).json({ ok: false, message: 'Invalid status' });
+  const user = data.users?.[request.userId];
+  if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
+  if (status === 'completed' && request.status !== 'completed') {
+    if (Number(user.balance || 0) < Number(request.amount || 0)) return res.status(400).json({ ok: false, message: 'User balance is lower than request amount' });
+    user.balance = Number(user.balance || 0) - Number(request.amount || 0);
+    user.updatedAt = now();
+  }
+  request.status = status;
+  request.txHash = txHash || request.txHash || '';
+  request.updatedAt = now();
+  request.reviewedBy = req.admin.id;
+  data.events.push({ type: 'admin_convert_update', adminId: req.admin.id, requestId: id, userId: request.userId, status, amount: request.amount, at: now() });
+  writeData(data);
+  res.json({ ok: true, request, user: publicAdminUser(data, user) });
+});
+
+app.get('/api/admin/distribution-simulator', requireAdmin, (req, res) => {
+  const data = readData();
+  const pending = (data.convertRequests || []).filter((r) => r.status === 'approved' || r.status === 'pending');
+  const totalAmount = pending.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  res.json({ ok: true, simulator: { recipients: pending.length, totalAmount, estimatedSolFee: Number((pending.length * 0.000005).toFixed(6)), mode: data.settings?.convertEnabled ? 'convert_enabled' : 'convert_disabled', note: 'Simulator only. No real Solana transfer yet.' } });
+});
+
+app.get('/api/admin/ranking/full', requireAdmin, (req, res) => {
+  const data = readData();
+  const users = Object.values(data.users || {}).map((u) => publicAdminUser(data, u));
+  res.json({ ok: true, ranking: { global: [...users].sort((a,b)=>Number(b.balance||0)-Number(a.balance||0)).slice(0,100), fleet: [...users].sort((a,b)=>Number(b.activeFleet||0)-Number(a.activeFleet||0)).slice(0,100), trusted: [...users].sort((a,b)=>Number(b.risk?.trustScore||0)-Number(a.risk?.trustScore||0)).slice(0,100) } });
+});
+
+app.post('/api/admin/mission/update', requireAdmin, (req, res) => {
+  const data = readData();
+  const mission = (data.missions || []).find((m) => m.id === String(req.body?.id || ''));
+  if (!mission) return res.status(404).json({ ok: false, message: 'Mission not found' });
+  if (req.body?.reward !== undefined) mission.reward = Number(req.body.reward);
+  if (req.body?.enabled !== undefined) mission.enabled = Boolean(req.body.enabled);
+  if (req.body?.title !== undefined) mission.title = String(req.body.title);
+  if (req.body?.url !== undefined) mission.url = String(req.body.url);
+  data.events.push({ type: 'admin_mission_update', adminId: req.admin.id, missionId: mission.id, mission, at: now() });
+  writeData(data);
+  res.json({ ok: true, mission });
+});
+
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
@@ -611,5 +703,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V6.2 Users KYC Risk Center running on port ${PORT}`);
+  console.log(`SpaceNovaX V7 Ultimate Core running on port ${PORT}`);
 });
