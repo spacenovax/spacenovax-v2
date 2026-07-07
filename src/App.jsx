@@ -11,6 +11,7 @@ import MiningEngine from './components/MiningEngine.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import TabPage from './components/TabPage.jsx';
 import AdminPage from './components/AdminPage.jsx';
+import MissionCenter from './components/MissionCenter.jsx';
 
 function getTelegramUser() {
   const tg = window.Telegram?.WebApp;
@@ -97,6 +98,7 @@ function App() {
       <main className="app">
         <Header user={user} />
         <FinalHomeHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
+<MissionCenter onUserUpdate={setUser} />
 <div className="notice">{isAdminRoute ? 'Admin mode connected to live server APIs.' : notice}</div>
 
         {isAdminRoute ? (

@@ -53,6 +53,20 @@ function readData() {
   data.events ||= [];
   data.missions ||= DEFAULT_MISSIONS;
   data.settings ||= {};
+
+  data.missions ||= [];
+  const officialMissions = [
+    { id: 'website', icon: '🌐', title: 'Visit SpaceNovaX Website', type: 'one_time', reward: 100, url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
+    { id: 'telegram', icon: '📢', title: 'Join Telegram', type: 'one_time', reward: 300, url: 'https://t.me/spacesnovax', action: 'JOIN', enabled: true },
+    { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
+    { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
+    { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
+    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
+    { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
+  ];
+  const existingMissions = Object.fromEntries((data.missions || []).map((m) => [m.id, m]));
+  data.missions = officialMissions.map((m) => ({ ...m, ...(existingMissions[m.id] || {}), url: existingMissions[m.id]?.url || m.url, reward: Number(existingMissions[m.id]?.reward ?? m.reward), enabled: existingMissions[m.id]?.enabled ?? m.enabled }));
+
   data.settings.miningSandboxEnabled ??= false;
   data.settings.miningSandboxMinutes ??= 5;
   data.settings.eventMultiplier ??= 1;
@@ -749,5 +763,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V7.1 Mining Engine Core running on port ${PORT}`);
+  console.log(`SpaceNovaX V7.2 One-Time Mission Links running on port ${PORT}`);
 });

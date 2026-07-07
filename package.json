@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v7-1-home-final-ui",
-  "version": "7.1.1",
+  "name": "spacenovax-v7-2-mission-onetime-links",
+  "version": "7.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX Home Final UI matching selected spaceship layout"
+  "description": "SpaceNovaX V7.2 One-Time Mission Links"
 }
