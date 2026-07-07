@@ -373,6 +373,66 @@ app.post('/api/wallet/save', (req, res) => {
 });
 
 
+
+function calculateRiskProfile(data, user) {
+  const users = Object.values(data.users || {});
+  const events = data.events || [];
+  const flags = [];
+  let riskScore = 10;
+  let trustScore = 50;
+  const wallet = String(user.solanaWallet || '').trim();
+
+  if (!wallet) { riskScore += 5; flags.push('wallet_missing'); }
+  if (wallet && users.some((u) => u.id !== user.id && String(u.solanaWallet || '').trim() === wallet)) {
+    riskScore += 45; trustScore -= 30; flags.push('duplicate_wallet');
+  }
+  const userEvents = events.filter((e) => e.userId === user.id);
+  const miningStarts = userEvents.filter((e) => e.type === 'mining_start').length;
+  const claims = userEvents.filter((e) => e.type === 'mining_claim').length;
+  const missions = userEvents.filter((e) => e.type === 'mission_claim').length;
+  trustScore += Math.min(15, miningStarts * 3) + Math.min(15, claims * 4) + Math.min(10, missions * 2);
+
+  if (Date.now() - Number(user.createdAt || Date.now()) < 10 * 60 * 1000) {
+    riskScore += 8; flags.push('new_account');
+  } else {
+    trustScore += 5;
+  }
+  if (Number(user.balance || 0) > 100000 && claims < 2) {
+    riskScore += 20; flags.push('high_balance_low_activity');
+  }
+  const referrals = user.referrals || [];
+  if (referrals.length >= 50 && getActiveFleetCount(data, user.id) < 5) {
+    riskScore += 20; flags.push('inactive_mass_referrals');
+  }
+  const kycStatus = user.kyc?.status || 'not_submitted';
+  if (kycStatus === 'approved') { trustScore += 25; riskScore -= 20; }
+  if (kycStatus === 'rejected') { riskScore += 50; trustScore -= 40; flags.push('kyc_rejected'); }
+
+  riskScore = Math.max(0, Math.min(100, riskScore));
+  trustScore = Math.max(0, Math.min(100, trustScore));
+
+  return {
+    riskScore,
+    trustScore,
+    riskLevel: riskScore >= 70 ? 'high' : riskScore >= 40 ? 'review' : riskScore <= 20 ? 'low' : 'normal',
+    trustLevel: trustScore >= 80 ? 'trusted' : trustScore >= 60 ? 'normal' : trustScore >= 40 ? 'review' : 'suspended',
+    flags,
+    kycStatus
+  };
+}
+
+function publicAdminUser(data, user) {
+  return {
+    ...publicUser(data, user),
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    lastMiningAt: user.lastMiningAt,
+    kyc: user.kyc || { status: 'not_submitted' },
+    banned: Boolean(user.banned),
+    risk: calculateRiskProfile(data, user)
+  };
+}
+
 app.post('/api/admin/login', (req, res) => {
   const id = String(req.body?.id || '').trim();
   const password = String(req.body?.password || '');
@@ -438,7 +498,7 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   const users = Object.values(data.users || {})
     .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))
     .slice(0, 200)
-    .map((user) => publicUser(data, user));
+    .map((user) => publicAdminUser(data, user));
   res.json({ ok: true, users });
 });
 
@@ -466,6 +526,83 @@ app.post('/api/admin/points', requireAdmin, (req, res) => {
   res.json({ ok: true, user: publicUser(data, user) });
 });
 
+
+app.get('/api/admin/users/search', requireAdmin, (req, res) => {
+  const data = readData();
+  const q = String(req.query.q || '').toLowerCase().trim();
+  const users = Object.values(data.users || {})
+    .filter((u) => !q || [u.id,u.telegramId,u.username,u.firstName,u.solanaWallet,u.kyc?.status].filter(Boolean).some((v) => String(v).toLowerCase().includes(q)))
+    .sort((a,b) => Number(b.balance || 0) - Number(a.balance || 0))
+    .slice(0,200)
+    .map((u) => publicAdminUser(data, u));
+  res.json({ ok: true, users });
+});
+
+app.get('/api/admin/risk', requireAdmin, (req, res) => {
+  const data = readData();
+  const users = Object.values(data.users || {}).map((u) => publicAdminUser(data, u))
+    .sort((a,b) => Number(b.risk.riskScore || 0) - Number(a.risk.riskScore || 0));
+  res.json({
+    ok: true,
+    highRisk: users.filter((u) => u.risk.riskLevel === 'high'),
+    review: users.filter((u) => u.risk.riskLevel === 'review'),
+    trusted: users.filter((u) => u.risk.trustLevel === 'trusted'),
+    all: users.slice(0,200)
+  });
+});
+
+app.post('/api/admin/user/update', requireAdmin, (req, res) => {
+  const data = readData();
+  const userId = String(req.body?.userId || '');
+  const user = data.users?.[userId];
+  if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
+  if (req.body?.balance !== undefined) user.balance = Number(req.body.balance);
+  if (req.body?.solanaWallet !== undefined) user.solanaWallet = String(req.body.solanaWallet || '').trim();
+  if (req.body?.banned !== undefined) user.banned = Boolean(req.body.banned);
+  user.updatedAt = now();
+  data.events.push({ type: 'admin_user_update', adminId: req.admin.id, userId, at: now() });
+  writeData(data);
+  res.json({ ok: true, user: publicAdminUser(data, user) });
+});
+
+app.post('/api/admin/kyc/update', requireAdmin, (req, res) => {
+  const data = readData();
+  const userId = String(req.body?.userId || '');
+  const status = String(req.body?.status || '');
+  const note = String(req.body?.note || '');
+  const user = data.users?.[userId];
+  if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
+  if (!['not_submitted','pending','approved','rejected'].includes(status)) return res.status(400).json({ ok: false, message: 'Invalid KYC status' });
+  user.kyc = { status, note, reviewedBy: req.admin.id, reviewedAt: now() };
+  user.updatedAt = now();
+  data.events.push({ type: 'admin_kyc_update', adminId: req.admin.id, userId, status, note, at: now() });
+  writeData(data);
+  res.json({ ok: true, user: publicAdminUser(data, user) });
+});
+
+app.get('/api/admin/live-monitor', requireAdmin, (req, res) => {
+  const data = readData();
+  const users = Object.values(data.users || {});
+  const events = data.events || [];
+  const nowMs = now();
+  const last10m = nowMs - 10 * 60 * 1000;
+  const last24h = nowMs - 24 * 60 * 60 * 1000;
+  const today = events.filter((e) => e.at >= last24h);
+  const online = new Set(events.filter((e) => e.at >= last10m && e.userId).map((e) => e.userId));
+  const risks = users.map((u) => calculateRiskProfile(data, u));
+  res.json({ ok: true, monitor: {
+    onlineUsers: online.size,
+    todayNewUsers: today.filter((e) => e.type === 'user_created').length,
+    todayMiningStarts: today.filter((e) => e.type === 'mining_start').length,
+    todayClaims: today.filter((e) => e.type === 'mining_claim').length,
+    todayMissions: today.filter((e) => e.type === 'mission_claim').length,
+    highRisk: risks.filter((r) => r.riskLevel === 'high').length,
+    review: risks.filter((r) => r.riskLevel === 'review').length,
+    trusted: risks.filter((r) => r.trustLevel === 'trusted').length,
+    totalUsers: users.length
+  }});
+});
+
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
@@ -474,5 +611,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V6.1 Admin Login Protected running on port ${PORT}`);
+  console.log(`SpaceNovaX V6.2 Users KYC Risk Center running on port ${PORT}`);
 });

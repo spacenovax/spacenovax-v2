@@ -1,28 +1,19 @@
-# SpaceNovaX V6.1 Admin Login Protected
+# SpaceNovaX V6.2 Users KYC Risk Center
 
-웹사이트(spacenovax.com)는 건드리지 않고, Telegram Mini App/Admin만 수정한 버전입니다.
+V6.1 관리자 로그인 보호 기능 위에 사용자 관리, KYC, Risk Center, Live Monitor를 추가한 버전입니다.
 
 ## 추가 기능
-- /admin 로그인 화면
-- Render 환경변수 기반 관리자 ID/비밀번호
-- HMAC 토큰 세션 인증
-- 관리자 로그아웃
-- Admin API 보호
-- Audit Logs 표시
-- 포인트 지급 로그 기록
+- Admin 탭 메뉴: Dashboard / Users / KYC / Risk / Logs
+- 사용자 검색
+- 사용자 Ban / Unban
+- KYC 상태 변경
+- Trust Score / Risk Score
+- Duplicate wallet 감지
+- High Risk / Review / Trusted 분류
+- Live Monitor: 10분 내 활성 사용자, 신규 가입, 미션, 채굴, 위험 계정
+- Audit Logs 강화
 
-## Render 환경변수 설정
-Render → Environment → Add Environment Variable
-
+## Render 환경변수
 ADMIN_ID=admin
-ADMIN_PASSWORD=원하는강력한비밀번호
+ADMIN_PASSWORD=원하는비밀번호
 JWT_SECRET=랜덤64자리문자열
-
-## 관리자 접속
-https://spacenovax-v2.onrender.com/admin
-
-환경변수를 설정하지 않으면 기본값:
-ID: admin
-Password: ChangeMe123!
-
-운영 전 반드시 Render 환경변수로 변경하세요.

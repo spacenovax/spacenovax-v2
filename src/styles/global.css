@@ -1102,3 +1102,18 @@ button { font-family: inherit; }
 .admin-log-row small{color:var(--muted)}
 .admin-log-row code{white-space:pre-wrap;word-break:break-word;color:rgba(235,240,255,.78);font-size:11px}
 @media(max-width:768px){.admin-login{padding:24px 18px}.admin-actions{display:grid}}
+
+/* V6.2 Users KYC Risk Center */
+.admin-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 18px}
+.admin-tabs button{border:1px solid rgba(52,239,255,.18);border-radius:14px;padding:10px 14px;background:rgba(3,7,18,.45);color:white;font-weight:900}
+.admin-tabs button.active{background:linear-gradient(135deg,rgba(52,239,255,.25),rgba(126,67,255,.65));border-color:rgba(126,67,255,.8)}
+.admin-search{display:flex;gap:10px;margin-bottom:12px}
+.admin-search input,.admin-form select{width:100%;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px 16px;background:rgba(0,0,0,.35);color:white;outline:none}
+.admin-search button,.admin-user-side button{border:1px solid rgba(126,67,255,.55);border-radius:14px;padding:10px 14px;background:linear-gradient(135deg,rgba(52,239,255,.2),rgba(126,67,255,.55));color:white;font-weight:1000}
+.admin-user-rich{align-items:flex-start}.admin-user-side{display:grid;gap:8px;justify-items:end}
+.risk-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:1000;border:1px solid rgba(255,255,255,.16)}
+.risk-low{background:rgba(52,239,255,.14);color:#34efff}.risk-normal{background:rgba(80,255,160,.12);color:#76ffb0}.risk-review{background:rgba(255,192,60,.16);color:#ffd66e}.risk-high{background:rgba(255,80,120,.18);color:#ff82a2}
+.risk-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.risk-summary div{border:1px solid rgba(52,239,255,.18);background:rgba(3,7,18,.45);border-radius:18px;padding:16px}
+.risk-summary small{display:block;color:var(--muted);margin-bottom:6px}.risk-summary b{font-size:26px}
+@media(max-width:768px){.admin-search{display:grid}.admin-user-side{justify-items:start}.risk-summary{grid-template-columns:1fr}}
