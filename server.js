@@ -153,7 +153,7 @@ function publicUser(user) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, project: 'SpaceNovaX V3.1 Working Tabs', version: '3.1.0' });
+  res.json({ ok: true, project: 'SpaceNovaX V5.1 Admin Connected', version: '5.1.0' });
 });
 
 app.post('/api/session', (req, res) => {
@@ -244,6 +244,64 @@ app.get('/api/leaderboard', (req, res) => {
   res.json({ ok: true, users });
 });
 
+
+app.get('/api/admin/stats', (req, res) => {
+  const data = loadData();
+  const users = Object.values(data.users || {});
+  const events = data.events || [];
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const today = events.filter((event) => event.at >= dayAgo);
+  const totalBalance = users.reduce((sum, user) => sum + Number(user.balance || 0), 0);
+  const activeMining = users.filter((user) => calculateMining(user).active).length;
+
+  res.json({
+    ok: true,
+    stats: {
+      totalUsers: users.length,
+      activeMining,
+      totalBalance,
+      todaySessions: today.filter((event) => event.type === 'session').length,
+      todayMiningStarts: today.filter((event) => event.type === 'mining_start').length,
+      todayClaims: today.filter((event) => event.type === 'mining_claim').length,
+      totalEvents: events.length
+    }
+  });
+});
+
+app.get('/api/admin/users', (req, res) => {
+  const data = loadData();
+  const users = Object.values(data.users || {})
+    .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))
+    .slice(0, 100)
+    .map((user) => publicUser(user));
+
+  res.json({ ok: true, users });
+});
+
+app.post('/api/admin/points', (req, res) => {
+  const data = loadData();
+  const userId = String(req.body?.userId || '');
+  const amount = Number(req.body?.amount || 0);
+  const reason = req.body?.reason || 'manual';
+
+  if (!userId || !Number.isFinite(amount)) {
+    return res.status(400).json({ ok: false, message: 'userId and amount are required' });
+  }
+
+  const user = data.users?.[userId];
+  if (!user) {
+    return res.status(404).json({ ok: false, message: 'User not found' });
+  }
+
+  user.balance = Number(user.balance || 0) + amount;
+  user.updatedAt = Date.now();
+  data.events.push({ type: 'admin_points', userId, amount, reason, at: Date.now() });
+  saveData(data);
+
+  res.json({ ok: true, user: publicUser(user) });
+});
+
+
 app.use(express.static(distPath));
 
 app.use((req, res) => {
@@ -255,5 +313,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V3.1 Working Tabs running on port ${PORT}`);
+  console.log(`SpaceNovaX V5.1 Admin Connected running on port ${PORT}`);
 });

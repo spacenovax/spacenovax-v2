@@ -1,15 +1,27 @@
-# SpaceNovaX V3.1 Working Tabs
+# SpaceNovaX V5.1 Admin Connected
 
-하단 메뉴가 실제로 작동하도록 수정한 버전입니다.
+관리자 페이지를 실제 서버 API와 연결한 버전입니다.
 
-## 수정 내용
-- Home / Mining / Missions / Friends / Ranking / Wallet / More 탭 작동
-- 각 메뉴별 페이지 추가
-- 모바일 Phase 1 겹침 추가 수정
-- TOTAL BALANCE 모바일 크기 추가 축소
-- 서버 채굴 API 유지
+## 관리자 접속
+배포 후:
+https://spacenovax-v2.onrender.com/admin
 
-## Render 설정
+또는 앱 More 탭 → Admin Dashboard
+
+## 연결된 API
+- GET /api/admin/stats
+- GET /api/admin/users
+- POST /api/admin/points
+
+## 관리자 기능
+- 총 사용자 수
+- 채굴 중 사용자 수
+- 총 SPNX Point
+- 오늘 접속/채굴/Claim 통계
+- Top Users
+- User ID로 포인트 지급
+
+## Render
 Build Command:
 npm install && npm run build
 

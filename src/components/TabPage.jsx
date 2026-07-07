@@ -1,3 +1,5 @@
+import AdminPage from './AdminPage.jsx';
+
 function formatBalance(value) {
   return Number(value || 0).toLocaleString('en-US', {
     minimumFractionDigits: 6,
@@ -80,16 +82,23 @@ export default function TabPage({ tab, user, notice }) {
     );
   }
 
-  return (
-    <section className="page-card glass">
-      <h2>••• More</h2>
-      <p>{notice}</p>
-      <div className="more-grid">
-        <button>Notice</button>
-        <button>Whitepaper</button>
-        <button>Community</button>
-        <button>Settings</button>
-      </div>
-    </section>
-  );
+  if (tab === 'more') {
+    return (
+      <>
+        <section className="page-card glass">
+          <h2>••• More</h2>
+          <p>{notice}</p>
+          <div className="more-grid">
+            <button>Notice</button>
+            <button>Whitepaper</button>
+            <button>Community</button>
+            <button>Settings</button>\n            <button onClick={() => { window.location.href = '/admin'; }}>Admin Dashboard</button>
+          </div>
+        </section>
+        <AdminPage />
+      </>
+    );
+  }
+
+  return null;
 }
