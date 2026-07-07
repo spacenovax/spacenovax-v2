@@ -6,6 +6,7 @@ import Header from './components/Header.jsx';
 import ExplorerCard from './components/ExplorerCard.jsx';
 import MiningHero from './components/MiningHero.jsx';
 import MiningPanel from './components/MiningPanel.jsx';
+import MiningEngine from './components/MiningEngine.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import TabPage from './components/TabPage.jsx';
 import AdminPage from './components/AdminPage.jsx';
@@ -104,7 +105,7 @@ function App() {
               <>
                 <ExplorerCard user={user} />
                 <MiningHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
-                <MiningPanel user={user} />
+                <MiningEngine user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
               </>
             )}
             <TabPage tab={activeTab} user={user} notice={notice} />

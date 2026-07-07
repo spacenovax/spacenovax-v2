@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'spacenovax-data.json');
 
 const MINING_DURATION = 24 * 60 * 60 * 1000;
-const BASE_MINING_REWARD = 30;
+const BASE_MINING_REWARD = 24;
 
 const DEFAULT_MISSIONS = [
   { id: 'website', title: 'Visit SpaceNovaX Website', icon: '🌐', reward: 100, type: 'one-time', url: 'https://spacenovax.com', enabled: true },
@@ -53,6 +53,10 @@ function readData() {
   data.events ||= [];
   data.missions ||= DEFAULT_MISSIONS;
   data.settings ||= {};
+  data.settings.miningSandboxEnabled ??= false;
+  data.settings.miningSandboxMinutes ??= 5;
+  data.settings.eventMultiplier ??= 1;
+  data.settings.miningEngineVersion ??= '1.0.0';
   data.convertRequests ||= [];
   data.distributions ||= [];
   return data;
@@ -86,14 +90,7 @@ function normalizeTelegramUser(raw) {
 }
 
 function fleetBonusPercent(activeFleet) {
-  if (activeFleet >= 100) return 20;
-  if (activeFleet >= 50) return 15;
-  if (activeFleet >= 30) return 10;
-  if (activeFleet >= 20) return 8;
-  if (activeFleet >= 10) return 5;
-  if (activeFleet >= 5) return 3;
-  if (activeFleet >= 1) return 1;
-  return 0;
+  return Math.max(0, Math.min(100, Number(activeFleet || 0)));
 }
 
 function fleetGrade(activeFleet) {
@@ -110,15 +107,14 @@ function getActiveFleetCount(data, userId) {
 }
 
 function miningPhase(data) {
-  const used = Object.values(data.users).reduce((sum, user) => sum + Number(user.totalMined || 0), 0);
+  const used = getMiningPoolUsed(data);
   const pool = data.settings?.miningPool || 3500000000;
   const ratio = pool > 0 ? used / pool : 0;
-
-  if (ratio >= 0.8) return { phase: 5, reward: 6, used, pool, ratio };
-  if (ratio >= 0.6) return { phase: 4, reward: 12, used, pool, ratio };
-  if (ratio >= 0.4) return { phase: 3, reward: 18, used, pool, ratio };
-  if (ratio >= 0.2) return { phase: 2, reward: 24, used, pool, ratio };
-  return { phase: 1, reward: BASE_MINING_REWARD, used, pool, ratio };
+  if (ratio >= 0.9) return { phase: 5, reward: 4.8, used, pool, ratio, multiplier: 0.2 };
+  if (ratio >= 0.75) return { phase: 4, reward: 9.6, used, pool, ratio, multiplier: 0.4 };
+  if (ratio >= 0.5) return { phase: 3, reward: 14.4, used, pool, ratio, multiplier: 0.6 };
+  if (ratio >= 0.25) return { phase: 2, reward: 19.2, used, pool, ratio, multiplier: 0.8 };
+  return { phase: 1, reward: BASE_MINING_REWARD, used, pool, ratio, multiplier: 1 };
 }
 
 function ensureUser(data, telegramUser, referralCode = '') {
@@ -157,36 +153,49 @@ function ensureUser(data, telegramUser, referralCode = '') {
   return data.users[userId];
 }
 
-function calculateMining(data, user) {
+
+function getMiningDuration(data) {
+  if (data.settings?.miningSandboxEnabled) return Math.max(1, Number(data.settings?.miningSandboxMinutes || 5)) * 60 * 1000;
+  return MINING_DURATION;
+}
+function getMiningPoolUsed(data) {
+  return Object.values(data.users || {}).reduce((sum, user) => sum + Number(user.totalMined || 0), 0);
+}
+function getMiningPoolRemaining(data) {
+  const pool = Number(data.settings?.miningPool || 3500000000);
+  return Math.max(0, pool - getMiningPoolUsed(data));
+}
+function miningSpeedPerHour(data, user) {
   const phase = miningPhase(data);
   const activeFleet = getActiveFleetCount(data, user.id);
-  const bonus = fleetBonusPercent(activeFleet);
-  const reward = Number((phase.reward * (1 + bonus / 100)).toFixed(6));
+  const fleetBonus = fleetBonusPercent(activeFleet);
+  const eventMultiplier = Number(data.settings?.eventMultiplier || 1);
+  const duration = getMiningDuration(data);
+  const basePerHour = phase.reward / 24;
+  const finalPerHour = basePerHour * (1 + fleetBonus / 100) * eventMultiplier;
+  return { basePerHour, finalPerHour: Number(finalPerHour.toFixed(8)), fleetBonus, activeFleet, phase: phase.phase, eventMultiplier, duration };
+}
+function miningRewardForCycle(data, user) {
+  const speed = miningSpeedPerHour(data, user);
+  const hours = speed.duration / (60 * 60 * 1000);
+  const amount = speed.finalPerHour * hours;
+  const remaining = getMiningPoolRemaining(data);
+  return Number(Math.max(0, Math.min(amount, remaining)).toFixed(8));
+}
 
+function calculateMining(data, user) {
+  const speed = miningSpeedPerHour(data, user);
+  const reward = miningRewardForCycle(data, user);
+  const duration = speed.duration;
   if (!user.mining?.active) {
-    return { active: false, reward, baseReward: phase.reward, fleetBonus: bonus, activeFleet, phase: phase.phase, remainingMs: MINING_DURATION, progress: 0, minedSoFar: 0, claimable: false };
+    return { active: false, reward, baseReward: miningPhase(data).reward, speedPerHour: speed.finalPerHour, baseSpeedPerHour: speed.basePerHour, fleetBonus: speed.fleetBonus, activeFleet: speed.activeFleet, phase: speed.phase, eventMultiplier: speed.eventMultiplier, durationMs: duration, remainingMs: duration, progress: 0, minedSoFar: 0, claimable: false, sandbox: Boolean(data.settings?.miningSandboxEnabled), engineVersion: data.settings?.miningEngineVersion || '1.0.0' };
   }
-
-  const startedAt = user.mining.startedAt;
-  const endsAt = startedAt + MINING_DURATION;
+  const startedAt = Number(user.mining.startedAt || now());
+  const endsAt = startedAt + duration;
   const remainingMs = Math.max(0, endsAt - now());
-  const progress = Math.min(1, Math.max(0, (now() - startedAt) / MINING_DURATION));
-  const minedSoFar = Number((reward * progress).toFixed(6));
-
-  return {
-    active: remainingMs > 0,
-    startedAt,
-    endsAt,
-    remainingMs,
-    progress,
-    minedSoFar,
-    reward,
-    baseReward: phase.reward,
-    fleetBonus: bonus,
-    activeFleet,
-    phase: phase.phase,
-    claimable: remainingMs <= 0
-  };
+  const progress = Math.min(1, Math.max(0, (now() - startedAt) / duration));
+  const minedSoFar = Number((reward * progress).toFixed(8));
+  return { active: remainingMs > 0, startedAt, endsAt, remainingMs, progress, minedSoFar, reward, baseReward: miningPhase(data).reward, speedPerHour: speed.finalPerHour, baseSpeedPerHour: speed.basePerHour, fleetBonus: speed.fleetBonus, activeFleet: speed.activeFleet, phase: speed.phase, eventMultiplier: speed.eventMultiplier, durationMs: duration, claimable: remainingMs <= 0, sandbox: Boolean(data.settings?.miningSandboxEnabled), engineVersion: data.settings?.miningEngineVersion || '1.0.0' };
 }
 
 function publicUser(data, user) {
@@ -275,7 +284,7 @@ app.post('/api/mining/start', (req, res) => {
 
   if (status.active) return res.json({ ok: true, message: 'Mining already active.', user: publicUser(data, user) });
 
-  user.mining = { active: true, startedAt: now() };
+  user.mining = { active: true, startedAt: now(), engineVersion: data.settings?.miningEngineVersion || '1.0.0', sandbox: Boolean(data.settings?.miningSandboxEnabled) };
   user.lastMiningAt = now();
   data.events.push({ type: 'mining_start', userId: user.id, at: now() });
   writeData(data);
@@ -288,6 +297,8 @@ app.post('/api/mining/claim', (req, res) => {
   const user = getSessionUser(req, data);
   const status = calculateMining(data, user);
 
+  if (user.banned) return res.status(403).json({ ok: false, message: 'Account is restricted.' });
+
   if (!status.claimable) {
     return res.status(400).json({ ok: false, message: 'Mining is not ready to claim yet.' });
   }
@@ -299,7 +310,7 @@ app.post('/api/mining/claim', (req, res) => {
   user.lastMiningAt = now();
   user.updatedAt = now();
 
-  data.events.push({ type: 'mining_claim', userId: user.id, amount, at: now() });
+  data.events.push({ type: 'mining_claim', userId: user.id, amount, phase: status.phase, fleetBonus: status.fleetBonus, engineVersion: status.engineVersion, sandbox: status.sandbox, at: now() });
   writeData(data);
 
   res.json({ ok: true, message: `Claimed ${amount} SPNX Point.`, user: publicUser(data, user) });
@@ -695,6 +706,41 @@ app.post('/api/admin/mission/update', requireAdmin, (req, res) => {
   res.json({ ok: true, mission });
 });
 
+
+app.get('/api/admin/mining/engine', requireAdmin, (req, res) => {
+  const data = readData();
+  const users = Object.values(data.users || {});
+  const phase = miningPhase(data);
+  const active = users.filter((u) => calculateMining(data, u).active).map((u) => ({ user: publicAdminUser(data, u), mining: calculateMining(data, u) }));
+  const events = data.events || [];
+  const dayAgo = now() - 24 * 60 * 60 * 1000;
+  const today = events.filter((e) => e.at >= dayAgo);
+  const todayClaims = today.filter((e) => e.type === 'mining_claim');
+  const todayMined = todayClaims.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  res.json({ ok: true, engine: { version: data.settings?.miningEngineVersion || '1.0.0', sandbox: Boolean(data.settings?.miningSandboxEnabled), sandboxMinutes: data.settings?.miningSandboxMinutes || 5, eventMultiplier: data.settings?.eventMultiplier || 1, activeMiners: active.length, todayMiningStarts: today.filter((e) => e.type === 'mining_start').length, todayClaims: todayClaims.length, todayMined, poolUsed: phase.used, poolRemaining: getMiningPoolRemaining(data), pool: phase.pool, poolRatio: phase.ratio, phase: phase.phase, phaseReward: phase.reward, active } });
+});
+app.post('/api/admin/mining/settings', requireAdmin, (req, res) => {
+  const data = readData();
+  data.settings ||= {};
+  if (req.body?.miningSandboxEnabled !== undefined) data.settings.miningSandboxEnabled = Boolean(req.body.miningSandboxEnabled);
+  if (req.body?.miningSandboxMinutes !== undefined) data.settings.miningSandboxMinutes = Math.max(1, Number(req.body.miningSandboxMinutes));
+  if (req.body?.eventMultiplier !== undefined) data.settings.eventMultiplier = Math.max(0, Number(req.body.eventMultiplier));
+  data.events.push({ type: 'admin_mining_settings_update', adminId: req.admin.id, settings: data.settings, at: now() });
+  writeData(data);
+  res.json({ ok: true, settings: data.settings });
+});
+app.post('/api/admin/mining/force-reset', requireAdmin, (req, res) => {
+  const data = readData();
+  const userId = String(req.body?.userId || '');
+  const user = data.users?.[userId];
+  if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
+  user.mining = null;
+  user.updatedAt = now();
+  data.events.push({ type: 'admin_mining_force_reset', adminId: req.admin.id, userId, at: now() });
+  writeData(data);
+  res.json({ ok: true, user: publicAdminUser(data, user) });
+});
+
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
@@ -703,5 +749,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V7 Ultimate Core running on port ${PORT}`);
+  console.log(`SpaceNovaX V7.1 Mining Engine Core running on port ${PORT}`);
 });

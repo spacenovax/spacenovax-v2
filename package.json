@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v7-ultimate-core",
-  "version": "7.0.0",
+  "name": "spacenovax-v7-1-mining-engine",
+  "version": "7.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V7 Ultimate Core"
+  "description": "SpaceNovaX V7.1 Mining Engine Core"
 }
