@@ -1,33 +1,18 @@
-# SpaceNovaX V8 Unified Platform
+# SpaceNovaX V8.0.1 Hotfix
 
-이번 버전은 덧붙이기 방식이 아니라 App.jsx를 하나의 플랫폼 구조로 재구성했습니다.
+화면이 검은색/빈 화면으로 나오는 문제 수정본입니다.
 
-## 핵심 수정
-- 화면 겹침 제거
-- 메뉴별 독립 페이지
-  - Home
-  - Mining
-  - Missions
-  - Friends
-  - Ranking
-  - Wallet
-  - Game
-  - More
-- 실사 시네마틱 느낌의 Nova-X1 우주선 스타일
-- 바둑판 현상 없는 랜덤 별 배경
-- 유성 효과
-- 24시간 = 24 SPNX 채굴 정책 표시
-- Mission 보상 고정
-  - Website +100, 1회
-  - Telegram +300, 1회
-  - X +300, 1회
-  - Discord +300, 1회
-  - YouTube Subscribe +300, 1회
-  - YouTube Like +100, 1회
-  - Daily Check-in +20, 하루 1회
-- Friends 추천 링크 메뉴 포함
-- Nova-X1 Game Preview 포함
+## 원인
+index.html이 `/src/App.jsx`를 직접 불러오고 있었습니다.
+React 앱은 반드시 `main.jsx`에서 `createRoot(...).render(<App />)`로 실행되어야 합니다.
+
+## 수정
+- `src/main.jsx` 추가
+- `index.html` script를 `/src/main.jsx`로 변경
+- V8 플랫폼 구조 유지
+- 메뉴별 독립 화면 유지
+- 미션/추천/게임/채굴 화면 유지
 
 ## 적용
-분리형 구조라면 우선 GitHub spacenovax-v2에 업로드하세요.
-그 다음 Render spacenovax-v2에서 Clear build cache & deploy.
+GitHub `spacenovax-v2`에 압축 해제한 파일을 덮어쓰기 업로드 후,
+Render `spacenovax-v2`에서 Clear build cache & deploy.

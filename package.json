@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v8-platform",
-  "version": "8.0.0",
+  "name": "spacenovax-v8-platform-hotfix",
+  "version": "8.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V8 Unified Platform"
+  "description": "SpaceNovaX V8 Platform Hotfix - React mount fixed"
 }
