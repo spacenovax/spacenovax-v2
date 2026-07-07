@@ -3,55 +3,125 @@ import { useEffect, useState } from 'react';
 function fmt(v) {
   return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+const getToken = () => localStorage.getItem('spnx_admin_token') || '';
+const setToken = (t) => localStorage.setItem('spnx_admin_token', t);
+const clearToken = () => localStorage.removeItem('spnx_admin_token');
+
+async function adminFetch(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+      ...(options.headers || {})
+    }
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.message || 'Admin API failed');
+  return data;
+}
+
+function AdminLogin({ onLogin }) {
+  const [form, setForm] = useState({ id: 'admin', password: '' });
+  const [notice, setNotice] = useState('Admin login required.');
+
+  async function login(e) {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.message || 'Login failed');
+      setToken(data.token);
+      onLogin(data.admin);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  return (
+    <section className="admin-login glass">
+      <div className="admin-login-logo"><img src="/spnx-official-logo.jpg" alt="SPNX" /></div>
+      <h2>SpaceNovaX Admin</h2>
+      <p>{notice}</p>
+      <form onSubmit={login}>
+        <input placeholder="Admin ID" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} />
+        <input placeholder="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <button type="submit">Login</button>
+      </form>
+    </section>
+  );
+}
 
 export default function AdminPage() {
+  const [admin, setAdmin] = useState(null);
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
-  const [notice, setNotice] = useState('Loading admin dashboard...');
+  const [logs, setLogs] = useState([]);
+  const [notice, setNotice] = useState('Checking admin session...');
   const [form, setForm] = useState({ userId: '', amount: '100', reason: 'admin bonus' });
 
   async function loadAdmin() {
     try {
-      const [a, b] = await Promise.all([fetch('/api/admin/stats'), fetch('/api/admin/users')]);
-      const statsData = await a.json();
-      const usersData = await b.json();
-      if (!statsData.ok || !usersData.ok) throw new Error('Admin API error');
-      setStats(statsData.stats);
-      setUsers(usersData.users);
-      setNotice('Admin connected.');
+      const [a,b,c] = await Promise.all([
+        adminFetch('/api/admin/stats'),
+        adminFetch('/api/admin/users'),
+        adminFetch('/api/admin/logs')
+      ]);
+      setStats(a.stats); setUsers(b.users); setLogs(c.logs || []);
+      setNotice('Admin protected dashboard connected.');
     } catch (e) {
       setNotice(e.message);
+      if (e.message.includes('required')) { clearToken(); setAdmin(null); }
+    }
+  }
+
+  async function checkSession() {
+    try {
+      const data = await adminFetch('/api/admin/me');
+      setAdmin(data.admin);
+      loadAdmin();
+    } catch {
+      clearToken();
+      setAdmin(null);
+      setNotice('Admin login required.');
     }
   }
 
   async function givePoints(e) {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/points', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.message || 'Failed');
+      const data = await adminFetch('/api/admin/points', { method: 'POST', body: JSON.stringify(form) });
       setNotice(`Points updated: ${data.user.firstName}`);
       setForm({ userId: '', amount: '100', reason: 'admin bonus' });
       loadAdmin();
-    } catch (e) {
-      setNotice(e.message);
-    }
+    } catch (e) { setNotice(e.message); }
   }
 
-  useEffect(() => { loadAdmin(); }, []);
+  async function logout() {
+    try { await adminFetch('/api/admin/logout', { method: 'POST', body: '{}' }); } catch {}
+    clearToken(); setAdmin(null); setNotice('Logged out.');
+  }
+
+  useEffect(() => { checkSession(); }, []);
+
+  if (!admin) return <AdminLogin onLogin={(a) => { setAdmin(a); loadAdmin(); }} />;
 
   return (
     <section className="admin-page glass">
       <div className="admin-head">
         <div>
-          <h2>🛠 SpaceNovaX Admin V6</h2>
+          <h2>🛠 SpaceNovaX Admin V6.1</h2>
           <p>{notice}</p>
+          <small>Logged in: {admin.id} · {admin.role}</small>
         </div>
-        <button type="button" onClick={loadAdmin}>Refresh</button>
+        <div className="admin-actions">
+          <button type="button" onClick={loadAdmin}>Refresh</button>
+          <button type="button" onClick={logout}>Logout</button>
+        </div>
       </div>
 
       <div className="admin-stats">
@@ -76,15 +146,26 @@ export default function AdminPage() {
 
       <div className="admin-users">
         <h3>Users / Top Miners</h3>
-        {users.length === 0 && <p className="admin-empty">아직 사용자가 없습니다. 앱에서 접속하면 자동 생성됩니다.</p>}
         {users.map((user, idx) => (
           <div className="admin-user-row" key={user.id}>
             <div>
               <b>#{idx + 1} {user.firstName}</b>
               <small>{user.id}</small>
               <small>Fleet {user.activeFleet} · Bonus +{user.fleetBonus}% · {user.fleetGrade}</small>
+              <small>Wallet: {user.solanaWallet || 'Not connected'}</small>
             </div>
             <strong>{fmt(user.balance)} SPNX</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="admin-logs">
+        <h3>Audit Logs</h3>
+        {logs.map((log, i) => (
+          <div className="admin-log-row" key={`${log.at}-${i}`}>
+            <b>{log.type}</b>
+            <small>{new Date(log.at).toLocaleString()}</small>
+            <code>{JSON.stringify(log)}</code>
           </div>
         ))}
       </div>

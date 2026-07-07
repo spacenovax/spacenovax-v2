@@ -220,6 +220,44 @@ function getSessionUser(req, data) {
 
 app.use(express.json({ limit: '2mb' }));
 
+const ADMIN_ID = process.env.ADMIN_ID || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
+const ADMIN_TOKEN_SECRET = process.env.JWT_SECRET || 'spacenovax-local-secret-change-on-render';
+const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000;
+
+function signAdminToken(payload) {
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + ADMIN_SESSION_MS })).toString('base64url');
+  const sig = crypto.createHmac('sha256', ADMIN_TOKEN_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyAdminToken(token = '') {
+  const [body, sig] = String(token).split('.');
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac('sha256', ADMIN_TOKEN_SECRET).update(body).digest('base64url');
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function getAdminToken(req) {
+  const auth = req.headers.authorization || '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : '';
+}
+
+function requireAdmin(req, res, next) {
+  const payload = verifyAdminToken(getAdminToken(req));
+  if (!payload) return res.status(401).json({ ok: false, message: 'Admin login required' });
+  req.admin = payload;
+  next();
+}
+
+
 app.post('/api/session', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
@@ -334,7 +372,43 @@ app.post('/api/wallet/save', (req, res) => {
   res.json({ ok: true, user: publicUser(data, user) });
 });
 
-app.get('/api/admin/stats', (req, res) => {
+
+app.post('/api/admin/login', (req, res) => {
+  const id = String(req.body?.id || '').trim();
+  const password = String(req.body?.password || '');
+
+  const data = readData();
+  if (id !== ADMIN_ID || password !== ADMIN_PASSWORD) {
+    data.events.push({ type: 'admin_login_failed', id, at: now() });
+    writeData(data);
+    return res.status(401).json({ ok: false, message: 'Invalid admin ID or password' });
+  }
+
+  const token = signAdminToken({ id, role: 'super_admin' });
+  data.events.push({ type: 'admin_login_success', id, at: now() });
+  writeData(data);
+  res.json({ ok: true, token, admin: { id, role: 'super_admin' } });
+});
+
+app.get('/api/admin/me', requireAdmin, (req, res) => {
+  res.json({ ok: true, admin: req.admin });
+});
+
+app.post('/api/admin/logout', requireAdmin, (req, res) => {
+  const data = readData();
+  data.events.push({ type: 'admin_logout', id: req.admin.id, at: now() });
+  writeData(data);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/logs', requireAdmin, (req, res) => {
+  const data = readData();
+  const logs = (data.events || []).filter((e) => String(e.type || '').startsWith('admin_')).slice(-100).reverse();
+  res.json({ ok: true, logs });
+});
+
+
+app.get('/api/admin/stats', requireAdmin, (req, res) => {
   const data = readData();
   const users = Object.values(data.users || {});
   const events = data.events || [];
@@ -359,7 +433,7 @@ app.get('/api/admin/stats', (req, res) => {
   }});
 });
 
-app.get('/api/admin/users', (req, res) => {
+app.get('/api/admin/users', requireAdmin, (req, res) => {
   const data = readData();
   const users = Object.values(data.users || {})
     .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))
@@ -368,12 +442,12 @@ app.get('/api/admin/users', (req, res) => {
   res.json({ ok: true, users });
 });
 
-app.get('/api/admin/missions', (req, res) => {
+app.get('/api/admin/missions', requireAdmin, (req, res) => {
   const data = readData();
   res.json({ ok: true, missions: data.missions });
 });
 
-app.post('/api/admin/points', (req, res) => {
+app.post('/api/admin/points', requireAdmin, (req, res) => {
   const data = readData();
   const userId = String(req.body?.userId || '');
   const amount = Number(req.body?.amount || 0);
@@ -386,7 +460,7 @@ app.post('/api/admin/points', (req, res) => {
 
   user.balance = Number(user.balance || 0) + amount;
   user.updatedAt = now();
-  data.events.push({ type: 'admin_points', userId, amount, reason, at: now() });
+  data.events.push({ type: 'admin_points', adminId: req.admin?.id || 'admin', userId, amount, reason, at: now() });
   writeData(data);
 
   res.json({ ok: true, user: publicUser(data, user) });
@@ -400,5 +474,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SpaceNovaX V6 Mission Fleet DB running on port ${PORT}`);
+  console.log(`SpaceNovaX V6.1 Admin Login Protected running on port ${PORT}`);
 });

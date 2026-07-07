@@ -1086,3 +1086,19 @@ button { font-family: inherit; }
 .wallet-input{width:100%;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px 16px;background:rgba(0,0,0,.35);color:white;margin-bottom:12px;outline:none}
 @media(max-width:768px){.official-logo{width:70px;height:70px}}
 @media(max-width:370px){.official-logo{width:60px;height:60px}}
+
+/* V6.1 Admin Login Protected */
+.admin-login{width:min(100%,520px);margin:28px auto;padding:32px;border-radius:30px;text-align:center}
+.admin-login-logo img{width:108px;height:108px;border-radius:50%;object-fit:cover;box-shadow:0 0 38px rgba(52,239,255,.55)}
+.admin-login h2{margin:18px 0 8px;font-size:32px}
+.admin-login p{margin:0 0 18px;color:var(--muted)}
+.admin-login form{display:grid;gap:12px}
+.admin-login input,.admin-form input{width:100%;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px 16px;background:rgba(0,0,0,.35);color:white;outline:none}
+.admin-login button,.admin-actions button,.admin-form button{border:1px solid rgba(126,67,255,.55);border-radius:16px;padding:12px 16px;background:linear-gradient(135deg,rgba(52,239,255,.2),rgba(126,67,255,.55));color:white;font-weight:1000}
+.admin-actions{display:flex;gap:10px;flex-wrap:wrap}
+.admin-head small{color:var(--muted)}
+.admin-logs{display:grid;gap:10px;margin-top:18px}
+.admin-log-row{border:1px solid rgba(52,239,255,.18);background:rgba(3,7,18,.45);border-radius:18px;padding:14px;display:grid;gap:6px}
+.admin-log-row small{color:var(--muted)}
+.admin-log-row code{white-space:pre-wrap;word-break:break-word;color:rgba(235,240,255,.78);font-size:11px}
+@media(max-width:768px){.admin-login{padding:24px 18px}.admin-actions{display:grid}}
