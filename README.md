@@ -1,43 +1,19 @@
-# SpaceNovaX V9 Ultimate
+# SpaceNovaX V10 Ultimate
 
-지금까지 논의한 내용을 하나로 통합한 최종 플랫폼 버전입니다.
+Home과 Game을 프리미엄 시네마틱 방향으로 재구성한 버전입니다.
 
-## 포함 기능
-- 공식 심볼 적용
-- Home 시네마틱 Nova-X1 우주선
-- 바둑판 현상 없는 반짝이는 별/유성/행성 효과
-- 메뉴별 독립 화면
-  - Home
-  - Mining
-  - Missions
-  - Friends
-  - Ranking
-  - Wallet
-  - KYC
-  - Game
-  - More
-- 채굴 정책: 24시간 = 24 SPNX Point
-- Mission 정책
-  - Website +100, 평생 1회
-  - Telegram +300, 평생 1회
-  - X +300, 평생 1회
-  - Discord +300, 평생 1회
-  - YouTube Subscribe +300, 평생 1회
-  - YouTube Like +20, 평생 1회
-  - Daily Check-in +20, 하루 1회
-- Friends 추천 링크
-- Solana Wallet 등록
-- 1 SPNX Point = 1 SPNX 앱 내 명시
-- KYC 신청 화면
-- Token Conversion 요청
-- Game 하루 최대 20 SPNX Point
-- Ranking 시스템
-- Glow UI
-- Launch Countdown
-- More 공식 링크
+## 핵심 개선
+- CSS 반복 별 패턴 제거
+- DOM 기반 랜덤 별 레이어 적용
+- 바둑판 현상 제거 목적
+- Home 시네마틱 배경 개선
+- Nova-X1 이미지급 SVG 우주선 사용
+- Game 화면을 아케이드 스테이지 형태로 개선
+- 크리스탈/운석/부스터/컨트롤 UI 추가
+- 게임 보상 하루 최대 20 SPNX 유지
+- Mission 보상 정책 유지
+- Solana Wallet/KYC/Token Conversion 유지
 
 ## 적용
-GitHub spacenovax-v2에 압축 해제 후 전체 덮어쓰기.
-그 다음 Render spacenovax-v2에서 Clear build cache & deploy.
-
-서버가 분리된 구조라면 server.js 변경사항은 spacenovax-server-v2에도 반영해야 합니다.
+GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.
+서버 분리 구조라면 server.js 변경분은 spacenovax-server-v2에도 반영해야 합니다.
