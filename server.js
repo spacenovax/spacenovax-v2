@@ -775,6 +775,60 @@ app.post('/api/admin/mining/force-reset', requireAdmin, (req, res) => {
   res.json({ ok: true, user: publicAdminUser(data, user) });
 });
 
+
+// V8 Unified Platform API helpers
+function v8TodayKey() {
+  return new Date(Date.now()).toISOString().slice(0, 10);
+}
+
+function v8EnsureMissions(data) {
+  data.missions ||= [
+    { id: 'website', icon: '🌐', title: 'Website', type: 'one_time', reward: 100, url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
+    { id: 'telegram', icon: '📢', title: 'Telegram', type: 'one_time', reward: 300, url: 'https://t.me/spacesnovax', action: 'JOIN', enabled: true },
+    { id: 'x', icon: '𝕏', title: 'X Twitter', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
+    { id: 'discord', icon: '💬', title: 'Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
+    { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
+    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
+    { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
+  ];
+}
+
+function v8MissionStatus(user, mission) {
+  user.missionClaims ||= {};
+  const claim = user.missionClaims[mission.id];
+  if (!claim) return { completed: false };
+  if (mission.type === 'daily') return { completed: claim.date === v8TodayKey(), claimedAt: claim.at || null };
+  return { completed: true, claimedAt: claim.at || null };
+}
+
+app.get('/api/missions', (req, res) => {
+  const data = readData();
+  v8EnsureMissions(data);
+  const user = ensureUser(data, {}, '');
+  const missions = data.missions.filter((m) => m.enabled !== false).map((m) => ({ ...m, status: v8MissionStatus(user, m) }));
+  writeData(data);
+  res.json({ ok: true, missions });
+});
+
+app.post('/api/missions/claim', (req, res) => {
+  const data = readData();
+  v8EnsureMissions(data);
+  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const mission = data.missions.find((m) => m.id === String(req.body?.missionId || '') && m.enabled !== false);
+  if (!mission) return res.status(404).json({ ok: false, message: 'Mission not found' });
+  if (v8MissionStatus(user, mission).completed) {
+    return res.status(400).json({ ok: false, message: mission.type === 'daily' ? 'Daily already claimed today.' : 'One-time mission already completed.' });
+  }
+  const reward = Number(mission.reward || 0);
+  user.balance = Number(user.balance || 0) + reward;
+  user.missionClaims ||= {};
+  user.missionClaims[mission.id] = { at: Date.now(), date: v8TodayKey(), reward, type: mission.type };
+  user.updatedAt = Date.now();
+  data.events.push({ type: 'mission_claim', userId: user.id, missionId: mission.id, reward, at: Date.now() });
+  writeData(data);
+  res.json({ ok: true, reward, user: publicUser(data, user) });
+});
+
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
