@@ -1,25 +1,15 @@
-# SpaceNovaX V7.1 Mining Engine Core
+# SpaceNovaX V7.1.1 Home Final UI
 
-채굴기를 우선 완성하기 위한 Mining Engine V1.0 핵심 버전입니다.
+선택한 우주선 디자인과 동일한 느낌으로 Home 화면을 정리한 버전입니다.
 
-## 핵심 정책
-- 24시간 = 24 SPNX Point
-- 1시간 = 1 SPNX Point
-- 서버 기준 시간 계산
-- Fleet 1명 = +1%, 최대 +100%
-- 35% 채굴 보상 풀 기준 반감기
-- Claim 서버 검증
-- 중복 채굴 방지
-- Sandbox 5분 테스트 모드
+## 수정 내용
+- Home 화면을 최종 선택 디자인 기준으로 변경
+- 중복 Mining Engine 카드 제거
+- 우주선 대형 중앙 배치
+- Phase / Balance / Today's Mining / Stats / Network 카드 구성
+- Start Mining / Claim 버튼은 메인 카드 안에 연결
+- Mining 탭은 상세 채굴 정보용으로 유지
 
-## 추가 기능
-- MiningEngine 컴포넌트
-- 서버 기반 실시간 진행률
-- 속도/보너스/반감기/보상 표시
-- 관리자 Mining Monitor 탭
-- Sandbox ON/OFF
-- 채굴 강제 Reset
-- 채굴 풀 잔량 / 오늘 채굴량 표시
-
-## 배포
-GitHub에 덮어올리고 Render에서 Clear build cache & deploy.
+## 업로드
+현재 구조가 분리형이라면 이 파일은 프론트엔드 저장소(spacenovax-v2)에 우선 적용하세요.
+서버 저장소는 기존 V7.1 Mining Engine API를 유지하면 됩니다.

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles/global.css';
 
 import Header from './components/Header.jsx';
+import FinalHomeHero from './components/FinalHomeHero.jsx';
 import ExplorerCard from './components/ExplorerCard.jsx';
 import MiningHero from './components/MiningHero.jsx';
 import MiningPanel from './components/MiningPanel.jsx';
@@ -95,7 +96,8 @@ function App() {
     <div className="app-shell">
       <main className="app">
         <Header user={user} />
-        <div className="notice">{isAdminRoute ? 'Admin mode connected to live server APIs.' : notice}</div>
+        <FinalHomeHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
+<div className="notice">{isAdminRoute ? 'Admin mode connected to live server APIs.' : notice}</div>
 
         {isAdminRoute ? (
           <AdminPage />
@@ -105,7 +107,7 @@ function App() {
               <>
                 <ExplorerCard user={user} />
                 <MiningHero user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
-                <MiningEngine user={user} onStart={startMining} onClaim={claimMining} loading={loading} />
+                
               </>
             )}
             <TabPage tab={activeTab} user={user} notice={notice} />
