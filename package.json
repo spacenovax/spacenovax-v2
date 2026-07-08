@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v2-main-crystal-fix",
-  "version": "13.4.3",
+  "name": "spacenovax-v13-4-7-arcade-stable-min",
+  "version": "13.4.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX crystal collision fix: crystal/item pickup never destroys ship"
+  "description": "Arcade stable minimal: pickups no restart, asteroid game over"
 }

@@ -578,3 +578,23 @@
 .leader-row em{color:#34efff;font-style:normal;font-weight:1000;font-size:18px}.leader-row span{color:#fff;font-weight:900}.leader-row b{color:#eaf2ff}.leader-row.rank-1{border-color:rgba(255,214,110,.34);box-shadow:0 0 18px rgba(255,214,110,.10)}
 .my-rank-card{border:1px solid rgba(52,239,255,.24);border-radius:20px;padding:13px 14px;background:linear-gradient(135deg,rgba(52,239,255,.08),rgba(126,67,255,.14));display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}.my-rank-card span{color:#cfd8ff;font-weight:900}.my-rank-card b{color:#34efff;font-size:24px}.my-rank-card small{grid-column:1/-1;color:rgba(234,242,255,.78);font-weight:800}
 @keyframes gameoverFade{from{opacity:0}to{opacity:1}}@keyframes gameoverPop{from{opacity:0;transform:scale(.88) translateY(14px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+/* V13.4.7 Arcade Stable Minimal */
+.arcade-ultimate-page .arcade-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sound-toggle{width:52px;height:52px;border-radius:50%;border:1px solid rgba(52,239,255,.26);background:rgba(3,7,18,.56);color:#fff;font-size:22px}
+.sound-toggle.on{background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.92),rgba(52,239,255,.24),rgba(126,67,255,.30))}
+.arcade-ultimate{position:relative}
+.gameover-overlay{position:absolute;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(1,3,12,.78);backdrop-filter:blur(8px)}
+.gameover-card{width:min(380px,100%);border:1px solid rgba(255,77,109,.36);border-radius:28px;padding:20px;background:linear-gradient(145deg,rgba(7,8,22,.96),rgba(35,18,55,.94));box-shadow:0 0 40px rgba(255,77,109,.25);text-align:center}
+.gameover-kicker{display:inline-block;padding:6px 10px;border-radius:999px;color:#ff4d6d;font-size:11px;font-weight:1000;letter-spacing:.12em;background:rgba(255,77,109,.08)}
+.gameover-card h2{margin:10px 0 8px;font-size:34px;color:#fff}
+.ai-fail{color:#dbe6ff;font-weight:850}
+.gameover-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.gameover-stats div{border:1px solid rgba(52,239,255,.18);border-radius:16px;padding:10px;background:rgba(3,7,18,.48)}
+.gameover-stats small{display:block;color:rgba(215,221,255,.70);font-weight:800;font-size:11px}
+.gameover-stats b{color:#34efff;font-size:18px}
+.play-again-btn{border:0;border-radius:16px;padding:12px 18px;background:linear-gradient(135deg,#34efff,#7e43ff);color:#fff;font-weight:1000}
+.galaxy-leaderboard{margin:14px 0;display:grid;gap:10px}
+.champion-banner,.my-rank-card{border:1px solid rgba(52,239,255,.24);border-radius:20px;padding:13px 14px;background:linear-gradient(135deg,rgba(52,239,255,.08),rgba(126,67,255,.14));display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+.champion-banner span{grid-column:1/-1;color:#ffd66e;font-weight:1000;font-size:12px}
+.champion-banner b,.my-rank-card span{color:#fff;font-weight:900}.champion-banner strong,.my-rank-card b{color:#34efff;font-size:20px}.my-rank-card small{grid-column:1/-1;color:rgba(234,242,255,.78);font-weight:800}
