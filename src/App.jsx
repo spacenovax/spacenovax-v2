@@ -388,17 +388,51 @@ function createArcadeSounds() {
     } catch {}
   };
   return {
-    start: () => { tone(240, .10, 'sawtooth', .05, 260); setTimeout(() => tone(760, .12, 'sine', .05, 180), 90); },
+    start: () => { tone(260, .10, 'sawtooth', .045, 220); setTimeout(() => tone(720, .11, 'sine', .05, 200), 90); },
     crystal: () => { tone(920, .08, 'sine', .055, 420); setTimeout(() => tone(1380, .10, 'triangle', .04, 240), 55); },
-    boost: () => { tone(180, .16, 'sawtooth', .055, 520); setTimeout(() => tone(740, .13, 'square', .035, 260), 80); },
-    hit: () => { tone(90, .22, 'sawtooth', .09, -35); setTimeout(() => tone(52, .20, 'square', .06, -14), 70); },
-    gameover: () => { tone(120, .22, 'sawtooth', .08, -60); setTimeout(() => tone(70, .36, 'square', .07, -20), 120); },
-    high: () => { tone(660, .10, 'sine', .055, 220); setTimeout(() => tone(880, .10, 'sine', .055, 220), 110); setTimeout(() => tone(1320, .16, 'triangle', .055, 0), 220); },
+    item: () => { tone(180, .16, 'sawtooth', .055, 520); setTimeout(() => tone(740, .13, 'square', .035, 260), 80); },
+    shield: () => { tone(500, .12, 'triangle', .06, 220); setTimeout(() => tone(900, .12, 'sine', .05, 200), 90); },
+    explosion: () => { tone(95, .24, 'sawtooth', .10, -45); setTimeout(() => tone(48, .32, 'square', .075, -18), 90); },
   };
 }
 
-function GameOverOverlay({ result, championScore = 18560, onPlayAgain }) {
+function GalaxyLeaderboard({ currentScore = 0 }) {
+  const championScore = 18560;
+  const top = [
+    { rank: 1, name: 'Captain Nova', score: championScore, badge: '👑' },
+    { rank: 2, name: 'Astro Hunter', score: 16240, badge: '🥈' },
+    { rank: 3, name: 'Mars Pilot', score: 14880, badge: '🥉' },
+  ];
+  const myRank = currentScore >= top[0].score ? 1 : currentScore >= top[2].score ? 3 : 128;
+  const gap = Math.max(0, championScore - currentScore);
+  return (
+    <div className="galaxy-leaderboard">
+      <div className="champion-banner">
+        <span>🌌 Current Galaxy Champion</span>
+        <b>{top[0].badge} {top[0].name}</b>
+        <strong>{top[0].score.toLocaleString()}</strong>
+      </div>
+      <div className="leaderboard-list">
+        {top.map((p) => (
+          <div key={p.rank} className={`leader-row rank-${p.rank}`}>
+            <em>#{p.rank}</em>
+            <span>{p.badge} {p.name}</span>
+            <b>{p.score.toLocaleString()}</b>
+          </div>
+        ))}
+      </div>
+      <div className="my-rank-card">
+        <span>🚀 My Arcade Rank</span>
+        <b>#{myRank}</b>
+        <small>{gap > 0 ? `${gap.toLocaleString()} points to Galaxy Champion` : 'You are today’s Galaxy Champion!'}</small>
+      </div>
+    </div>
+  );
+}
+
+function GameOverOverlay({ result, onPlayAgain }) {
   if (!result?.over) return null;
+  const championScore = 18560;
   const gap = Math.max(0, championScore - Number(result.score || 0));
   return (
     <div className="gameover-overlay">
@@ -425,42 +459,10 @@ function GameOverOverlay({ result, championScore = 18560, onPlayAgain }) {
   );
 }
 
-function GalaxyLeaderboard({ currentScore = 0 }) {
-  const top = [
-    { rank: 1, name: 'Captain Nova', score: 18560, badge: '👑' },
-    { rank: 2, name: 'Astro Hunter', score: 16240, badge: '🥈' },
-    { rank: 3, name: 'Mars Pilot', score: 14880, badge: '🥉' },
-  ];
-  const myRank = currentScore >= top[0].score ? 1 : currentScore >= top[2].score ? 3 : 128;
-  const gap = Math.max(0, top[0].score - currentScore);
-  return (
-    <div className="galaxy-leaderboard">
-      <div className="champion-banner">
-        <span>🌌 Current Galaxy Champion</span>
-        <b>{top[0].badge} {top[0].name}</b>
-        <strong>{top[0].score.toLocaleString()}</strong>
-      </div>
-      <div className="leaderboard-list">
-        {top.map((p) => (
-          <div key={p.rank} className={`leader-row rank-${p.rank}`}>
-            <em>#{p.rank}</em>
-            <span>{p.badge} {p.name}</span>
-            <b>{p.score.toLocaleString()}</b>
-          </div>
-        ))}
-      </div>
-      <div className="my-rank-card">
-        <span>🚀 My Arcade Rank</span>
-        <b>#{myRank}</b>
-        <small>{gap > 0 ? `${gap.toLocaleString()} points to Galaxy Champion` : 'You are leading the Galaxy today!'}</small>
-      </div>
-    </div>
-  );
-}
-
 function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent, onGameOver, restartKey }) {
   const canvasRef = useRef(null);
   const soundsRef = useRef(null);
+  const stopRef = useRef(false);
 
   const play = useCallback((name) => {
     if (!soundOn) return;
@@ -472,6 +474,8 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let raf = 0;
+    stopRef.current = false;
+
     const state = {
       score: 0,
       crystals: 0,
@@ -488,11 +492,32 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
       shield: 0,
       boost: 0,
       combo: 0,
-      gameOver: false,
+      dead: false,
+      showShip: true,
       gameOverSent: false,
     };
 
-    function resize() {
+    const addFloater = (x, y, text, color = '#34efff') => {
+      state.floaters.push({ x, y, text, color, life: 72, max: 72 });
+    };
+
+    const burst = (x, y, color, count = 18, power = 3) => {
+      for (let i = 0; i < count; i += 1) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 0.8 + Math.random() * power;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 38 + Math.random() * 30,
+          max: 70,
+          r: 1.6 + Math.random() * 5.4,
+          color,
+        });
+      }
+    };
+
+    const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.floor(rect.width * dpr);
@@ -505,9 +530,10 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
         a: 0.18 + Math.random() * 0.82,
         v: 0.15 + Math.random() * 0.85,
       }));
-    }
+    };
 
-    function spawn(w, difficulty) {
+    const spawn = (w, difficulty) => {
+      if (state.dead) return;
       const roll = Math.random();
       const type = roll < 0.55 ? 'crystal' : roll < 0.86 ? 'asteroid' : roll < 0.94 ? 'boost' : 'shield';
       state.objects.push({
@@ -519,25 +545,42 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
         vy: (type === 'asteroid' ? 1.8 + Math.random() * 1.9 : 1.2 + Math.random() * 1.3) + difficulty,
         spin: Math.random() * Math.PI,
       });
-    }
+    };
 
-    function burst(x, y, color, count = 18, power = 3) {
-      for (let i = 0; i < count; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const sp = 0.8 + Math.random() * power;
-        state.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 36 + Math.random() * 24, max: 60, r: 1.5 + Math.random() * 4.6, color });
-      }
-    }
+    const endGame = (shipX, shipY) => {
+      if (state.gameOverSent) return;
+      state.gameOverSent = true;
+      state.dead = true;
+      state.showShip = false;
+      state.objects = [];
+      state.shake = 32;
+      state.flash = 44;
+      state.combo = 0;
+      burst(shipX, shipY, '#ff4d6d', 110, 10);
+      burst(shipX, shipY, '#ffd66e', 70, 8);
+      burst(shipX, shipY, '#34efff', 42, 6);
+      addFloater(shipX, shipY - 50, 'MISSION FAILED', '#ff4d6d');
+      play('explosion');
+      if (navigator.vibrate) navigator.vibrate([100, 50, 160]);
+      onEvent?.('Mission failed, Captain. Prepare for another launch.');
 
-    function floater(x, y, text, color = '#34efff') {
-      state.floaters.push({ x, y, text, color, life: 72, max: 72 });
-    }
+      setTimeout(() => {
+        if (stopRef.current) return;
+        onGameOver?.({
+          over: true,
+          score: state.score,
+          crystals: state.crystals,
+          reward: Math.min(20, Math.floor(state.score / 100) * 5),
+          rank: state.score >= 18560 ? 1 : state.score >= 14880 ? 3 : state.score >= 10920 ? 5 : 128,
+        });
+      }, 1000);
+    };
 
-    function drawShip(x, y, t) {
-      if (state.gameOver) return;
+    const drawShip = (x, y, t) => {
+      if (!state.showShip) return;
       ctx.save();
       ctx.translate(x, y + Math.sin(t / 28) * 4);
-      ctx.scale(0.44, 0.44);
+      ctx.scale(0.43, 0.43);
       ctx.shadowColor = state.boost > 0 ? '#ffd66e' : '#34efff';
       ctx.shadowBlur = state.boost > 0 ? 52 : 34;
 
@@ -549,65 +592,62 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
       grad.addColorStop(1, 'rgba(255,60,231,0)');
       ctx.fillStyle = grad;
       [-28, 0, 28].forEach((dx) => {
-        ctx.beginPath(); ctx.moveTo(dx - 9, 28); ctx.lineTo(dx + 9, 28); ctx.lineTo(dx, 32 + flame); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(dx - 9, 28);
+        ctx.lineTo(dx + 9, 28);
+        ctx.lineTo(dx, 32 + flame);
+        ctx.closePath();
+        ctx.fill();
       });
 
       const wingGrad = ctx.createLinearGradient(-120, -10, 120, 20);
-      wingGrad.addColorStop(0, '#f8fbff'); wingGrad.addColorStop(.45, '#7c8fa8'); wingGrad.addColorStop(1, '#f8fbff');
+      wingGrad.addColorStop(0, '#f8fbff');
+      wingGrad.addColorStop(.45, '#7c8fa8');
+      wingGrad.addColorStop(1, '#f8fbff');
       ctx.fillStyle = wingGrad;
       ctx.beginPath(); ctx.moveTo(-18, 6); ctx.lineTo(-128, 52); ctx.lineTo(-82, 0); ctx.lineTo(-22, -18); ctx.closePath(); ctx.fill();
       ctx.beginPath(); ctx.moveTo(18, 6); ctx.lineTo(128, 52); ctx.lineTo(82, 0); ctx.lineTo(22, -18); ctx.closePath(); ctx.fill();
 
       const bodyGrad = ctx.createLinearGradient(-30, -80, 36, 64);
-      bodyGrad.addColorStop(0, '#ffffff'); bodyGrad.addColorStop(.35, '#cbd8e8'); bodyGrad.addColorStop(.6, '#41536b'); bodyGrad.addColorStop(1, '#f8fbff');
+      bodyGrad.addColorStop(0, '#ffffff');
+      bodyGrad.addColorStop(.35, '#cbd8e8');
+      bodyGrad.addColorStop(.6, '#41536b');
+      bodyGrad.addColorStop(1, '#f8fbff');
       ctx.fillStyle = bodyGrad;
-      ctx.beginPath(); ctx.moveTo(0, -98); ctx.bezierCurveTo(42, -40, 48, 26, 0, 72); ctx.bezierCurveTo(-48, 26, -42, -40, 0, -98); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0, -98);
+      ctx.bezierCurveTo(42, -40, 48, 26, 0, 72);
+      ctx.bezierCurveTo(-48, 26, -42, -40, 0, -98);
+      ctx.closePath();
+      ctx.fill();
 
       const cockGrad = ctx.createRadialGradient(0, -38, 4, 0, -30, 42);
-      cockGrad.addColorStop(0, '#6ffaff'); cockGrad.addColorStop(.38, '#12315c'); cockGrad.addColorStop(1, '#020617');
+      cockGrad.addColorStop(0, '#6ffaff');
+      cockGrad.addColorStop(.38, '#12315c');
+      cockGrad.addColorStop(1, '#020617');
       ctx.fillStyle = cockGrad;
-      ctx.beginPath(); ctx.ellipse(0, -34, 20, 42, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0, -34, 20, 42, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       if (state.shield > 0) {
         ctx.strokeStyle = 'rgba(118,250,255,.9)';
         ctx.lineWidth = 5;
-        ctx.beginPath(); ctx.arc(0, -10, 148, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, -10, 148, 0, Math.PI * 2);
+        ctx.stroke();
       }
       ctx.restore();
-    }
+    };
 
-    function finishGame(shipX, shipY) {
-      if (state.gameOverSent) return;
-      state.gameOverSent = true;
-      state.gameOver = true;
-      state.objects = [];
-      state.shake = 28;
-      state.flash = 38;
-      play('gameover');
-      if (navigator.vibrate) navigator.vibrate([80, 40, 140]);
-      burst(shipX, shipY, '#ff4d6d', 100, 10);
-      burst(shipX, shipY, '#ffd66e', 70, 8);
-      burst(shipX, shipY, '#34efff', 40, 6);
-      floater(shipX, shipY - 40, 'MISSION FAILED', '#ff4d6d');
-      onEvent?.('Mission failed, Captain. Prepare for another launch.');
-      setTimeout(() => {
-        onGameOver?.({
-          over: true,
-          score: state.score,
-          crystals: state.crystals,
-          reward: Math.min(20, Math.floor(state.score / 100) * 5),
-          rank: state.score >= 18560 ? 1 : state.score >= 14880 ? 3 : state.score >= 10920 ? 5 : 128,
-        });
-      }, 1200);
-    }
-
-    function draw(ts) {
+    const loop = () => {
       const rect = canvas.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
-      const t = state.frame++;
-      const difficulty = Math.min(2.7, t / 3400);
+      const t = state.frame;
+      state.frame += 1;
 
+      const difficulty = Math.min(2.7, t / 3400);
       if (state.shake > 0) state.shake *= .88;
       if (state.flash > 0) state.flash *= .90;
       if (state.boost > 0) state.boost -= 1;
@@ -618,68 +658,102 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
       const shakeY = state.shake > 0.2 ? (Math.random() - .5) * state.shake : 0;
       ctx.translate(shakeX, shakeY);
 
-      ctx.clearRect(-30, -30, w + 60, h + 60);
+      ctx.clearRect(-40, -40, w + 80, h + 80);
       const bg = ctx.createRadialGradient(w * .55, h * .45, 10, w * .5, h * .45, h * .78);
-      bg.addColorStop(0, '#172968'); bg.addColorStop(.35, '#070b22'); bg.addColorStop(1, '#02030b');
-      ctx.fillStyle = bg; ctx.fillRect(-30, -30, w + 60, h + 60);
+      bg.addColorStop(0, '#172968');
+      bg.addColorStop(.35, '#070b22');
+      bg.addColorStop(1, '#02030b');
+      ctx.fillStyle = bg;
+      ctx.fillRect(-40, -40, w + 80, h + 80);
 
       state.stars.forEach((s) => {
         s.y += s.v * (state.boost > 0 ? 2 : 1);
-        if (s.y > h) { s.y = -4; s.x = Math.random() * w; }
+        if (s.y > h) {
+          s.y = -4;
+          s.x = Math.random() * w;
+        }
         ctx.globalAlpha = s.a * (0.55 + Math.sin((t + s.x) / 28) * 0.45);
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
+        ctx.fill();
       });
       ctx.globalAlpha = 1;
 
-      if (!state.gameOver && t % Math.max(18, 34 - Math.floor(difficulty * 5)) === 0) spawn(w, difficulty);
+      if (!state.dead && t % Math.max(16, 34 - Math.floor(difficulty * 5)) === 0) spawn(w, difficulty);
 
       state.objects.forEach((o) => {
         o.y += o.vy;
         o.spin += 0.04;
         if (o.type === 'asteroid') {
-          ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.spin);
-          ctx.shadowColor = '#ff7a2f'; ctx.shadowBlur = 14;
+          ctx.save();
+          ctx.translate(o.x, o.y);
+          ctx.rotate(o.spin);
+          ctx.shadowColor = '#ff7a2f';
+          ctx.shadowBlur = 14;
           const g = ctx.createRadialGradient(-6, -8, 3, 0, 0, o.r);
-          g.addColorStop(0, '#d8d8d8'); g.addColorStop(.55, '#383843'); g.addColorStop(1, '#08080d');
-          ctx.fillStyle = g; ctx.beginPath();
-          for (let i=0;i<9;i++){ const a=(Math.PI*2/9)*i; const rr=o.r*(.72+((i*13)%30)/100); ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr); }
-          ctx.closePath(); ctx.fill(); ctx.restore();
+          g.addColorStop(0, '#d8d8d8');
+          g.addColorStop(.55, '#383843');
+          g.addColorStop(1, '#08080d');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          for (let i = 0; i < 9; i += 1) {
+            const a = (Math.PI * 2 / 9) * i;
+            const rr = o.r * (.72 + ((i * 13) % 30) / 100);
+            ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
         } else if (o.type === 'boost') {
-          ctx.font='30px system-ui'; ctx.shadowColor='#ffd66e'; ctx.shadowBlur=20; ctx.fillText('⚡',o.x-14,o.y+12); ctx.shadowBlur=0;
+          ctx.font = '30px system-ui';
+          ctx.shadowColor = '#ffd66e';
+          ctx.shadowBlur = 20;
+          ctx.fillText('⚡', o.x - 14, o.y + 12);
+          ctx.shadowBlur = 0;
         } else if (o.type === 'shield') {
-          ctx.font='29px system-ui'; ctx.shadowColor='#76faff'; ctx.shadowBlur=20; ctx.fillText('🛡',o.x-14,o.y+12); ctx.shadowBlur=0;
+          ctx.font = '29px system-ui';
+          ctx.shadowColor = '#76faff';
+          ctx.shadowBlur = 20;
+          ctx.fillText('🛡', o.x - 14, o.y + 12);
+          ctx.shadowBlur = 0;
         } else {
-          const emoji=o.crystalType==='gold'?'🔶':o.crystalType==='purple'?'🔮':'💎';
-          ctx.font='28px system-ui'; ctx.shadowColor=o.crystalType==='gold'?'#ffd66e':'#8b5cff'; ctx.shadowBlur=18; ctx.fillText(emoji,o.x-14,o.y+10); ctx.shadowBlur=0;
+          const emoji = o.crystalType === 'gold' ? '🔶' : o.crystalType === 'purple' ? '🔮' : '💎';
+          ctx.font = '28px system-ui';
+          ctx.shadowColor = o.crystalType === 'gold' ? '#ffd66e' : '#8b5cff';
+          ctx.shadowBlur = 18;
+          ctx.fillText(emoji, o.x - 14, o.y + 10);
+          ctx.shadowBlur = 0;
         }
       });
 
-      state.shipX += (state.targetX - state.shipX) * 0.11;
+      if (!state.dead) state.shipX += (state.targetX - state.shipX) * 0.11;
       const shipX = w * state.shipX;
       const shipY = h - 105;
       const hitbox = 24;
       drawShip(shipX, shipY, t);
 
-      if (!state.gameOver) {
+      if (!state.dead) {
         for (const o of state.objects) {
           const dx = o.x - shipX;
           const dy = o.y - shipY;
-          const dist = Math.sqrt(dx*dx + dy*dy);
+          const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < o.r + hitbox) {
             o.y = h + 100;
             if (o.type === 'asteroid') {
               state.combo = 0;
               if (state.shield > 0) {
                 state.shield = 0;
-                state.shake = 12;
+                state.shake = 13;
                 state.flash = 10;
                 burst(o.x, o.y, '#76faff', 40, 6);
-                floater(o.x, o.y, 'SHIELD BLOCK!', '#76faff');
-                play('hit');
-                onEvent?.('Shield absorbed the impact.');
+                addFloater(o.x, o.y, 'SHIELD BLOCK!', '#76faff');
+                play('shield');
                 if (navigator.vibrate) navigator.vibrate(60);
+                onEvent?.('Shield absorbed the impact.');
               } else {
-                finishGame(shipX, shipY);
+                endGame(shipX, shipY);
+                break;
               }
             } else {
               const points = o.type === 'boost' ? 25 : o.type === 'shield' ? 18 : o.crystalType === 'gold' ? 35 : o.crystalType === 'purple' ? 20 : 10;
@@ -687,17 +761,23 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
               state.combo += 1;
               if (o.type === 'crystal') state.crystals += 1;
               burst(o.x, o.y, o.type === 'boost' ? '#ffd66e' : o.type === 'shield' ? '#76faff' : '#34efff', 20, 4);
-              floater(o.x, o.y, o.type === 'boost' ? 'BOOST!' : o.type === 'shield' ? 'SHIELD!' : `+${points}`, o.type === 'boost' ? '#ffd66e' : '#34efff');
-              if (o.type === 'boost') { state.boost = 300; play('boost'); }
-              else if (o.type === 'shield') { state.shield = 520; play('boost'); }
-              else play('crystal');
-              if (state.combo === 10) floater(w/2, h*.36, 'GREAT COMBO x10', '#ffd66e');
-              if (state.combo === 20) floater(w/2, h*.36, 'GALAXY COMBO x20', '#ff3ce7');
+              addFloater(o.x, o.y, o.type === 'boost' ? 'BOOST!' : o.type === 'shield' ? 'SHIELD!' : `+${points}`, o.type === 'boost' ? '#ffd66e' : '#34efff');
+              if (o.type === 'boost') {
+                state.boost = 300;
+                play('item');
+              } else if (o.type === 'shield') {
+                state.shield = 520;
+                play('shield');
+              } else {
+                play('crystal');
+              }
+              if (state.combo === 10) addFloater(w / 2, h * .36, 'GREAT COMBO x10', '#ffd66e');
+              if (state.combo === 20) addFloater(w / 2, h * .36, 'GALAXY COMBO x20', '#ff3ce7');
               onScore?.(state.score);
               if (state.score - state.lastRewardScore >= 100 && dailyRemaining > 0) {
                 state.lastRewardScore = state.score;
                 onReward(Math.min(5, dailyRemaining));
-                floater(shipX, shipY - 80, '+5 SPNX', '#76ffb0');
+                addFloater(shipX, shipY - 80, '+5 SPNX', '#76ffb0');
               }
             }
           }
@@ -706,33 +786,71 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
 
       state.objects = state.objects.filter((o) => o.y < h + 80);
       state.particles.forEach((p) => {
-        p.x += p.vx; p.y += p.vy; p.vy += .025; p.life -= 1;
-        ctx.globalAlpha = Math.max(0, p.life/p.max); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += .025;
+        p.life -= 1;
+        ctx.globalAlpha = Math.max(0, p.life / p.max);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
       });
       state.particles = state.particles.filter((p) => p.life > 0);
       ctx.globalAlpha = 1;
+
       state.floaters.forEach((f) => {
-        f.y -= .65; f.life -= 1;
-        ctx.globalAlpha = Math.max(0, f.life/f.max); ctx.fillStyle=f.color; ctx.shadowColor=f.color; ctx.shadowBlur=16; ctx.font='900 18px system-ui'; ctx.textAlign='center'; ctx.fillText(f.text,f.x,f.y); ctx.shadowBlur=0; ctx.textAlign='start';
+        f.y -= .65;
+        f.life -= 1;
+        ctx.globalAlpha = Math.max(0, f.life / f.max);
+        ctx.fillStyle = f.color;
+        ctx.shadowColor = f.color;
+        ctx.shadowBlur = 16;
+        ctx.font = '900 18px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.shadowBlur = 0;
+        ctx.textAlign = 'start';
       });
       state.floaters = state.floaters.filter((f) => f.life > 0);
       ctx.globalAlpha = 1;
 
-      ctx.fillStyle='rgba(2,5,20,.66)'; ctx.strokeStyle='rgba(52,239,255,.28)'; ctx.lineWidth=1; ctx.beginPath(); ctx.roundRect(12,12,172,72,16); ctx.fill(); ctx.stroke();
-      ctx.fillStyle='#34efff'; ctx.font='800 13px system-ui'; ctx.fillText('SCORE',28,34);
-      ctx.fillStyle='#fff'; ctx.font='900 22px system-ui'; ctx.fillText(String(state.score),28,60);
-      ctx.fillStyle='#ffd66e'; ctx.font='800 12px system-ui'; ctx.fillText(`COMBO x${state.combo}`,102,34);
-      ctx.fillStyle='#76ffb0'; ctx.fillText(`CRYSTAL ${state.crystals}`,102,58);
+      ctx.fillStyle = 'rgba(2,5,20,.66)';
+      ctx.strokeStyle = 'rgba(52,239,255,.28)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(12, 12, 172, 72, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#34efff';
+      ctx.font = '800 13px system-ui';
+      ctx.fillText('SCORE', 28, 34);
+      ctx.fillStyle = '#fff';
+      ctx.font = '900 22px system-ui';
+      ctx.fillText(String(state.score), 28, 60);
+      ctx.fillStyle = '#ffd66e';
+      ctx.font = '800 12px system-ui';
+      ctx.fillText(`COMBO x${state.combo}`, 102, 34);
+      ctx.fillStyle = '#76ffb0';
+      ctx.fillText(`CRYSTAL ${state.crystals}`, 102, 58);
 
-      if (state.flash > 0.2) {
-        ctx.globalAlpha = Math.min(.38, state.flash/60);
-        ctx.fillStyle = '#ff2d55';
-        ctx.fillRect(-30,-30,w+60,h+60);
+      if (state.dead) {
+        ctx.globalAlpha = .72;
+        ctx.fillStyle = 'rgba(1,3,12,.22)';
+        ctx.fillRect(-40, -40, w + 80, h + 80);
         ctx.globalAlpha = 1;
       }
+
+      if (state.flash > 0.2) {
+        ctx.globalAlpha = Math.min(.42, state.flash / 60);
+        ctx.fillStyle = '#ff2d55';
+        ctx.fillRect(-40, -40, w + 80, h + 80);
+        ctx.globalAlpha = 1;
+      }
+
       ctx.restore();
-      raf = requestAnimationFrame(draw);
-    }
+      raf = requestAnimationFrame(loop);
+    };
 
     resize();
     onScore?.(0);
@@ -740,17 +858,20 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
 
     const onResize = () => resize();
     const onMove = (e) => {
-      if (state.gameOver) return;
+      if (state.dead) return;
       const rect = canvas.getBoundingClientRect();
       const clientX = e.touches?.[0]?.clientX ?? e.clientX;
       state.targetX = Math.max(0.10, Math.min(0.90, (clientX - rect.left) / rect.width));
     };
+
     window.addEventListener('resize', onResize);
     canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('touchmove', onMove, { passive: true });
     canvas.addEventListener('touchstart', onMove, { passive: true });
-    raf = requestAnimationFrame(draw);
+    raf = requestAnimationFrame(loop);
+
     return () => {
+      stopRef.current = true;
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
       canvas.removeEventListener('mousemove', onMove);
@@ -768,12 +889,12 @@ function GamePage({ user, setUser }) {
   const earned = gs.date === today ? Number(gs.earnedToday || 0) : 0;
   const remaining = Math.max(0, 20 - earned);
   const [score, setScore] = useState(0);
-  const [notice, setNotice] = useState('Nova-X1 Arcade Ultimate · 하루 최대 20 SPNX Point');
+  const [notice, setNotice] = useState('Real Game Over Mode · 운석 충돌 시 Shield 없으면 즉시 종료');
   const [soundOn, setSoundOn] = useState(true);
   const [gameOver, setGameOver] = useState(null);
   const [restartKey, setRestartKey] = useState(0);
 
-  async function rewardGame(reward) {
+  const rewardGame = useCallback(async (reward) => {
     if (remaining <= 0) {
       setNotice('오늘 게임 보상 20 SPNX를 모두 받았습니다. 랭킹은 계속 기록됩니다.');
       return;
@@ -785,14 +906,14 @@ function GamePage({ user, setUser }) {
     } catch {
       setNotice(`Preview reward: +${reward} SPNX · 서버 연결 후 실제 지급됩니다.`);
     }
-  }
+  }, [remaining, score, setUser]);
 
-  function restartArcade() {
+  const restartArcade = () => {
     setGameOver(null);
     setScore(0);
     setNotice('3... 2... 1... LAUNCH!');
     setRestartKey((v) => v + 1);
-  }
+  };
 
   return (
     <section className="page premium-card content-card game-page arcade-ultimate-page">
@@ -805,11 +926,14 @@ function GamePage({ user, setUser }) {
           {soundOn ? '🔊' : '🔇'}
         </button>
       </div>
+
       <div className="grid">
         <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
         <div><small>Remaining</small><b>{remaining} SPNX</b></div>
       </div>
+
       <GalaxyLeaderboard currentScore={score} />
+
       <div className="arcade-live arcade-ultimate">
         <NovaArcadeCanvas
           onReward={rewardGame}
@@ -822,9 +946,10 @@ function GamePage({ user, setUser }) {
         />
         <GameOverOverlay result={gameOver} onPlayAgain={restartArcade} />
       </div>
+
       <div className="game-help">
-        <span>🖱️ 마우스/손가락으로 Nova-X1 좌우 이동</span>
-        <span>💎 Crystal 수집 · ☄️ 운석 회피 · ⚡ Boost · 🛡 Shield</span>
+        <span>☄️ Shield 없이 운석 충돌 = GAME OVER</span>
+        <span>🛡 Shield는 1회 방어 · 💎 Crystal 수집 · ⚡ Boost</span>
       </div>
       <div className="rank-row"><b>Score</b><span>Real Game Over Mode</span><strong>{score}</strong></div>
     </section>

@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-4-gameover-fixed",
-  "version": "13.4.1",
+  "name": "spacenovax-v13-4-2-real-gameover-final",
+  "version": "13.4.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V13.4.1 fixed real gameover replacement"
+  "description": "SpaceNovaX V13.4.2 Real Game Over Final - full Arcade replacement"
 }

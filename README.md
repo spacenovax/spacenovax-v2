@@ -1,15 +1,27 @@
-# SpaceNovaX V13.4.1 GameOver FIXED
+# SpaceNovaX V13.4.2 Real Game Over Final
 
-이번 버전은 App.jsx의 NovaArcadeCanvas와 GamePage 전체를 직접 교체했습니다.
+이번 버전은 추정 패치가 아니라 GamePage + NovaArcadeCanvas 전체를 교체한 버전입니다.
 
-## 핵심
-- 운석 충돌 + Shield 없음 = 게임 정지 후 GAME OVER
-- Shield 있으면 1회 방어 후 계속
-- Play Again으로 완전 재시작
-- 폭발 파티클/흔들림/플래시/사운드/진동
-- 결과 화면 포함
-- Galaxy Champion/Leaderboard 포함
+## 핵심 규칙
+- 운석 충돌 + Shield 없음 = 즉시 죽음 처리
+- 죽는 순간:
+  - 오브젝트 생성 중지
+  - 우주선 조작 중지
+  - 우주선 표시 제거
+  - 폭발 파티클
+  - 화면 흔들림
+  - 데미지 플래시
+  - 1초 후 GAME OVER 화면
+- Shield가 있으면 1회 방어 후 게임 계속
+- Play Again 누르기 전까지 재시작 없음
 
-## 중요
-이전 버전에서 게임이 그대로였던 문제는 코드 일부가 실제 GamePage에 맞게 적용되지 않았기 때문입니다.
-이번 버전은 게임 컴포넌트 전체를 교체했습니다.
+## 포함
+- Sound ON/OFF
+- Crystal/Boost/Shield/Explosion sound
+- Galaxy Leaderboard
+- Result screen
+- Daily 20 SPNX reward limit 유지
+
+## 적용
+기존 파일 일부만 교체하지 말고 ZIP 전체를 GitHub에 덮어쓰기.
+Render에서 Clear build cache & deploy 필수.
