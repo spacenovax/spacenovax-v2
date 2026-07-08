@@ -1,5 +1,5 @@
 {
-  "name": "spacenovax-v13-4-2-real-gameover-final",
+  "name": "spacenovax-v13-4-2-real-gameover-final-buildfix-definitive",
   "version": "13.4.2",
   "private": true,
   "type": "module",
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V13.4.2 Real Game Over Final - full Arcade replacement"
+  "description": "Definitive build fix: only one createArcadeSounds function remains"
 }

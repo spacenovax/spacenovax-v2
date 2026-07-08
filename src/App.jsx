@@ -364,38 +364,7 @@ function createArcadeSounds() {
 }
 
 
-function createArcadeSounds() {
-  let audioCtx = null;
-  const getCtx = () => {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
-  };
-  const tone = (freq = 440, dur = 0.12, type = 'sine', gain = 0.08, slide = 0) => {
-    try {
-      const ctx = getCtx();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), ctx.currentTime + dur);
-      g.gain.setValueAtTime(gain, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + dur);
-    } catch {}
-  };
-  return {
-    start: () => { tone(260, .10, 'sawtooth', .045, 220); setTimeout(() => tone(720, .11, 'sine', .05, 200), 90); },
-    crystal: () => { tone(920, .08, 'sine', .055, 420); setTimeout(() => tone(1380, .10, 'triangle', .04, 240), 55); },
-    item: () => { tone(180, .16, 'sawtooth', .055, 520); setTimeout(() => tone(740, .13, 'square', .035, 260), 80); },
-    shield: () => { tone(500, .12, 'triangle', .06, 220); setTimeout(() => tone(900, .12, 'sine', .05, 200), 90); },
-    explosion: () => { tone(95, .24, 'sawtooth', .10, -45); setTimeout(() => tone(48, .32, 'square', .075, -18), 90); },
-  };
-}
-
+/* duplicate createArcadeSounds removed */
 function GalaxyLeaderboard({ currentScore = 0 }) {
   const championScore = 18560;
   const top = [
