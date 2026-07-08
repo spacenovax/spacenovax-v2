@@ -1,18 +1,41 @@
-# SpaceNovaX V13.2.1 Arcade Galaxy Leaderboard
+# SpaceNovaX V13.3 - Epic Moments & Hall of Champions
 
-Arcade에 오늘의 최고 점수/챔피언 시스템 UI를 추가한 버전입니다.
+## New Features
 
-## 포함
-- Current Galaxy Champion 배너
-- Today / Week / All Time 탭 UI
-- Top 3 Captain 리스트
-- My Arcade Rank 카드
-- 다음 순위까지 필요한 점수 표시
-- Captain AI에 리더보드 도전 메시지 추가
+### 👑 Today's Captain
+- Displays the #1 player globally for today.
+- Gold animated champion card.
 
-## 참고
-현재는 프론트 UI/데모 데이터입니다.
-정식 운영에서는 서버 DB에 점수 저장, 비정상 점수 탐지, 일일/주간/역대 랭킹 API를 연결해야 합니다.
+### 🏆 Hall of Champions
+- Daily Champion
+- Weekly Champion
+- Monthly Champion
+- All-Time Legend
 
-## 적용
-GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.
+### 💥 Epic Moments
+- Near Miss (slow motion + Captain AI: "That was close, Captain!")
+- Combo x10 -> GREAT
+- Combo x20 -> AMAZING
+- Combo x30 -> LEGENDARY
+- #1 achieved -> Fireworks + Galaxy Champion ceremony.
+
+### ☄️ Game Over
+If Shield is inactive:
+- Massive explosion
+- Screen shake
+- Ship breaks apart
+- 2-second slow motion
+- Captain AI:
+  "Every Captain falls...
+   ...but every great Captain rises again."
+
+### 🎖 Titles
+Top 100 : Elite Captain
+Top 10 : Galaxy Commander
+Top 1 : Galaxy Champion
+Monthly Winner : Hall of Champions
+
+### Future
+Server-verified leaderboard
+Anti-cheat validation
+Season rewards

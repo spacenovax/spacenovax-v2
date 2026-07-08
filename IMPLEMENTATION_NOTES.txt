@@ -1,0 +1,2 @@
+Next implementation target after Arcade Sprint 1.
+Integrate with server leaderboard, animation, Captain AI events.
