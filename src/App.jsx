@@ -49,6 +49,23 @@ function defaultUser() {
 function refCode(user) {
   return (user?.id || 'guest-captain').replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase() || 'SPNX2026';
 }
+
+function getCaptainCode(user) {
+  const n = Math.abs(String(user?.id || 'guest-captain').split('').reduce((a, c) => a + c.charCodeAt(0), 0));
+  return `#${String(n % 999999).padStart(6, '0')}`;
+}
+
+function getRank(level = 1) {
+  if (level >= 70) return { emoji: '👑', title: 'Galactic Legend', className: 'rank-legend', ship: 'Nova-X1 Genesis', sector: 'Andromeda' };
+  if (level >= 60) return { emoji: '💎', title: 'Admiral', className: 'rank-admiral', ship: 'Nova-X1 Admiral', sector: 'Nebula-X' };
+  if (level >= 50) return { emoji: '🔴', title: 'Commander', className: 'rank-commander', ship: 'Nova-X1 Commander', sector: 'Alpha Centauri' };
+  if (level >= 40) return { emoji: '🟣', title: 'Explorer', className: 'rank-explorer', ship: 'Nova-X1 Titan', sector: 'Jupiter Station' };
+  if (level >= 30) return { emoji: '🔷', title: 'Pioneer', className: 'rank-pioneer', ship: 'Nova-X1 Falcon', sector: 'Mars Colony' };
+  if (level >= 20) return { emoji: '🟡', title: 'Voyager', className: 'rank-voyager', ship: 'Nova-X1 Voyager', sector: 'Moon Base' };
+  if (level >= 10) return { emoji: '⚪', title: 'Cadet', className: 'rank-cadet', ship: 'Nova-X1 Scout', sector: 'Earth Orbit' };
+  return { emoji: '🥉', title: 'Rookie', className: 'rank-rookie', ship: 'Nova-X1 Basic', sector: 'Earth Orbit' };
+}
+
 function openUrl(url) {
   if (!url) return;
   const tg = window.Telegram?.WebApp;
@@ -71,28 +88,36 @@ function SymbolLogo() {
   );
 }
 
-function StarField({ count = 160 }) {
-  const stars = useMemo(() => Array.from({ length: count }, (_, i) => {
-    const x = (i * 73 + 17) % 100;
-    const y = (i * 41 + 29) % 100;
-    const size = 0.7 + ((i * 13) % 22) / 10;
-    const delay = ((i * 19) % 80) / 10;
-    const dur = 2.6 + ((i * 11) % 45) / 10;
-    const alpha = 0.35 + ((i * 7) % 60) / 100;
-    return { x, y, size, delay, dur, alpha };
-  }), [count]);
-  return <div className="star-layer">{stars.map((s, i) => <i key={i} style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s`, animationDuration: `${s.dur}s`, opacity: s.alpha }} />)}</div>;
+function StarField({ count = 220, className = '' }) {
+  const stars = useMemo(() => {
+    let x = (Date.now() % 100000) || 12345;
+    const rand = () => {
+      x = (x * 1664525 + 1013904223) % 4294967296;
+      return x / 4294967296;
+    };
+    return Array.from({ length: count }, (_, i) => ({
+      x: rand() * 100,
+      y: rand() * 100,
+      size: 0.45 + rand() * (i % 11 === 0 ? 2.8 : 1.7),
+      delay: rand() * 8,
+      dur: 2.4 + rand() * 5.6,
+      alpha: 0.22 + rand() * 0.78,
+      tint: rand() > 0.86 ? 'cyan' : rand() > 0.72 ? 'violet' : 'white',
+    }));
+  }, [count]);
+  return <div className={`star-layer ${className}`}>{stars.map((s, i) => <i key={i} className={s.tint} style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s`, animationDuration: `${s.dur}s`, opacity: s.alpha }} />)}</div>;
 }
 
 function AppHeader({ user }) {
+  const rank = getRank(user?.level || 1);
   return (
     <header className="app-header">
       <SymbolLogo />
       <div>
         <h1>SpaceNovaX</h1>
-        <p>Mine Together. Explore Beyond.</p>
+        <p>Explore. Mine. Evolve.</p>
       </div>
-      <div className="phase-pill">Phase {user?.mining?.phase || 1}</div>
+      <div className={`phase-pill ${rank.className}`}>{rank.emoji} {rank.title}</div>
     </header>
   );
 }
@@ -114,12 +139,13 @@ function CinematicShip({ active = false, game = false }) {
   );
 }
 
-function LaunchCountdown() {
+function LaunchCountdown({ user }) {
+  const rank = getRank(user?.level || 1);
   return (
     <div className="launch-card premium-card">
-      <span>🚀 Launch Countdown</span>
-      <b>TGE Coming Soon</b>
-      <small>1 SPNX Point = 1 SPNX after official conversion window</small>
+      <span>🤖 Captain AI</span>
+      <b>Welcome back, Captain {getCaptainCode(user)}</b>
+      <small>{rank.sector} sector active · Game reward max 20 SPNX/day · 1 Point = 1 SPNX after TGE</small>
     </div>
   );
 }
@@ -130,16 +156,21 @@ function HomePage({ user, startMining, claimMining, loading }) {
   const canClaim = Boolean(m.claimable);
   return (
     <section className="page">
-      <div className="profile-card premium-card">
-        <SymbolLogo />
-        <div><b>Space Explorer</b><span>Lv.{user.level || 7} Captain · Genesis Explorer</span></div>
+      <div className={`profile-card premium-card ${getRank(user.level || 1).className}`}>
+        <div className="rank-badge">{getRank(user.level || 1).emoji}</div>
+        <div>
+          <b>Captain {getCaptainCode(user)}</b>
+          <span>Lv.{user.level || 7} · {getRank(user.level || 1).title} · {getRank(user.level || 1).ship}</span>
+        </div>
         <div className="exp-bar"><small>Experience</small><em><i /></em></div>
       </div>
-      <LaunchCountdown />
+      <LaunchCountdown user={user} />
       <div className="hero-cinema">
         <StarField count={180} />
         <span className="meteor meteor-one" />
         <span className="meteor meteor-two" />
+        <span className="meteor meteor-three" />
+        <span className="meteor meteor-four" />
         <span className="nebula n1" />
         <span className="planet planet-one" />
         <span className="planet planet-two" />
@@ -191,10 +222,14 @@ function MissionsPage({ setUser }) {
   const [missions, setMissions] = useState(MISSIONS.map((m) => ({ ...m, status: { completed: false } })));
   const [notice, setNotice] = useState('Official missions are paid once per account.');
   const [busy, setBusy] = useState('');
+  const completed = missions.filter((m) => m.status?.completed).length;
+  const progress = Math.round((completed / Math.max(1, missions.length)) * 100);
+
   async function load() {
     try { const data = await api('/api/missions'); setMissions(data.missions || missions); } catch {}
   }
   useEffect(() => { load(); }, []);
+
   async function claim(mission) {
     if (mission.status?.completed || busy) return;
     setBusy(mission.id);
@@ -202,18 +237,26 @@ function MissionsPage({ setUser }) {
     setTimeout(async () => {
       try {
         const data = await api('/api/missions/claim', { method: 'POST', body: JSON.stringify({ missionId: mission.id }) });
-        setNotice(`Mission Complete: +${data.reward} SPNX`);
+        setNotice(`✨ Mission Complete: +${data.reward} SPNX`);
         if (data.user) setUser(data.user);
         await load();
       } catch (e) { setNotice(e.message); } finally { setBusy(''); }
     }, mission.url ? 650 : 0);
   }
+
   return (
-    <section className="page premium-card content-card">
-      <h2>⭐ Space Missions</h2><p>{notice}</p>
+    <section className="page premium-card content-card mission-page">
+      <h2>⭐ Space Missions</h2>
+      <p>{notice}</p>
+      <div className="mission-progress">
+        <div><b>{completed}/{missions.length}</b><span>Completed</span></div>
+        <em><i style={{ width: `${progress}%` }} /></em>
+      </div>
       {missions.map((m) => (
         <button key={m.id} className={m.status?.completed ? 'mission-row done' : 'mission-row'} disabled={m.status?.completed || busy === m.id} onClick={() => claim(m)}>
-          <span>{m.icon} {m.title}</span><em>{m.status?.completed ? (m.type === 'daily' ? 'Claimed Today' : 'Completed') : busy === m.id ? 'Checking...' : m.action}</em><b>+{m.reward} SPNX</b>
+          <span><strong>{m.icon}</strong><i>{m.title}<small>{m.type === 'daily' ? 'Daily reward' : 'One-time official mission'}</small></i></span>
+          <em>{m.status?.completed ? (m.type === 'daily' ? 'Claimed Today' : 'Completed') : busy === m.id ? 'Checking...' : m.action}</em>
+          <b>+{m.reward} SPNX</b>
         </button>
       ))}
     </section>
@@ -311,12 +354,12 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
       canvas.height = Math.floor(rect.height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (!state.stars.length) {
-        state.stars = Array.from({ length: 160 }, (_, i) => ({
-          x: (i * 71 + 13) % rect.width,
-          y: (i * 47 + 19) % rect.height,
-          s: 0.6 + ((i * 17) % 20) / 10,
-          a: 0.35 + ((i * 9) % 60) / 100,
-          v: 0.15 + ((i * 5) % 20) / 40,
+        state.stars = Array.from({ length: 220 }, () => ({
+          x: Math.random() * rect.width,
+          y: Math.random() * rect.height,
+          s: 0.4 + Math.random() * 2.2,
+          a: 0.22 + Math.random() * 0.78,
+          v: 0.12 + Math.random() * 0.62,
         }));
       }
     }
@@ -337,6 +380,7 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
     function drawShip(x, y, t) {
       ctx.save();
       ctx.translate(x, y + Math.sin(t / 28) * 4);
+      ctx.scale(0.62, 0.62);
       ctx.shadowColor = '#34efff';
       ctx.shadowBlur = 30;
 
@@ -500,14 +544,14 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
       // smooth ship movement
       state.shipX += (state.targetX - state.shipX) * 0.08;
       const shipX = w * state.shipX;
-      const shipY = h - 135;
+      const shipY = h - 105;
       drawShip(shipX, shipY, t);
 
       // collection zone
       for (const o of state.objects) {
         const dx = o.x - shipX;
         const dy = o.y - shipY;
-        const hit = Math.sqrt(dx * dx + dy * dy) < (o.r + 42);
+        const hit = Math.sqrt(dx * dx + dy * dy) < (o.r + 34);
         if (hit && o.type !== 'asteroid') {
           o.y = h + 100;
           state.score += o.type === 'boost' ? 25 : 10;

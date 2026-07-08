@@ -64,3 +64,28 @@
   .hero-cinema{min-height:810px}
   .mining-glass{margin-top:420px}
 }
+
+/* V12 Ultimate Release Candidate */
+.star-layer i.cyan{background:#78faff;box-shadow:0 0 10px rgba(52,239,255,.9)}
+.star-layer i.violet{background:#d07aff;box-shadow:0 0 10px rgba(177,83,255,.8)}
+.star-layer i.white{background:#fff}
+.rank-badge{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-size:30px;font-weight:1000;background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.9),rgba(52,239,255,.18),rgba(126,67,255,.12));border:1px solid rgba(255,255,255,.18);box-shadow:0 0 22px rgba(52,239,255,.35)}
+.rank-rookie{--rank:#b97843}.rank-cadet{--rank:#dfe8ff}.rank-voyager{--rank:#ffd66e}.rank-pioneer{--rank:#34efff}.rank-explorer{--rank:#b15cff}.rank-commander{--rank:#ff4d6d}.rank-admiral{--rank:#76faff}.rank-legend{--rank:#ffd66e}
+.profile-card{border-color:color-mix(in srgb,var(--rank,#34efff) 35%,rgba(52,239,255,.2));}
+.profile-card .rank-badge{box-shadow:0 0 28px color-mix(in srgb,var(--rank,#34efff) 65%,transparent)}
+.phase-pill{border-color:color-mix(in srgb,var(--rank,#34efff) 45%,rgba(255,255,255,.14));color:var(--rank,#34efff)}
+.ship-wrap:before{content:"";position:absolute;left:50%;top:48%;width:78%;height:52%;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(52,239,255,.38),rgba(126,67,255,.18) 48%,transparent 72%);filter:blur(22px);z-index:-2;animation:shipAura 3.2s ease-in-out infinite alternate}
+.meteor-three{right:260px;top:330px;transform:rotate(22deg);animation:meteorReverse 8s linear infinite 2.2s}
+.meteor-four{left:20px;top:185px;transform:rotate(-35deg);animation:meteorFast 3.8s linear infinite 1s}
+@keyframes meteorReverse{0%,72%{opacity:0;transform:translate(0,0) rotate(22deg)}76%{opacity:1}100%{opacity:0;transform:translate(420px,180px) rotate(22deg)}}
+@keyframes meteorFast{0%,60%{opacity:0;transform:translate(0,0) rotate(-35deg)}64%{opacity:1}100%{opacity:0;transform:translate(420px,150px) rotate(-35deg)}}
+.mission-progress{border:1px solid rgba(52,239,255,.22);border-radius:18px;padding:14px;background:rgba(3,7,18,.42);margin:14px 0}
+.mission-progress div{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.mission-progress b{color:#34efff;font-size:24px}.mission-progress span{color:#d7ddff;font-weight:900}
+.mission-progress em{display:block;height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}.mission-progress i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#34efff,#7e43ff,#ffd66e)}
+.mission-row{position:relative;overflow:hidden;min-height:74px}.mission-row:before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-130%);animation:missionShine 4.8s ease-in-out infinite}
+.mission-row span{display:flex;gap:10px;align-items:center}.mission-row span strong{font-size:26px}.mission-row span i{font-style:normal;display:grid}.mission-row span small{display:block;color:rgba(235,240,255,.68);font-size:11px;margin-top:2px}
+.mission-row.done{border-color:rgba(255,214,110,.38);box-shadow:0 0 18px rgba(255,214,110,.12)}
+@keyframes missionShine{0%,70%{transform:translateX(-130%)}100%{transform:translateX(130%)}}
+.arcade-live{height:min(62vh,560px);min-height:430px}.arcade-canvas{border-radius:26px}.game-help span{font-size:13px}
+@media(max-width:420px){.profile-card{grid-template-columns:58px 1fr}.rank-badge{width:54px;height:54px;font-size:28px}.arcade-live{height:calc(100vh - 310px);min-height:390px}}
