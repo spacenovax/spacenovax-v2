@@ -1,28 +1,18 @@
-# SpaceNovaX V13.2 Arcade Ultimate Sprint 1
+# SpaceNovaX V13.2.1 Arcade Galaxy Leaderboard
 
-게임의 재미와 타격감을 올리는 첫 번째 Arcade 업데이트입니다.
+Arcade에 오늘의 최고 점수/챔피언 시스템 UI를 추가한 버전입니다.
 
 ## 포함
-- Arcade Sound Engine
-  - Game start
-  - Crystal collect
-  - Boost/Shield
-  - Asteroid hit
-  - High score cue
-- Sound ON/OFF 버튼
-- 운석 충돌 효과
-  - 폭발 파티클
-  - 화면 흔들림
-  - 데미지 플래시
-  - 모바일 진동
-- 크리스탈 획득 효과
-  - 파티클
-  - Floating score
-  - +5 SPNX reward feedback
-- 우주선 크기/Hitbox 축소
-- Boost / Shield 아이템 1차 적용
-- Combo 표시
-- 일일 게임 보상 최대 20 SPNX 유지
+- Current Galaxy Champion 배너
+- Today / Week / All Time 탭 UI
+- Top 3 Captain 리스트
+- My Arcade Rank 카드
+- 다음 순위까지 필요한 점수 표시
+- Captain AI에 리더보드 도전 메시지 추가
+
+## 참고
+현재는 프론트 UI/데모 데이터입니다.
+정식 운영에서는 서버 DB에 점수 저장, 비정상 점수 탐지, 일일/주간/역대 랭킹 API를 연결해야 합니다.
 
 ## 적용
 GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.

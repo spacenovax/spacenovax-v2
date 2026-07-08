@@ -715,6 +715,52 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent 
   return <canvas className="arcade-canvas" ref={canvasRef} />;
 }
 
+
+function GalaxyLeaderboard({ currentScore = 0 }) {
+  const top = [
+    { rank: 1, name: 'Captain Nova', score: 18560, badge: '👑' },
+    { rank: 2, name: 'Astro Hunter', score: 16240, badge: '🥈' },
+    { rank: 3, name: 'Mars Pilot', score: 14880, badge: '🥉' },
+    { rank: 4, name: 'Nebula Rider', score: 12150, badge: '🔷' },
+    { rank: 5, name: 'Star Miner', score: 10920, badge: '⭐' },
+  ];
+  const myRank = currentScore >= top[0].score ? 1 : currentScore >= top[2].score ? 3 : currentScore >= top[4].score ? 5 : 128;
+  const nextTarget = top.find((p) => p.score > currentScore)?.score || top[0].score;
+  const gap = Math.max(0, nextTarget - currentScore);
+
+  return (
+    <div className="galaxy-leaderboard">
+      <div className="champion-banner">
+        <span>🌌 Current Galaxy Champion</span>
+        <b>{top[0].badge} {top[0].name}</b>
+        <strong>{top[0].score.toLocaleString()}</strong>
+      </div>
+
+      <div className="leaderboard-tabs">
+        <button className="active">Today</button>
+        <button>Week</button>
+        <button>All Time</button>
+      </div>
+
+      <div className="leaderboard-list">
+        {top.slice(0, 3).map((p) => (
+          <div key={p.rank} className={`leader-row rank-${p.rank}`}>
+            <em>#{p.rank}</em>
+            <span>{p.badge} {p.name}</span>
+            <b>{p.score.toLocaleString()}</b>
+          </div>
+        ))}
+      </div>
+
+      <div className="my-rank-card">
+        <span>🚀 My Arcade Rank</span>
+        <b>#{myRank}</b>
+        <small>{gap > 0 ? `${gap.toLocaleString()} points to the next Captain` : 'You are leading the Galaxy today!'}</small>
+      </div>
+    </div>
+  );
+}
+
 function GamePage({ user, setUser }) {
   const today = new Date().toISOString().slice(0, 10);
   const gs = user.gameReward || { date: today, earnedToday: 0, bestScore: 0 };
@@ -754,6 +800,7 @@ function GamePage({ user, setUser }) {
         <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
         <div><small>Remaining</small><b>{remaining} SPNX</b></div>
       </div>
+      <GalaxyLeaderboard currentScore={score} />
       <div className="arcade-live arcade-ultimate">
         <NovaArcadeCanvas
           onReward={rewardGame}
@@ -807,6 +854,7 @@ function captainAiMessages(user = defaultUser()) {
   else messages.unshift('Mining engine is ready. Start your 24-hour expedition.');
 
   messages.push(`Game reward remaining today: ${gameLeft}/20 SPNX.`);
+  messages.push('Today\'s Galaxy Champion is waiting to be challenged. Enter Arcade and climb the leaderboard.');
   messages.push(`Mission progress: ${Object.keys(claims).length}/7 completed. Lifetime missions can be claimed only once.`);
   messages.push(`Current rank: ${rank.title}. Sector: ${rank.sector}.`);
   messages.push(user.solanaWallet ? 'Solana wallet registered. You are preparing for the future conversion window.' : 'Register your Solana wallet to prepare for future SPNX conversion.');

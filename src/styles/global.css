@@ -441,3 +441,116 @@
     height:46px;
   }
 }
+
+/* V13.2.1 Galaxy Leaderboard */
+.galaxy-leaderboard{
+  margin:14px 0;
+  display:grid;
+  gap:10px;
+}
+.champion-banner{
+  border:1px solid rgba(255,214,110,.30);
+  border-radius:22px;
+  padding:13px 14px;
+  background:
+    radial-gradient(circle at 18% 18%,rgba(255,214,110,.16),transparent 34%),
+    linear-gradient(135deg,rgba(3,7,18,.72),rgba(31,25,72,.62));
+  box-shadow:0 0 24px rgba(255,214,110,.12), inset 0 0 20px rgba(126,67,255,.08);
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:3px 10px;
+  align-items:center;
+}
+.champion-banner span{
+  grid-column:1/-1;
+  color:#ffd66e;
+  font-weight:1000;
+  font-size:12px;
+  letter-spacing:.04em;
+}
+.champion-banner b{
+  color:#fff;
+  font-size:18px;
+}
+.champion-banner strong{
+  color:#34efff;
+  font-size:20px;
+  text-shadow:0 0 12px rgba(52,239,255,.45);
+}
+.leaderboard-tabs{
+  display:flex;
+  gap:8px;
+}
+.leaderboard-tabs button{
+  flex:1;
+  border:1px solid rgba(52,239,255,.22);
+  border-radius:999px;
+  padding:9px 10px;
+  background:rgba(3,7,18,.50);
+  color:#cfd8ff;
+  font-weight:1000;
+}
+.leaderboard-tabs button.active{
+  color:#020513;
+  background:linear-gradient(135deg,#34efff,#ffd66e);
+  box-shadow:0 0 18px rgba(52,239,255,.24);
+}
+.leaderboard-list{
+  display:grid;
+  gap:8px;
+}
+.leader-row{
+  display:grid;
+  grid-template-columns:52px 1fr auto;
+  align-items:center;
+  gap:10px;
+  padding:12px 14px;
+  border:1px solid rgba(52,239,255,.20);
+  border-radius:18px;
+  background:linear-gradient(135deg,rgba(3,7,18,.55),rgba(22,24,64,.40));
+}
+.leader-row em{
+  color:#34efff;
+  font-style:normal;
+  font-weight:1000;
+  font-size:18px;
+}
+.leader-row span{
+  color:#fff;
+  font-weight:900;
+}
+.leader-row b{
+  color:#eaf2ff;
+}
+.leader-row.rank-1{
+  border-color:rgba(255,214,110,.34);
+  box-shadow:0 0 18px rgba(255,214,110,.10);
+}
+.my-rank-card{
+  border:1px solid rgba(52,239,255,.24);
+  border-radius:20px;
+  padding:13px 14px;
+  background:linear-gradient(135deg,rgba(52,239,255,.08),rgba(126,67,255,.14));
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:4px 12px;
+  align-items:center;
+}
+.my-rank-card span{
+  color:#cfd8ff;
+  font-weight:900;
+}
+.my-rank-card b{
+  color:#34efff;
+  font-size:24px;
+}
+.my-rank-card small{
+  grid-column:1/-1;
+  color:rgba(234,242,255,.78);
+  font-weight:800;
+}
+@media(max-width:420px){
+  .champion-banner b{font-size:15px}
+  .champion-banner strong{font-size:17px}
+  .leader-row{grid-template-columns:44px 1fr auto;padding:11px 12px}
+}

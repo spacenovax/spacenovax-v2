@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-2-arcade-sprint1",
-  "version": "13.2.0",
+  "name": "spacenovax-v13-2-arcade-leaderboard",
+  "version": "13.2.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V13.2 Arcade Ultimate Sprint 1 - sound, collision, crystal FX, reward feedback"
+  "description": "SpaceNovaX V13.2.1 Arcade Galaxy Leaderboard"
 }
