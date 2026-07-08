@@ -88,30 +88,24 @@ function SymbolLogo() {
   );
 }
 
-function StarField({ count = 220, className = '' }) {
-  const stars = useMemo(() => {
-    let x = (Date.now() % 100000) || 12345;
-    const rand = () => {
-      x = (x * 1664525 + 1013904223) % 4294967296;
-      return x / 4294967296;
-    };
-    return Array.from({ length: count }, (_, i) => ({
-      x: rand() * 100,
-      y: rand() * 100,
-      size: 0.45 + rand() * (i % 11 === 0 ? 2.8 : 1.7),
-      delay: rand() * 8,
-      dur: 2.4 + rand() * 5.6,
-      alpha: 0.22 + rand() * 0.78,
-      tint: rand() > 0.86 ? 'cyan' : rand() > 0.72 ? 'violet' : 'white',
-    }));
-  }, [count]);
-  return <div className={`star-layer ${className}`}>{stars.map((s, i) => <i key={i} className={s.tint} style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s`, animationDuration: `${s.dur}s`, opacity: s.alpha }} />)}</div>;
+function StarField({ count = 260, className = '' }) {
+  const stars = useMemo(() => Array.from({ length: count }, (_, i) => ({
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    size: 0.35 + Math.random() * (i % 12 === 0 ? 2.9 : 1.55),
+    delay: Math.random() * 8,
+    dur: 2.2 + Math.random() * 6.2,
+    alpha: 0.18 + Math.random() * 0.82,
+    tint: Math.random() > 0.88 ? 'cyan' : Math.random() > 0.76 ? 'violet' : 'white',
+    layer: i % 3,
+  })), [count]);
+  return <div className={`star-layer ${className}`}>{stars.map((s, i) => <i key={i} className={`${s.tint} l${s.layer}`} style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s`, animationDuration: `${s.dur}s`, opacity: s.alpha }} />)}</div>;
 }
 
 function AppHeader({ user }) {
   const rank = getRank(user?.level || 1);
   return (
-    <header className="app-header">
+    <header className="app-header v13-header">
       <SymbolLogo />
       <div>
         <h1>SpaceNovaX</h1>
@@ -142,10 +136,10 @@ function CinematicShip({ active = false, game = false }) {
 function LaunchCountdown({ user }) {
   const rank = getRank(user?.level || 1);
   return (
-    <div className="launch-card premium-card">
-      <span>🤖 Captain AI</span>
-      <b>Welcome back, Captain {getCaptainCode(user)}</b>
-      <small>{rank.sector} sector active · Game reward max 20 SPNX/day · 1 Point = 1 SPNX after TGE</small>
+    <div className="launch-card premium-card v13-launch">
+      <span>🚀 Official Launch</span>
+      <b>Coming Soon</b>
+      <small>Captain {getCaptainCode(user)} · {rank.sector} · 1 Point = 1 SPNX during official conversion</small>
     </div>
   );
 }
@@ -174,6 +168,7 @@ function HomePage({ user, startMining, claimMining, loading }) {
         <span className="nebula n1" />
         <span className="planet planet-one" />
         <span className="planet planet-two" />
+        <div className="system-online-chip">🟢 SYSTEM ONLINE</div>
         <div className="balance-block">
           <small>TOTAL BALANCE</small>
           <strong>{fmt(user.balance)}</strong>
@@ -273,7 +268,7 @@ function FriendsPage({ user }) {
   }
   return (
     <section className="page premium-card content-card">
-      <h2>👥 Fleet Friends</h2><p>Your referral link automatically registers new captains into your Fleet.</p>
+      <h2>👥 Fleet Command</h2><p>Your referral link automatically registers new captains into your Fleet.</p>
       <div className="invite-box"><small>Your Fleet Code</small><b>{code}</b><input readOnly value={link} /><div className="two-buttons"><button onClick={copy}>📋 Copy</button><button onClick={share}>📤 Share</button></div></div>
       <div className="grid"><div><small>Total Invites</small><b>{user.referrals?.length || 0}</b></div><div><small>Active Fleet</small><b>{user.activeFleet || 0}</b></div><div><small>Fleet Bonus</small><b>+{user.fleetBonus || 0}%</b></div><div><small>Fleet Rank</small><b>Captain</b></div></div>
     </section>
@@ -283,7 +278,7 @@ function FriendsPage({ user }) {
 function RankingPage({ user }) {
   return (
     <section className="page premium-card content-card">
-      <h2>🏆 Galaxy Ranking</h2><p>Mining, Fleet and Game rankings.</p>
+      <h2>🏆 Galaxy Rank</h2><p>Mining, Fleet and Game rankings.</p>
       <div className="ranking-tabs"><span>Mining</span><span>Fleet</span><span>Game</span></div>
       {[user, { firstName: 'Nova Pilot', balance: 9800 }, { firstName: 'Mars Captain', balance: 7600 }].map((u, i) => <div className="rank-row" key={i}><b>#{i + 1}</b><span>{u.firstName}</span><strong>{fmt(u.balance)}</strong></div>)}
     </section>
@@ -380,7 +375,7 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
     function drawShip(x, y, t) {
       ctx.save();
       ctx.translate(x, y + Math.sin(t / 28) * 4);
-      ctx.scale(0.62, 0.62);
+      ctx.scale(0.46, 0.46);
       ctx.shadowColor = '#34efff';
       ctx.shadowBlur = 30;
 
@@ -551,7 +546,7 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
       for (const o of state.objects) {
         const dx = o.x - shipX;
         const dy = o.y - shipY;
-        const hit = Math.sqrt(dx * dx + dy * dy) < (o.r + 34);
+        const hit = Math.sqrt(dx * dx + dy * dy) < (o.r + 25);
         if (hit && o.type !== 'asteroid') {
           o.y = h + 100;
           state.score += o.type === 'boost' ? 25 : 10;
@@ -609,7 +604,7 @@ function GamePage({ user, setUser }) {
   const earned = gs.date === today ? Number(gs.earnedToday || 0) : 0;
   const remaining = Math.max(0, 20 - earned);
   const [score, setScore] = useState(0);
-  const [notice, setNotice] = useState('Nova-X1 Live Arcade · 하루 최대 20 SPNX Point');
+  const [notice, setNotice] = useState('Nova-X1 Arcade · 하루 최대 20 SPNX Point');
 
   async function rewardGame(reward) {
     if (remaining <= 0) {
@@ -629,7 +624,7 @@ function GamePage({ user, setUser }) {
 
   return (
     <section className="page premium-card content-card game-page">
-      <h2>🎮 Nova-X1 Live Arcade</h2>
+      <h2>🎮 Nova-X1 Arcade</h2>
       <p>{notice}</p>
       <div className="grid">
         <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
@@ -649,7 +644,7 @@ function GamePage({ user, setUser }) {
 
 function MorePage() {
   return (
-    <section className="page premium-card content-card"><h2>••• Command Menu</h2><div className="panel"><h3>🔄 Listing Conversion Policy</h3><p>상장 후 공식 교환 기간에 1 SPNX Point = 1 SPNX 비율로 교환됩니다.</p><p>KYC, 보안 검토, Solana 지갑 등록이 필요합니다.</p></div><button className="wide" onClick={() => { window.location.href = '/admin'; }}>Admin Dashboard</button>{Object.entries(OFFICIAL_LINKS).map(([k, url]) => <button key={k} className="wide ghost" onClick={() => openUrl(url)}>{k.toUpperCase()}</button>)}</section>
+    <section className="page premium-card content-card"><h2>••• Command Center</h2><div className="panel"><h3>🔄 Listing Conversion Policy</h3><p>상장 후 공식 교환 기간에 1 SPNX Point = 1 SPNX 비율로 교환됩니다.</p><p>KYC, 보안 검토, Solana 지갑 등록이 필요합니다.</p></div><button className="wide" onClick={() => { window.location.href = '/admin'; }}>Admin Dashboard</button>{Object.entries(OFFICIAL_LINKS).map(([k, url]) => <button key={k} className="wide ghost" onClick={() => openUrl(url)}>{k.toUpperCase()}</button>)}</section>
   );
 }
 
@@ -718,8 +713,30 @@ function CaptainAI({ user }) {
 }
 
 function BottomNav({ tab, setTab }) {
-  const items = [['home','🏠','Home'],['mining','⛏️','Mining'],['missions','⭐','Missions'],['friends','👥','Friends'],['ranking','🏆','Ranking'],['wallet','👛','Wallet'],['kyc','🛡️','KYC'],['game','🎮','Game'],['more','•••','More']];
-  return <nav className="bottom-nav">{items.map(([id, icon, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><span>{icon}</span><small>{label}</small></button>)}</nav>;
+  const items = [
+    ['home','🪐','HOME'],
+    ['mining','⛏','MINE'],
+    ['missions','⭐','MISSIONS'],
+    ['friends','👨‍🚀','FLEET'],
+    ['ranking','🏆','RANK'],
+    ['wallet','👛','WALLET'],
+    ['kyc','🛡','KYC'],
+    ['game','🚀','ARCADE'],
+    ['more','🛰','COMMAND'],
+  ];
+  function go(id) {
+    if (navigator.vibrate) navigator.vibrate(12);
+    setTab(id);
+  }
+  return (
+    <nav className="bottom-nav v13-bottom-nav">
+      {items.map(([id, icon, label]) => (
+        <button key={id} className={tab === id ? 'active' : ''} onClick={() => go(id)}>
+          <span>{icon}</span><small>{label}</small>
+        </button>
+      ))}
+    </nav>
+  );
 }
 
 export default function App() {

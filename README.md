@@ -1,39 +1,21 @@
-# SpaceNovaX V12 Ultimate Release Candidate
+# SpaceNovaX V13 Premium UI Phase 1
 
-## 핵심 개선
-- Home 별 배치 완전 랜덤화: 사선/바둑판 패턴 제거
-- 3~8초 간격 교차 유성 추가
+1순위 작업: Premium Home, Bottom Navigation, Premium Button System.
+
+## 포함
+- HOME / MINE / MISSIONS / FLEET / RANK / WALLET / KYC / ARCADE / COMMAND 메뉴명 적용
+- 하단 메뉴 Floating Glass Bar
+- 선택 아이콘 360도 회전
+- 네온 Glow / Pulse / 모바일 진동
+- Premium Button Glow
+- Official Launch Coming Soon
+- System Online Chip
+- Rank Badge/Profile 개선
 - 우주선 후광 강화
-- 레벨 옆 중복 심볼 제거
-- 프로필에 계급 배지 적용
-- Captain Code 표시
-- 계급/레벨별 색상 효과
-- Mission 카드 고급화: Glow, Shine, 진행률 표시
-- Game Canvas 개선: 별 랜덤화, 우주선 크기 축소, 충돌 범위 조정
-- 공식 링크/보상 정책 유지
-- Solana Wallet/KYC/1:1 Conversion 유지
+- 유성 추가
+- 게임 우주선/Hitbox 축소
+- Captain AI 유지
+- 최종 미션 링크/평생 1회 정책 유지
 
 ## 적용
-GitHub spacenovax-v2에 전체 덮어쓰기.
-Render에서 Clear build cache & deploy.
-
-
-Mission update:
-- Telegram: https://t.me/spacenovaxteam
-- Discord: https://discord.gg/rxVNWMC8e8
-- Telegram/Discord rewards are limited to ONE claim per account for lifetime.
-
-Lifetime Mission Rules
-- Website: +100 (ONE TIME)
-- Telegram: +300 (ONE TIME)
-- X(Twitter): +300 (ONE TIME)
-- Discord: +300 (ONE TIME)
-- YouTube Subscribe: +300 (ONE TIME)
-- YouTube Like: +20 (ONE TIME)
-Only Daily Check-in can be claimed repeatedly.
-
-Captain AI Added
-- Floating Captain AI assistant button
-- Status guidance for Mining, Game reward, Missions, Wallet, KYC, Conversion
-- Rotating assistant messages
-- Premium glow UI
+GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.

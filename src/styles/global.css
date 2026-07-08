@@ -181,3 +181,37 @@
   .captain-ai{right:10px;bottom:82px}
   .captain-ai-orb{width:52px;height:52px}
 }
+
+/* V13 Premium UI Phase 1 */
+:root{--nova-blue:#34efff;--galaxy-purple:#7e43ff;--deep-space:#020513;--gold:#ffd66e}
+.v13-header{padding-top:10px}
+.v13-header .symbol-logo{box-shadow:0 0 34px rgba(52,239,255,.62), inset 0 0 16px rgba(255,255,255,.18)}
+.v13-header h1{letter-spacing:-.02em;text-shadow:0 0 18px rgba(52,239,255,.28)}
+.v13-launch{background:linear-gradient(135deg,rgba(255,214,110,.11),rgba(52,239,255,.07),rgba(126,67,255,.15))}
+.system-online-chip{position:absolute;right:16px;top:16px;z-index:6;padding:8px 11px;border:1px solid rgba(118,255,176,.26);border-radius:999px;background:rgba(2,5,20,.48);color:#76ffb0;font-size:11px;font-weight:1000;letter-spacing:.06em;box-shadow:0 0 16px rgba(118,255,176,.12)}
+.star-layer i.cyan{background:#78faff;box-shadow:0 0 10px rgba(52,239,255,.9)}
+.star-layer i.violet{background:#d07aff;box-shadow:0 0 10px rgba(177,83,255,.8)}
+.star-layer i.white{background:#fff}
+.meteor-three{right:260px;top:330px;transform:rotate(22deg);animation:meteorReverse 8s linear infinite 2.2s}
+.meteor-four{left:20px;top:185px;transform:rotate(-35deg);animation:meteorFast 3.8s linear infinite 1s}
+@keyframes meteorReverse{0%,72%{opacity:0;transform:translate(0,0) rotate(22deg)}76%{opacity:1}100%{opacity:0;transform:translate(420px,180px) rotate(22deg)}}
+@keyframes meteorFast{0%,60%{opacity:0;transform:translate(0,0) rotate(-35deg)}64%{opacity:1}100%{opacity:0;transform:translate(420px,150px) rotate(-35deg)}}
+.ship-wrap:before{content:"";position:absolute;left:50%;top:48%;width:82%;height:56%;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(52,239,255,.42),rgba(126,67,255,.22) 46%,transparent 74%);filter:blur(26px);z-index:-2;animation:shipAura 3.2s ease-in-out infinite alternate}
+.rank-badge{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-size:30px;font-weight:1000;background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.9),rgba(52,239,255,.18),rgba(126,67,255,.12));border:1px solid rgba(255,255,255,.18);box-shadow:0 0 22px rgba(52,239,255,.35)}
+.rank-rookie{--rank:#b97843}.rank-cadet{--rank:#dfe8ff}.rank-voyager{--rank:#ffd66e}.rank-pioneer{--rank:#34efff}.rank-explorer{--rank:#b15cff}.rank-commander{--rank:#ff4d6d}.rank-admiral{--rank:#76faff}.rank-legend{--rank:#ffd66e}
+.profile-card{border-color:color-mix(in srgb,var(--rank,#34efff) 35%,rgba(52,239,255,.2))}
+.profile-card .rank-badge{box-shadow:0 0 28px color-mix(in srgb,var(--rank,#34efff) 65%,transparent)}
+.phase-pill{border-color:color-mix(in srgb,var(--rank,#34efff) 45%,rgba(255,255,255,.14));color:var(--rank,#34efff)}
+.premium-card button,.wide,.two-buttons button,.mining-glass button{position:relative;overflow:hidden;background:linear-gradient(135deg,#34efff,#7e43ff 58%,#ff3ce7)!important;box-shadow:0 0 24px rgba(52,239,255,.28),0 0 20px rgba(126,67,255,.25)!important;transition:transform .16s ease,filter .16s ease}
+.premium-card button:active,.wide:active,.two-buttons button:active,.mining-glass button:active{transform:scale(.97);filter:brightness(1.2)}
+.v13-bottom-nav{height:74px;padding:8px 9px!important;border-radius:30px!important;background:linear-gradient(180deg,rgba(11,18,43,.74),rgba(2,5,20,.90))!important;border:1px solid rgba(52,239,255,.25)!important;box-shadow:0 0 30px rgba(52,239,255,.18), inset 0 0 26px rgba(126,67,255,.08),0 -10px 40px rgba(0,0,0,.36)!important}
+.v13-bottom-nav button{position:relative;min-width:0;color:rgba(224,235,255,.62)!important}
+.v13-bottom-nav button span{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;font-size:18px;filter:drop-shadow(0 0 5px rgba(52,239,255,.25));transition:.24s ease}
+.v13-bottom-nav button small{font-size:7px!important;letter-spacing:.02em;margin-top:2px}
+.v13-bottom-nav button.active{background:transparent!important;box-shadow:none!important;color:#fff!important}
+.v13-bottom-nav button.active span{background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.96),rgba(52,239,255,.24),rgba(126,67,255,.32));box-shadow:0 0 20px rgba(52,239,255,.62), inset 0 0 12px rgba(255,255,255,.20);transform:translateY(-10px) scale(1.13);animation:navRotate .8s ease}
+.v13-bottom-nav button.active:after{content:"";position:absolute;left:50%;bottom:3px;width:22px;height:3px;border-radius:999px;transform:translateX(-50%);background:#34efff;box-shadow:0 0 12px #34efff}
+.v13-bottom-nav button.active:before{content:"";position:absolute;left:50%;top:3px;width:44px;height:44px;border-radius:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(52,239,255,.22),transparent 68%);animation:navPulse 1.7s ease-in-out infinite}
+@keyframes navRotate{0%{transform:translateY(-10px) scale(1.13) rotate(0)}100%{transform:translateY(-10px) scale(1.13) rotate(360deg)}}
+@keyframes navPulse{0%,100%{opacity:.4;transform:translateX(-50%) scale(.88)}50%{opacity:1;transform:translateX(-50%) scale(1.12)}}
+@media(max-width:420px){.v13-bottom-nav{height:68px}.v13-bottom-nav button small{display:none!important}.v13-bottom-nav button.active span{transform:translateY(-6px) scale(1.08)}@keyframes navRotate{0%{transform:translateY(-6px) scale(1.08) rotate(0)}100%{transform:translateY(-6px) scale(1.08) rotate(360deg)}}.profile-card{grid-template-columns:58px 1fr}.rank-badge{width:54px;height:54px;font-size:28px}}
