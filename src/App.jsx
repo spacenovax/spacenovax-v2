@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/global.css';
 
 const OFFICIAL_LINKS = {
@@ -329,10 +329,44 @@ function KycPage({ user, setUser }) {
 }
 
 
-function NovaArcadeCanvas({ onReward, dailyRemaining }) {
+
+function createArcadeSounds() {
+  let audioCtx = null;
+  const getCtx = () => {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  };
+  const tone = (freq = 440, dur = 0.12, type = 'sine', gain = 0.08, slide = 0) => {
+    try {
+      const ctx = getCtx();
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), ctx.currentTime + dur);
+      g.gain.setValueAtTime(gain, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    } catch {}
+  };
+  return {
+    start: () => { tone(220, .10, 'sawtooth', .045, 220); setTimeout(() => tone(660, .12, 'sine', .05, 220), 90); },
+    crystal: () => { tone(860, .08, 'sine', .055, 360); setTimeout(() => tone(1320, .10, 'triangle', .04, 240), 55); },
+    boost: () => { tone(180, .16, 'sawtooth', .055, 520); setTimeout(() => tone(740, .13, 'square', .035, 260), 80); },
+    hit: () => { tone(90, .20, 'sawtooth', .09, -35); setTimeout(() => tone(54, .18, 'square', .055, -14), 70); },
+    high: () => { tone(660, .10, 'sine', .055, 220); setTimeout(() => tone(880, .10, 'sine', .055, 220), 110); setTimeout(() => tone(1320, .16, 'triangle', .055, 0), 220); },
+    muted: false,
+  };
+}
+
+function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent }) {
   const canvasRef = useRef(null);
+  const soundsRef = useRef(null);
   const stateRef = useRef({
-    running: true,
     score: 0,
     crystals: 0,
     shipX: 0.5,
@@ -340,14 +374,29 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
     lastRewardScore: 0,
     objects: [],
     stars: [],
+    particles: [],
+    floaters: [],
     frame: 0,
+    shake: 0,
+    flash: 0,
+    shield: 0,
+    boost: 0,
+    combo: 0,
+    highScorePlayed: false,
   });
+
+  const play = useCallback((name) => {
+    if (!soundOn) return;
+    if (!soundsRef.current) soundsRef.current = createArcadeSounds();
+    soundsRef.current[name]?.();
+  }, [soundOn]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const state = stateRef.current;
     let raf = 0;
+    let lastTs = performance.now();
 
     function resize() {
       const rect = canvas.getBoundingClientRect();
@@ -355,43 +404,62 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
       canvas.width = Math.floor(rect.width * dpr);
       canvas.height = Math.floor(rect.height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (!state.stars.length) {
-        state.stars = Array.from({ length: 220 }, () => ({
-          x: Math.random() * rect.width,
-          y: Math.random() * rect.height,
-          s: 0.4 + Math.random() * 2.2,
-          a: 0.22 + Math.random() * 0.78,
-          v: 0.12 + Math.random() * 0.62,
-        }));
+      state.stars = Array.from({ length: 230 }, () => ({
+        x: Math.random() * rect.width,
+        y: Math.random() * rect.height,
+        s: 0.35 + Math.random() * 2.1,
+        a: 0.18 + Math.random() * 0.82,
+        v: 0.15 + Math.random() * 0.85,
+      }));
+    }
+
+    function spawn(w, difficulty) {
+      const roll = Math.random();
+      let type = roll < 0.52 ? 'crystal' : roll < 0.82 ? 'asteroid' : roll < 0.91 ? 'boost' : 'shield';
+      const rarity = Math.random();
+      state.objects.push({
+        type,
+        crystalType: type === 'crystal' ? (rarity > .94 ? 'gold' : rarity > .80 ? 'purple' : 'blue') : '',
+        x: 32 + Math.random() * (w - 64),
+        y: -44,
+        r: type === 'asteroid' ? 18 + Math.random() * 22 : type === 'boost' ? 18 : 16,
+        vy: (type === 'asteroid' ? 1.4 + Math.random() * 1.5 : 1.1 + Math.random() * 1.2) + difficulty,
+        spin: Math.random() * Math.PI,
+      });
+    }
+
+    function burst(x, y, color, count = 18, power = 3) {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 0.8 + Math.random() * power;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 28 + Math.random() * 22,
+          max: 48,
+          r: 1.5 + Math.random() * 3.8,
+          color,
+        });
       }
     }
 
-    function spawn(w) {
-      const typeRoll = Math.random();
-      const type = typeRoll < 0.58 ? 'crystal' : typeRoll < 0.86 ? 'asteroid' : 'boost';
-      state.objects.push({
-        type,
-        x: 30 + Math.random() * (w - 60),
-        y: -40,
-        r: type === 'asteroid' ? 22 + Math.random() * 18 : type === 'boost' ? 18 : 16,
-        vy: type === 'asteroid' ? 1.5 + Math.random() * 1.5 : 1.2 + Math.random() * 1.1,
-        spin: Math.random() * Math.PI,
-      });
+    function floater(x, y, text, color = '#34efff') {
+      state.floaters.push({ x, y, text, color, life: 64, max: 64 });
     }
 
     function drawShip(x, y, t) {
       ctx.save();
       ctx.translate(x, y + Math.sin(t / 28) * 4);
       ctx.scale(0.46, 0.46);
-      ctx.shadowColor = '#34efff';
-      ctx.shadowBlur = 30;
+      ctx.shadowColor = state.boost > 0 ? '#ffd66e' : '#34efff';
+      ctx.shadowBlur = state.boost > 0 ? 48 : 32;
 
-      // engine flame
-      const flame = 62 + Math.sin(t / 4) * 20;
+      const flame = (state.boost > 0 ? 108 : 72) + Math.sin(t / 4) * 18;
       const grad = ctx.createLinearGradient(0, 32, 0, 32 + flame);
-      grad.addColorStop(0, 'rgba(255,255,255,.95)');
-      grad.addColorStop(.25, 'rgba(52,239,255,.85)');
-      grad.addColorStop(.62, 'rgba(91,104,255,.55)');
+      grad.addColorStop(0, 'rgba(255,255,255,.98)');
+      grad.addColorStop(.22, 'rgba(52,239,255,.90)');
+      grad.addColorStop(.62, state.boost > 0 ? 'rgba(255,214,110,.58)' : 'rgba(91,104,255,.55)');
       grad.addColorStop(1, 'rgba(255,60,231,0)');
       ctx.fillStyle = grad;
       [-28, 0, 28].forEach((dx) => {
@@ -403,28 +471,14 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
         ctx.fill();
       });
 
-      // wings
       const wingGrad = ctx.createLinearGradient(-120, -10, 120, 20);
       wingGrad.addColorStop(0, '#f8fbff');
       wingGrad.addColorStop(.45, '#7c8fa8');
       wingGrad.addColorStop(1, '#f8fbff');
       ctx.fillStyle = wingGrad;
-      ctx.beginPath();
-      ctx.moveTo(-18, 6);
-      ctx.lineTo(-128, 52);
-      ctx.lineTo(-82, 0);
-      ctx.lineTo(-22, -18);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(18, 6);
-      ctx.lineTo(128, 52);
-      ctx.lineTo(82, 0);
-      ctx.lineTo(22, -18);
-      ctx.closePath();
-      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-18, 6); ctx.lineTo(-128, 52); ctx.lineTo(-82, 0); ctx.lineTo(-22, -18); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(18, 6); ctx.lineTo(128, 52); ctx.lineTo(82, 0); ctx.lineTo(22, -18); ctx.closePath(); ctx.fill();
 
-      // body
       const bodyGrad = ctx.createLinearGradient(-30, -80, 36, 64);
       bodyGrad.addColorStop(0, '#ffffff');
       bodyGrad.addColorStop(.35, '#cbd8e8');
@@ -438,7 +492,6 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
       ctx.closePath();
       ctx.fill();
 
-      // cockpit
       const cockGrad = ctx.createRadialGradient(0, -38, 4, 0, -30, 42);
       cockGrad.addColorStop(0, '#6ffaff');
       cockGrad.addColorStop(.38, '#12315c');
@@ -448,7 +501,6 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
       ctx.ellipse(0, -34, 20, 42, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // engines
       [-30, 0, 30].forEach((dx) => {
         const eg = ctx.createRadialGradient(dx, 28, 2, dx, 28, 18);
         eg.addColorStop(0, '#fff');
@@ -461,51 +513,61 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
         ctx.fill();
       });
 
+      if (state.shield > 0) {
+        ctx.strokeStyle = 'rgba(118,250,255,.9)';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, -10, 148, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
-    function draw() {
+    function loop(ts) {
       const rect = canvas.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
+      const dt = Math.min(2, (ts - lastTs) / 16.67);
+      lastTs = ts;
       const t = state.frame++;
-      ctx.clearRect(0, 0, w, h);
+      const difficulty = Math.min(2.6, t / 3600);
 
-      // deep space
+      if (state.shake > 0) state.shake -= dt;
+      if (state.flash > 0) state.flash -= dt;
+      if (state.boost > 0) state.boost -= dt;
+      if (state.shield > 0) state.shield -= dt;
+
+      ctx.save();
+      const shakeX = state.shake > 0 ? (Math.random() - .5) * state.shake * 3.8 : 0;
+      const shakeY = state.shake > 0 ? (Math.random() - .5) * state.shake * 3.8 : 0;
+      ctx.translate(shakeX, shakeY);
+      ctx.clearRect(-20, -20, w + 40, h + 40);
+
       const bg = ctx.createRadialGradient(w * .55, h * .45, 10, w * .5, h * .45, h * .75);
-      bg.addColorStop(0, '#172968');
-      bg.addColorStop(.35, '#070b22');
-      bg.addColorStop(1, '#02030b');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
+      bg.addColorStop(0, '#172968'); bg.addColorStop(.35, '#070b22'); bg.addColorStop(1, '#02030b');
+      ctx.fillStyle = bg; ctx.fillRect(-20, -20, w + 40, h + 40);
 
-      // nebula
       ctx.save();
       ctx.globalAlpha = .35;
       const ng = ctx.createRadialGradient(w * .35, h * .35, 20, w * .35, h * .35, w * .55);
-      ng.addColorStop(0, '#7e43ff');
-      ng.addColorStop(.4, '#123cff');
-      ng.addColorStop(1, 'transparent');
-      ctx.fillStyle = ng;
-      ctx.fillRect(0, 0, w, h);
+      ng.addColorStop(0, '#7e43ff'); ng.addColorStop(.4, '#123cff'); ng.addColorStop(1, 'transparent');
+      ctx.fillStyle = ng; ctx.fillRect(0, 0, w, h);
       ctx.restore();
 
-      // stars no tiled pattern
       state.stars.forEach((s) => {
-        s.y += s.v;
+        s.y += s.v * dt * (state.boost > 0 ? 2.3 : 1);
         if (s.y > h) { s.y = -4; s.x = Math.random() * w; }
         ctx.globalAlpha = s.a * (0.55 + Math.sin((t + s.x) / 28) * 0.45);
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2); ctx.fill();
       });
       ctx.globalAlpha = 1;
 
-      if (t % 34 === 0) spawn(w);
+      const spawnRate = Math.max(18, 34 - Math.floor(difficulty * 6));
+      if (t % spawnRate === 0) spawn(w, difficulty);
+
       state.objects.forEach((o) => {
-        o.y += o.vy;
-        o.spin += 0.04;
+        o.y += o.vy * dt * (state.boost > 0 && o.type !== 'asteroid' ? 1.2 : 1);
+        o.spin += 0.04 * dt;
 
         if (o.type === 'asteroid') {
           ctx.save();
@@ -514,9 +576,7 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
           ctx.shadowColor = '#ff7a2f';
           ctx.shadowBlur = 14;
           const g = ctx.createRadialGradient(-6, -8, 3, 0, 0, o.r);
-          g.addColorStop(0, '#d8d8d8');
-          g.addColorStop(.55, '#383843');
-          g.addColorStop(1, '#08080d');
+          g.addColorStop(0, '#d8d8d8'); g.addColorStop(.55, '#383843'); g.addColorStop(1, '#08080d');
           ctx.fillStyle = g;
           ctx.beginPath();
           for (let i = 0; i < 9; i++) {
@@ -524,83 +584,133 @@ function NovaArcadeCanvas({ onReward, dailyRemaining }) {
             const rr = o.r * (0.72 + ((i * 13) % 30) / 100);
             ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
           }
-          ctx.closePath();
-          ctx.fill();
+          ctx.closePath(); ctx.fill();
           ctx.restore();
         } else if (o.type === 'boost') {
-          ctx.font = '30px system-ui';
-          ctx.shadowColor = '#ffd66e';
-          ctx.shadowBlur = 20;
-          ctx.fillText('⚡', o.x - 14, o.y + 12);
-          ctx.shadowBlur = 0;
+          ctx.font = '30px system-ui'; ctx.shadowColor = '#ffd66e'; ctx.shadowBlur = 20; ctx.fillText('⚡', o.x - 14, o.y + 12); ctx.shadowBlur = 0;
+        } else if (o.type === 'shield') {
+          ctx.font = '29px system-ui'; ctx.shadowColor = '#76faff'; ctx.shadowBlur = 20; ctx.fillText('🛡', o.x - 14, o.y + 12); ctx.shadowBlur = 0;
         } else {
-          ctx.font = '28px system-ui';
-          ctx.shadowColor = '#8b5cff';
-          ctx.shadowBlur = 18;
-          ctx.fillText('💎', o.x - 14, o.y + 10);
-          ctx.shadowBlur = 0;
+          const emoji = o.crystalType === 'gold' ? '🔶' : o.crystalType === 'purple' ? '🔮' : '💎';
+          ctx.font = '28px system-ui'; ctx.shadowColor = o.crystalType === 'gold' ? '#ffd66e' : '#8b5cff'; ctx.shadowBlur = 18; ctx.fillText(emoji, o.x - 14, o.y + 10); ctx.shadowBlur = 0;
         }
       });
-      state.objects = state.objects.filter((o) => o.y < h + 60);
 
-      // smooth ship movement
-      state.shipX += (state.targetX - state.shipX) * 0.08;
+      state.shipX += (state.targetX - state.shipX) * 0.10;
       const shipX = w * state.shipX;
       const shipY = h - 105;
+      const hitbox = 25;
       drawShip(shipX, shipY, t);
 
-      // collection zone
       for (const o of state.objects) {
         const dx = o.x - shipX;
         const dy = o.y - shipY;
-        const hit = Math.sqrt(dx * dx + dy * dy) < (o.r + 25);
-        if (hit && o.type !== 'asteroid') {
-          o.y = h + 100;
-          state.score += o.type === 'boost' ? 25 : 10;
-          state.crystals += o.type === 'boost' ? 0 : 1;
-          if (state.score - state.lastRewardScore >= 30 && dailyRemaining > 0) {
-            state.lastRewardScore = state.score;
-            onReward(Math.min(5, dailyRemaining));
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < (o.r + hitbox)) {
+          if (o.type === 'asteroid') {
+            o.y = h + 100;
+            state.combo = 0;
+            state.shake = 10;
+            state.flash = 12;
+            burst(o.x, o.y, '#ff7a2f', 30, 5.5);
+            floater(o.x, o.y, state.shield > 0 ? 'SHIELD BLOCK' : 'HIT!', '#ff4d6d');
+            play('hit');
+            if (navigator.vibrate) navigator.vibrate(55);
+            onEvent?.(state.shield > 0 ? 'Shield blocked asteroid' : 'Asteroid impact!');
+            if (state.shield > 0) state.shield = Math.max(0, state.shield - 90);
+          } else {
+            o.y = h + 100;
+            const points = o.type === 'boost' ? 25 : o.type === 'shield' ? 18 : o.crystalType === 'gold' ? 35 : o.crystalType === 'purple' ? 20 : 10;
+            state.score += points;
+            state.combo += 1;
+            state.crystals += o.type === 'crystal' ? 1 : 0;
+            burst(o.x, o.y, o.type === 'boost' ? '#ffd66e' : o.type === 'shield' ? '#76faff' : '#34efff', 18, 3.5);
+            floater(o.x, o.y, o.type === 'boost' ? 'BOOST!' : o.type === 'shield' ? 'SHIELD!' : `+${points}`, o.type === 'boost' ? '#ffd66e' : '#34efff');
+            if (o.type === 'boost') { state.boost = 300; play('boost'); }
+            else if (o.type === 'shield') { state.shield = 520; play('boost'); }
+            else play('crystal');
+            if (state.combo === 10) floater(w / 2, h * .36, 'GREAT COMBO x10', '#ffd66e');
+            if (state.combo === 20) floater(w / 2, h * .36, 'GALAXY COMBO x20', '#ff3ce7');
+            if (state.score >= 1000 && !state.highScorePlayed) { state.highScorePlayed = true; play('high'); }
+            onScore?.(state.score);
+            if (state.score - state.lastRewardScore >= 100 && dailyRemaining > 0) {
+              state.lastRewardScore = state.score;
+              onReward(Math.min(5, dailyRemaining));
+              floater(shipX, shipY - 80, '+5 SPNX', '#76ffb0');
+            }
           }
         }
       }
 
-      // HUD
-      ctx.fillStyle = 'rgba(2,5,20,.62)';
-      ctx.strokeStyle = 'rgba(52,239,255,.25)';
+      state.objects = state.objects.filter((o) => o.y < h + 70);
+      state.particles.forEach((p) => {
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.025 * dt; p.life -= dt;
+        ctx.globalAlpha = Math.max(0, p.life / p.max);
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+      });
+      state.particles = state.particles.filter((p) => p.life > 0);
+      ctx.globalAlpha = 1;
+
+      state.floaters.forEach((f) => {
+        f.y -= 0.65 * dt; f.life -= dt;
+        ctx.globalAlpha = Math.max(0, f.life / f.max);
+        ctx.fillStyle = f.color;
+        ctx.shadowColor = f.color;
+        ctx.shadowBlur = 16;
+        ctx.font = '900 18px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.shadowBlur = 0;
+        ctx.textAlign = 'start';
+      });
+      state.floaters = state.floaters.filter((f) => f.life > 0);
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = 'rgba(2,5,20,.66)';
+      ctx.strokeStyle = 'rgba(52,239,255,.28)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(12, 12, 150, 52, 16);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = '#34efff';
-      ctx.font = '700 14px system-ui';
-      ctx.fillText('SCORE', 28, 32);
-      ctx.fillStyle = '#fff';
-      ctx.font = '900 22px system-ui';
-      ctx.fillText(String(state.score), 28, 56);
+      ctx.roundRect(12, 12, 172, 72, 16);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#34efff'; ctx.font = '800 13px system-ui'; ctx.fillText('SCORE', 28, 34);
+      ctx.fillStyle = '#fff'; ctx.font = '900 22px system-ui'; ctx.fillText(String(state.score), 28, 60);
+      ctx.fillStyle = '#ffd66e'; ctx.font = '800 12px system-ui'; ctx.fillText(`COMBO x${state.combo}`, 102, 34);
+      ctx.fillStyle = '#76ffb0'; ctx.fillText(`CRYSTAL ${state.crystals}`, 102, 58);
 
-      raf = requestAnimationFrame(draw);
+      if (state.flash > 0) {
+        ctx.globalAlpha = Math.min(.28, state.flash / 32);
+        ctx.fillStyle = '#ff2d55';
+        ctx.fillRect(-20, -20, w + 40, h + 40);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+      raf = requestAnimationFrame(loop);
     }
 
     resize();
-    const onResize = () => { state.stars = []; resize(); };
+    play('start');
+
+    const onResize = () => resize();
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
       const clientX = e.touches?.[0]?.clientX ?? e.clientX;
-      state.targetX = Math.max(0.12, Math.min(0.88, (clientX - rect.left) / rect.width));
+      state.targetX = Math.max(0.10, Math.min(0.90, (clientX - rect.left) / rect.width));
     };
     window.addEventListener('resize', onResize);
     canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('touchmove', onMove, { passive: true });
-    draw();
+    canvas.addEventListener('touchstart', onMove, { passive: true });
+
+    raf = requestAnimationFrame(loop);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
       canvas.removeEventListener('mousemove', onMove);
       canvas.removeEventListener('touchmove', onMove);
+      canvas.removeEventListener('touchstart', onMove);
     };
-  }, [dailyRemaining, onReward]);
+  }, [dailyRemaining, onReward, onScore, onEvent, play]);
 
   return <canvas className="arcade-canvas" ref={canvasRef} />;
 }
@@ -611,7 +721,8 @@ function GamePage({ user, setUser }) {
   const earned = gs.date === today ? Number(gs.earnedToday || 0) : 0;
   const remaining = Math.max(0, 20 - earned);
   const [score, setScore] = useState(0);
-  const [notice, setNotice] = useState('Nova-X1 Arcade · 하루 최대 20 SPNX Point');
+  const [notice, setNotice] = useState('Nova-X1 Arcade Ultimate · 하루 최대 20 SPNX Point');
+  const [soundOn, setSoundOn] = useState(true);
 
   async function rewardGame(reward) {
     if (remaining <= 0) {
@@ -619,32 +730,44 @@ function GamePage({ user, setUser }) {
       return;
     }
     try {
-      const nextScore = score + 30;
-      setScore(nextScore);
+      const nextScore = Math.max(score, 100);
       const data = await api('/api/game/reward', { method: 'POST', body: JSON.stringify({ score: nextScore, reward }) });
       if (data.user) setUser(data.user);
-      setNotice(`💎 Live Arcade reward! +${data.reward} SPNX`);
+      setNotice(`💎 Arcade reward! +${data.reward} SPNX`);
     } catch {
       setNotice(`Preview reward: +${reward} SPNX · 서버 연결 후 실제 지급됩니다.`);
     }
   }
 
   return (
-    <section className="page premium-card content-card game-page">
-      <h2>🎮 Nova-X1 Arcade</h2>
-      <p>{notice}</p>
+    <section className="page premium-card content-card game-page arcade-ultimate-page">
+      <div className="arcade-title-row">
+        <div>
+          <h2>🎮 Nova-X1 Arcade Ultimate</h2>
+          <p>{notice}</p>
+        </div>
+        <button className={soundOn ? 'sound-toggle on' : 'sound-toggle'} onClick={() => setSoundOn(!soundOn)}>
+          {soundOn ? '🔊' : '🔇'}
+        </button>
+      </div>
       <div className="grid">
         <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
         <div><small>Remaining</small><b>{remaining} SPNX</b></div>
       </div>
-      <div className="arcade-live">
-        <NovaArcadeCanvas onReward={rewardGame} dailyRemaining={remaining} />
+      <div className="arcade-live arcade-ultimate">
+        <NovaArcadeCanvas
+          onReward={rewardGame}
+          dailyRemaining={remaining}
+          soundOn={soundOn}
+          onScore={setScore}
+          onEvent={setNotice}
+        />
       </div>
       <div className="game-help">
-        <span>🖱️ 마우스/손가락으로 우주선을 좌우 이동</span>
-        <span>💎 크리스탈 수집 · ☄️ 운석 회피 · ⚡ 부스터 획득</span>
+        <span>🖱️ 마우스/손가락으로 Nova-X1 좌우 이동</span>
+        <span>💎 Crystal 수집 · ☄️ 운석 회피 · ⚡ Boost · 🛡 Shield</span>
       </div>
-      <div className="rank-row"><b>Score</b><span>SPNX Crystal</span><strong>{score}</strong></div>
+      <div className="rank-row"><b>Score</b><span>Combo Arcade</span><strong>{score}</strong></div>
     </section>
   );
 }

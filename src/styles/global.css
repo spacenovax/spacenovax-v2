@@ -387,3 +387,57 @@
 .manifesto-panel h3{margin:0 0 8px;color:#ffd66e}
 .manifesto-panel p{color:#eaf2ff;margin:0 0 10px;line-height:1.45;font-weight:850}
 .manifesto-panel b{display:block;color:#34efff;font-size:14px}
+
+/* V13.2 Arcade Ultimate Sprint 1 */
+.arcade-ultimate-page .arcade-title-row{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.sound-toggle{
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  border:1px solid rgba(52,239,255,.26);
+  background:rgba(3,7,18,.56);
+  color:#fff;
+  font-size:22px;
+  box-shadow:0 0 18px rgba(52,239,255,.16);
+}
+.sound-toggle.on{
+  background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.92),rgba(52,239,255,.24),rgba(126,67,255,.30));
+  box-shadow:0 0 22px rgba(52,239,255,.48);
+}
+.arcade-ultimate{
+  border-color:rgba(52,239,255,.34)!important;
+  box-shadow:0 0 36px rgba(52,239,255,.20), inset 0 0 42px rgba(126,67,255,.12)!important;
+}
+.arcade-ultimate:after{
+  content:"SOUND · IMPACT · COMBO";
+  position:absolute;
+  right:12px;
+  bottom:10px;
+  z-index:3;
+  font-size:10px;
+  letter-spacing:.12em;
+  color:rgba(215,221,255,.50);
+  font-weight:900;
+  pointer-events:none;
+}
+.arcade-canvas{
+  background:#020513;
+}
+.game-help span{
+  border-color:rgba(52,239,255,.24)!important;
+  background:linear-gradient(135deg,rgba(3,7,18,.50),rgba(20,22,62,.44))!important;
+}
+@media(max-width:420px){
+  .arcade-ultimate-page .arcade-title-row{
+    align-items:center;
+  }
+  .sound-toggle{
+    width:46px;
+    height:46px;
+  }
+}

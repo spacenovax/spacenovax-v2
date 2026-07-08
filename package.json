@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-1-captain-ai-manifesto",
-  "version": "13.1.1",
+  "name": "spacenovax-v13-2-arcade-sprint1",
+  "version": "13.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V13.1.1 Captain AI Manifesto Messages"
+  "description": "SpaceNovaX V13.2 Arcade Ultimate Sprint 1 - sound, collision, crystal FX, reward feedback"
 }

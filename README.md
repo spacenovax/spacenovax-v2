@@ -1,12 +1,28 @@
-# SpaceNovaX V13.1.1 Captain AI Manifesto
+# SpaceNovaX V13.2 Arcade Ultimate Sprint 1
 
-Captain AI가 단순 알림을 넘어 SpaceNovaX의 목표와 비전을 설득력 있게 전달하도록 개선한 버전입니다.
+게임의 재미와 타격감을 올리는 첫 번째 Arcade 업데이트입니다.
 
-## 추가/수정
-- Captain AI 비전 메시지 추가
-- Command Center에 SpaceNovaX Manifesto 카드 추가
-- AI 말풍선 문구 개선
-- Mining/Game/Mission/Wallet/Launch 안내 유지
+## 포함
+- Arcade Sound Engine
+  - Game start
+  - Crystal collect
+  - Boost/Shield
+  - Asteroid hit
+  - High score cue
+- Sound ON/OFF 버튼
+- 운석 충돌 효과
+  - 폭발 파티클
+  - 화면 흔들림
+  - 데미지 플래시
+  - 모바일 진동
+- 크리스탈 획득 효과
+  - 파티클
+  - Floating score
+  - +5 SPNX reward feedback
+- 우주선 크기/Hitbox 축소
+- Boost / Shield 아이템 1차 적용
+- Combo 표시
+- 일일 게임 보상 최대 20 SPNX 유지
 
 ## 적용
 GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.
