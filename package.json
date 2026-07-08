@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-2-arcade-leaderboard",
-  "version": "13.2.1",
+  "name": "spacenovax-v13-4-gameover-fixed",
+  "version": "13.4.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V13.2.1 Arcade Galaxy Leaderboard"
+  "description": "SpaceNovaX V13.4.1 fixed real gameover replacement"
 }
