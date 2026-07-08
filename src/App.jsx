@@ -3,7 +3,7 @@ import './styles/global.css';
 
 const OFFICIAL_LINKS = {
   website: 'https://spacenovax.com',
-  telegram: 'https://t.me/spacesnovax',
+  telegram: 'https://t.me/spacenovaxteam',
   x: 'https://x.com/spacenovaxteam',
   discord: 'https://discord.gg/rxVNWMC8e8',
   youtube: 'https://youtube.com/@spacenovaxteam',
@@ -220,7 +220,7 @@ function MiningPage({ user, startMining, claimMining, loading }) {
 
 function MissionsPage({ setUser }) {
   const [missions, setMissions] = useState(MISSIONS.map((m) => ({ ...m, status: { completed: false } })));
-  const [notice, setNotice] = useState('Official missions are paid once per account.');
+  const [notice, setNotice] = useState('Official missions (Website, Telegram, X, Discord, YouTube Subscribe, YouTube Like +20) are rewarded ONLY ONCE per account for lifetime.');
   const [busy, setBusy] = useState('');
   const completed = missions.filter((m) => m.status?.completed).length;
   const progress = Math.round((completed / Math.max(1, missions.length)) * 100);
@@ -254,7 +254,7 @@ function MissionsPage({ setUser }) {
       </div>
       {missions.map((m) => (
         <button key={m.id} className={m.status?.completed ? 'mission-row done' : 'mission-row'} disabled={m.status?.completed || busy === m.id} onClick={() => claim(m)}>
-          <span><strong>{m.icon}</strong><i>{m.title}<small>{m.type === 'daily' ? 'Daily reward' : 'One-time official mission'}</small></i></span>
+          <span><strong>{m.icon}</strong><i>{m.title}<small>{m.type === 'daily' ? 'Daily reward' : 'Lifetime one-time reward'}</small></i></span>
           <em>{m.status?.completed ? (m.type === 'daily' ? 'Claimed Today' : 'Completed') : busy === m.id ? 'Checking...' : m.action}</em>
           <b>+{m.reward} SPNX</b>
         </button>
@@ -653,6 +653,70 @@ function MorePage() {
   );
 }
 
+
+function captainAiMessages(user = defaultUser()) {
+  const m = user.mining || {};
+  const today = new Date().toISOString().slice(0, 10);
+  const game = user.gameReward || { date: today, earnedToday: 0 };
+  const gameEarned = game.date === today ? Number(game.earnedToday || 0) : 0;
+  const gameLeft = Math.max(0, 20 - gameEarned);
+  const claims = user.missionClaims || {};
+  const missionCompleted = Object.keys(claims).length;
+  const walletReady = Boolean(user.solanaWallet);
+  const kycStatus = user.kyc?.status || 'not_submitted';
+  const rank = typeof getRank === 'function' ? getRank(user.level || 1) : { title: 'Captain', sector: 'Earth Orbit' };
+
+  const messages = [];
+
+  if (m.claimable) messages.push('Mining complete. Claim your 24 SPNX reward.');
+  else if (m.active) messages.push(`Mining in progress. Next claim in ${time(m.remainingMs || 0)}.`);
+  else messages.push('Mining engine is ready. Start your 24-hour expedition.');
+
+  messages.push(`Game reward remaining today: ${gameLeft}/20 SPNX.`);
+  messages.push(`Mission progress: ${missionCompleted}/7 completed.`);
+  messages.push(`Current rank: ${rank.title}. Sector: ${rank.sector}.`);
+
+  if (!walletReady) messages.push('Solana wallet is not registered yet.');
+  else messages.push('Solana wallet is registered for future conversion.');
+
+  if (kycStatus === 'approved') messages.push('KYC approved. You are ready for conversion review.');
+  else if (kycStatus === 'pending') messages.push('KYC submitted. Waiting for admin review.');
+  else messages.push('KYC is required before token conversion.');
+
+  messages.push('After official TGE, 1 SPNX Point = 1 SPNX during the conversion window.');
+
+  return messages;
+}
+
+function CaptainAI({ user }) {
+  const [open, setOpen] = useState(false);
+  const messages = captainAiMessages(user);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setIndex((v) => (v + 1) % messages.length), 5200);
+    return () => clearInterval(timer);
+  }, [messages.length]);
+
+  return (
+    <div className={open ? 'captain-ai open' : 'captain-ai'}>
+      <button className="captain-ai-orb" type="button" onClick={() => setOpen(!open)}>
+        <span>🤖</span>
+      </button>
+      <div className="captain-ai-panel">
+        <div className="captain-ai-head">
+          <b>Captain AI</b>
+          <button type="button" onClick={() => setOpen(false)}>×</button>
+        </div>
+        <p>{messages[index]}</p>
+        <div className="captain-ai-dots">
+          {messages.slice(0, 6).map((_, i) => <i key={i} className={i === index % 6 ? 'active' : ''} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BottomNav({ tab, setTab }) {
   const items = [['home','🏠','Home'],['mining','⛏️','Mining'],['missions','⭐','Missions'],['friends','👥','Friends'],['ranking','🏆','Ranking'],['wallet','👛','Wallet'],['kyc','🛡️','KYC'],['game','🎮','Game'],['more','•••','More']];
   return <nav className="bottom-nav">{items.map(([id, icon, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><span>{icon}</span><small>{label}</small></button>)}</nav>;
@@ -678,5 +742,6 @@ export default function App() {
     if (tab === 'game') return <GamePage user={user} setUser={setUser} />;
     return <MorePage />;
   }, [tab, user, loading]);
-  return <div className="app-shell"><AppHeader user={user} />{page}<BottomNav tab={tab} setTab={setTab} /></div>;
+  return <div className="app-shell"><AppHeader user={user} />{page}<CaptainAI user={user} />
+      <BottomNav tab={tab} setTab={setTab} /></div>;
 }

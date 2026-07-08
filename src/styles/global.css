@@ -89,3 +89,95 @@
 @keyframes missionShine{0%,70%{transform:translateX(-130%)}100%{transform:translateX(130%)}}
 .arcade-live{height:min(62vh,560px);min-height:430px}.arcade-canvas{border-radius:26px}.game-help span{font-size:13px}
 @media(max-width:420px){.profile-card{grid-template-columns:58px 1fr}.rank-badge{width:54px;height:54px;font-size:28px}.arcade-live{height:calc(100vh - 310px);min-height:390px}}
+
+/* V12.1 Captain AI Assistant */
+.captain-ai{
+  position:fixed;
+  right:14px;
+  bottom:92px;
+  z-index:80;
+  display:grid;
+  justify-items:end;
+  gap:10px;
+  pointer-events:none;
+}
+.captain-ai-orb{
+  pointer-events:auto;
+  width:58px;
+  height:58px;
+  border:1px solid rgba(52,239,255,.42);
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.95),rgba(52,239,255,.26),rgba(126,67,255,.34));
+  color:#fff;
+  box-shadow:0 0 26px rgba(52,239,255,.48), inset 0 0 18px rgba(255,255,255,.18);
+  font-size:26px;
+  animation:captainPulse 2.4s ease-in-out infinite;
+}
+.captain-ai-panel{
+  pointer-events:auto;
+  width:min(330px, calc(100vw - 28px));
+  border:1px solid rgba(52,239,255,.28);
+  border-radius:22px;
+  padding:14px;
+  background:linear-gradient(145deg,rgba(4,8,26,.94),rgba(21,18,62,.92));
+  box-shadow:0 0 34px rgba(52,239,255,.22), inset 0 0 26px rgba(126,67,255,.08);
+  backdrop-filter:blur(18px);
+  opacity:0;
+  transform:translateY(12px) scale(.96);
+  transform-origin:right bottom;
+  transition:.22s ease;
+}
+.captain-ai.open .captain-ai-panel{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+.captain-ai-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:8px;
+}
+.captain-ai-head b{
+  color:#34efff;
+  font-size:17px;
+}
+.captain-ai-head button{
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:50%;
+  width:28px;
+  height:28px;
+  color:#fff;
+  background:rgba(255,255,255,.06);
+}
+.captain-ai-panel p{
+  margin:0;
+  color:#eaf2ff;
+  font-weight:850;
+  line-height:1.45;
+}
+.captain-ai-dots{
+  display:flex;
+  gap:6px;
+  margin-top:12px;
+}
+.captain-ai-dots i{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:rgba(255,255,255,.18);
+}
+.captain-ai-dots i.active{
+  background:#34efff;
+  box-shadow:0 0 10px #34efff;
+}
+@keyframes captainPulse{
+  0%,100%{transform:translateY(0);filter:brightness(1)}
+  50%{transform:translateY(-4px);filter:brightness(1.25)}
+}
+@media(max-width:420px){
+  .captain-ai{right:10px;bottom:82px}
+  .captain-ai-orb{width:52px;height:52px}
+}

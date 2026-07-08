@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v12-ultimate-release",
-  "version": "12.0.0",
+  "name": "spacenovax-v12-captain-ai",
+  "version": "12.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V12 Ultimate Release Candidate"
+  "description": "SpaceNovaX V12.1 Captain AI Assistant"
 }

@@ -16,3 +16,24 @@
 ## 적용
 GitHub spacenovax-v2에 전체 덮어쓰기.
 Render에서 Clear build cache & deploy.
+
+
+Mission update:
+- Telegram: https://t.me/spacenovaxteam
+- Discord: https://discord.gg/rxVNWMC8e8
+- Telegram/Discord rewards are limited to ONE claim per account for lifetime.
+
+Lifetime Mission Rules
+- Website: +100 (ONE TIME)
+- Telegram: +300 (ONE TIME)
+- X(Twitter): +300 (ONE TIME)
+- Discord: +300 (ONE TIME)
+- YouTube Subscribe: +300 (ONE TIME)
+- YouTube Like: +20 (ONE TIME)
+Only Daily Check-in can be claimed repeatedly.
+
+Captain AI Added
+- Floating Captain AI assistant button
+- Status guidance for Mining, Game reward, Missions, Wallet, KYC, Conversion
+- Rotating assistant messages
+- Premium glow UI
