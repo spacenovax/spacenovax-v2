@@ -1,21 +1,12 @@
-# SpaceNovaX V13 Premium UI Phase 1
+# SpaceNovaX V13.1.1 Captain AI Manifesto
 
-1순위 작업: Premium Home, Bottom Navigation, Premium Button System.
+Captain AI가 단순 알림을 넘어 SpaceNovaX의 목표와 비전을 설득력 있게 전달하도록 개선한 버전입니다.
 
-## 포함
-- HOME / MINE / MISSIONS / FLEET / RANK / WALLET / KYC / ARCADE / COMMAND 메뉴명 적용
-- 하단 메뉴 Floating Glass Bar
-- 선택 아이콘 360도 회전
-- 네온 Glow / Pulse / 모바일 진동
-- Premium Button Glow
-- Official Launch Coming Soon
-- System Online Chip
-- Rank Badge/Profile 개선
-- 우주선 후광 강화
-- 유성 추가
-- 게임 우주선/Hitbox 축소
-- Captain AI 유지
-- 최종 미션 링크/평생 1회 정책 유지
+## 추가/수정
+- Captain AI 비전 메시지 추가
+- Command Center에 SpaceNovaX Manifesto 카드 추가
+- AI 말풍선 문구 개선
+- Mining/Game/Mission/Wallet/Launch 안내 유지
 
 ## 적용
 GitHub spacenovax-v2에 전체 덮어쓰기 후 Render Clear build cache & deploy.

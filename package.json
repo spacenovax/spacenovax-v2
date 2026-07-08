@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-premium-ui-phase1",
-  "version": "13.0.0",
+  "name": "spacenovax-v13-1-captain-ai-manifesto",
+  "version": "13.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "SpaceNovaX V13 Premium UI Phase 1"
+  "description": "SpaceNovaX V13.1.1 Captain AI Manifesto Messages"
 }

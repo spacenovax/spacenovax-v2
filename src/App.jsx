@@ -159,16 +159,23 @@ function HomePage({ user, startMining, claimMining, loading }) {
         <div className="exp-bar"><small>Experience</small><em><i /></em></div>
       </div>
       <LaunchCountdown user={user} />
-      <div className="hero-cinema">
+      <div className="hero-cinema home-ultimate">
+        <span className="space-weather" />
+        <span className="cosmic-dust dust-one" />
+        <span className="cosmic-dust dust-two" />
+        <span className="tiny-galaxy" />
         <StarField count={180} />
         <span className="meteor meteor-one" />
         <span className="meteor meteor-two" />
         <span className="meteor meteor-three" />
         <span className="meteor meteor-four" />
+        <span className="meteor meteor-five" />
+        <span className="meteor meteor-six" />
         <span className="nebula n1" />
         <span className="planet planet-one" />
         <span className="planet planet-two" />
         <div className="system-online-chip">🟢 SYSTEM ONLINE</div>
+        <div className="ai-home-bubble">🤖 Every Captain has a story</div>
         <div className="balance-block">
           <small>TOTAL BALANCE</small>
           <strong>{fmt(user.balance)}</strong>
@@ -644,7 +651,12 @@ function GamePage({ user, setUser }) {
 
 function MorePage() {
   return (
-    <section className="page premium-card content-card"><h2>••• Command Center</h2><div className="panel"><h3>🔄 Listing Conversion Policy</h3><p>상장 후 공식 교환 기간에 1 SPNX Point = 1 SPNX 비율로 교환됩니다.</p><p>KYC, 보안 검토, Solana 지갑 등록이 필요합니다.</p></div><button className="wide" onClick={() => { window.location.href = '/admin'; }}>Admin Dashboard</button>{Object.entries(OFFICIAL_LINKS).map(([k, url]) => <button key={k} className="wide ghost" onClick={() => openUrl(url)}>{k.toUpperCase()}</button>)}</section>
+    <section className="page premium-card content-card"><h2>🛰 Command Center</h2>
+      <div className="manifesto-panel">
+        <h3>🌌 SpaceNovaX Manifesto</h3>
+        <p>We are not just building an app. We are building the future digital space civilization.</p>
+        <b>Every great journey begins with one brave Captain.</b>
+      </div><div className="panel"><h3>🔄 Listing Conversion Policy</h3><p>상장 후 공식 교환 기간에 1 SPNX Point = 1 SPNX 비율로 교환됩니다.</p><p>KYC, 보안 검토, Solana 지갑 등록이 필요합니다.</p></div><button className="wide" onClick={() => { window.location.href = '/admin'; }}>Admin Dashboard</button>{Object.entries(OFFICIAL_LINKS).map(([k, url]) => <button key={k} className="wide ghost" onClick={() => openUrl(url)}>{k.toUpperCase()}</button>)}</section>
   );
 }
 
@@ -656,29 +668,26 @@ function captainAiMessages(user = defaultUser()) {
   const gameEarned = game.date === today ? Number(game.earnedToday || 0) : 0;
   const gameLeft = Math.max(0, 20 - gameEarned);
   const claims = user.missionClaims || {};
-  const missionCompleted = Object.keys(claims).length;
-  const walletReady = Boolean(user.solanaWallet);
-  const kycStatus = user.kyc?.status || 'not_submitted';
-  const rank = typeof getRank === 'function' ? getRank(user.level || 1) : { title: 'Captain', sector: 'Earth Orbit' };
+  const rank = getRank(user.level || 1);
 
-  const messages = [];
+  const messages = [
+    'We are not just building an app. We are building the future digital space civilization.',
+    'Every great journey begins with one brave Captain.',
+    'Explore. Mine. Evolve. This is the SpaceNovaX way.',
+    'Every Captain has a story. Yours begins here.',
+    'One Galaxy. Millions of Captains.',
+    'SpaceNovaX is not only a token. It is a growing space ecosystem.',
+  ];
 
-  if (m.claimable) messages.push('Mining complete. Claim your 24 SPNX reward.');
-  else if (m.active) messages.push(`Mining in progress. Next claim in ${time(m.remainingMs || 0)}.`);
-  else messages.push('Mining engine is ready. Start your 24-hour expedition.');
+  if (m.claimable) messages.unshift('Mining complete. Claim your 24 SPNX and continue the expedition.');
+  else if (m.active) messages.unshift(`Mining in progress. Next claim in ${time(m.remainingMs || 0)}.`);
+  else messages.unshift('Mining engine is ready. Start your 24-hour expedition.');
 
   messages.push(`Game reward remaining today: ${gameLeft}/20 SPNX.`);
-  messages.push(`Mission progress: ${missionCompleted}/7 completed.`);
+  messages.push(`Mission progress: ${Object.keys(claims).length}/7 completed. Lifetime missions can be claimed only once.`);
   messages.push(`Current rank: ${rank.title}. Sector: ${rank.sector}.`);
-
-  if (!walletReady) messages.push('Solana wallet is not registered yet.');
-  else messages.push('Solana wallet is registered for future conversion.');
-
-  if (kycStatus === 'approved') messages.push('KYC approved. You are ready for conversion review.');
-  else if (kycStatus === 'pending') messages.push('KYC submitted. Waiting for admin review.');
-  else messages.push('KYC is required before token conversion.');
-
-  messages.push('After official TGE, 1 SPNX Point = 1 SPNX during the conversion window.');
+  messages.push(user.solanaWallet ? 'Solana wallet registered. You are preparing for the future conversion window.' : 'Register your Solana wallet to prepare for future SPNX conversion.');
+  messages.push('Official Launch is coming. 1 SPNX Point = 1 SPNX during the official conversion period.');
 
   return messages;
 }
@@ -700,7 +709,7 @@ function CaptainAI({ user }) {
       </button>
       <div className="captain-ai-panel">
         <div className="captain-ai-head">
-          <b>Captain AI</b>
+          <b>Captain AI</b><small>SpaceNovaX Vision Assistant</small>
           <button type="button" onClick={() => setOpen(false)}>×</button>
         </div>
         <p>{messages[index]}</p>

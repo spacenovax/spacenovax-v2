@@ -215,3 +215,175 @@
 @keyframes navRotate{0%{transform:translateY(-10px) scale(1.13) rotate(0)}100%{transform:translateY(-10px) scale(1.13) rotate(360deg)}}
 @keyframes navPulse{0%,100%{opacity:.4;transform:translateX(-50%) scale(.88)}50%{opacity:1;transform:translateX(-50%) scale(1.12)}}
 @media(max-width:420px){.v13-bottom-nav{height:68px}.v13-bottom-nav button small{display:none!important}.v13-bottom-nav button.active span{transform:translateY(-6px) scale(1.08)}@keyframes navRotate{0%{transform:translateY(-6px) scale(1.08) rotate(0)}100%{transform:translateY(-6px) scale(1.08) rotate(360deg)}}.profile-card{grid-template-columns:58px 1fr}.rank-badge{width:54px;height:54px;font-size:28px}}
+
+/* V13.1 Sprint 1 — HOME Ultimate */
+.home-ultimate{
+  isolation:isolate;
+  background:
+    radial-gradient(circle at 18% 42%,rgba(52,239,255,.18),transparent 26%),
+    radial-gradient(circle at 75% 18%,rgba(126,67,255,.32),transparent 22%),
+    radial-gradient(circle at 50% 62%,rgba(52,239,255,.09),transparent 46%),
+    radial-gradient(circle at 22% 76%,rgba(255,60,231,.08),transparent 24%),
+    linear-gradient(180deg,#020513,#05091d 48%,#01030c)!important;
+}
+.home-ultimate:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 38%,rgba(52,239,255,.12),transparent 18%),
+    radial-gradient(circle at 62% 50%,rgba(126,67,255,.16),transparent 28%),
+    radial-gradient(circle at 32% 70%,rgba(255,255,255,.035),transparent 40%);
+  filter:blur(14px);
+  animation:nebulaDrift 18s ease-in-out infinite alternate;
+}
+.space-weather{
+  position:absolute;
+  inset:-20%;
+  z-index:0;
+  pointer-events:none;
+  background:
+    linear-gradient(120deg,transparent 20%,rgba(52,239,255,.07),transparent 52%,rgba(126,67,255,.08),transparent 80%);
+  filter:blur(22px);
+  animation:spaceWeather 22s ease-in-out infinite alternate;
+}
+.cosmic-dust{
+  position:absolute;
+  z-index:1;
+  border-radius:50%;
+  pointer-events:none;
+  background:radial-gradient(circle,rgba(255,255,255,.15),rgba(52,239,255,.05),transparent 70%);
+  filter:blur(10px);
+  opacity:.55;
+}
+.dust-one{width:330px;height:170px;left:-60px;top:260px;animation:dustFloat 16s ease-in-out infinite}
+.dust-two{width:260px;height:140px;right:-70px;top:460px;animation:dustFloat 19s ease-in-out infinite reverse}
+.tiny-galaxy{
+  position:absolute;
+  width:170px;
+  height:60px;
+  left:34px;
+  top:520px;
+  z-index:1;
+  border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(255,255,255,.22),rgba(52,239,255,.10) 38%,rgba(126,67,255,.06) 55%,transparent 72%);
+  transform:rotate(-18deg);
+  filter:blur(1px);
+  opacity:.5;
+  animation:galaxySpin 30s linear infinite;
+}
+.star-layer{
+  z-index:2;
+}
+.star-layer i{
+  animation-name:twinkle, starDepthMove;
+  animation-timing-function:ease-in-out, linear;
+  animation-iteration-count:infinite, infinite;
+}
+.star-layer i.l0{animation-duration:var(--tw, 4s), 34s}
+.star-layer i.l1{animation-duration:var(--tw, 5s), 52s}
+.star-layer i.l2{animation-duration:var(--tw, 6s), 74s}
+.home-ultimate .ship-wrap{
+  filter:drop-shadow(0 0 54px rgba(52,239,255,.62)) drop-shadow(0 26px 34px rgba(0,0,0,.72))!important;
+}
+.home-ultimate .ship-wrap:before{
+  width:92%;
+  height:62%;
+  background:radial-gradient(circle,rgba(52,239,255,.46),rgba(126,67,255,.23) 45%,rgba(52,239,255,.08) 62%,transparent 78%)!important;
+  filter:blur(30px)!important;
+}
+.home-ultimate .ship-flare{
+  width:245px!important;
+  height:172px!important;
+  bottom:28px!important;
+  filter:blur(2.6px) drop-shadow(0 0 34px #34efff)!important;
+}
+.ai-home-bubble{
+  position:absolute;
+  right:14px;
+  top:54px;
+  z-index:7;
+  max-width:220px;
+  padding:10px 13px;
+  border-radius:18px 18px 4px 18px;
+  border:1px solid rgba(52,239,255,.24);
+  background:linear-gradient(135deg,rgba(3,7,18,.72),rgba(25,24,66,.74));
+  color:#eaf2ff;
+  font-size:12px;
+  font-weight:900;
+  box-shadow:0 0 18px rgba(52,239,255,.18);
+  animation:aiBubble 7s ease-in-out infinite;
+}
+.meteor-five{
+  left:35%;
+  top:130px;
+  transform:rotate(28deg);
+  animation:meteorReverse 5.8s linear infinite 3.4s;
+}
+.meteor-six{
+  right:4%;
+  top:540px;
+  transform:rotate(-24deg);
+  animation:meteorFast 7.2s linear infinite 5.1s;
+}
+.balance-block{
+  text-shadow:0 0 18px rgba(52,239,255,.12);
+}
+.mining-glass{
+  border-color:rgba(52,239,255,.42)!important;
+  box-shadow:0 0 30px rgba(52,239,255,.16), inset 0 0 22px rgba(126,67,255,.08)!important;
+}
+.stat-strip{
+  box-shadow:0 0 22px rgba(52,239,255,.10), inset 0 0 16px rgba(126,67,255,.06)!important;
+}
+@keyframes nebulaDrift{
+  from{transform:translate3d(-12px,-8px,0) scale(1);opacity:.55}
+  to{transform:translate3d(14px,12px,0) scale(1.05);opacity:.82}
+}
+@keyframes spaceWeather{
+  0%{transform:translateX(-4%) rotate(0deg);opacity:.38}
+  50%{opacity:.72}
+  100%{transform:translateX(4%) rotate(2deg);opacity:.48}
+}
+@keyframes dustFloat{
+  0%,100%{transform:translate3d(0,0,0) rotate(0);opacity:.35}
+  50%{transform:translate3d(24px,-18px,0) rotate(6deg);opacity:.62}
+}
+@keyframes galaxySpin{
+  from{transform:rotate(-18deg) scale(1)}
+  to{transform:rotate(342deg) scale(1.03)}
+}
+@keyframes starDepthMove{
+  from{transform:translateY(0)}
+  to{transform:translateY(12px)}
+}
+@keyframes aiBubble{
+  0%,18%{opacity:0;transform:translateY(8px) scale(.96)}
+  24%,72%{opacity:1;transform:translateY(0) scale(1)}
+  88%,100%{opacity:0;transform:translateY(-6px) scale(.98)}
+}
+@media(max-width:420px){
+  .ai-home-bubble{
+    top:50px;
+    right:10px;
+    max-width:180px;
+    font-size:11px;
+  }
+  .tiny-galaxy{
+    top:500px;
+    left:20px;
+    opacity:.42;
+  }
+}
+
+/* V13.1.1 Captain AI Manifesto */
+.captain-ai-head{align-items:flex-start!important}
+.captain-ai-head b{display:grid;gap:2px}
+.captain-ai-head small{color:rgba(215,221,255,.72);font-size:10px;font-weight:800;letter-spacing:.04em}
+.captain-ai-panel p{font-size:14px}
+.manifesto-panel{border:1px solid rgba(255,214,110,.25);border-radius:22px;padding:16px;margin:12px 0 14px;background:radial-gradient(circle at 20% 20%,rgba(255,214,110,.12),transparent 34%),linear-gradient(135deg,rgba(3,7,18,.62),rgba(34,27,78,.62));box-shadow:0 0 26px rgba(255,214,110,.10), inset 0 0 22px rgba(126,67,255,.08)}
+.manifesto-panel h3{margin:0 0 8px;color:#ffd66e}
+.manifesto-panel p{color:#eaf2ff;margin:0 0 10px;line-height:1.45;font-weight:850}
+.manifesto-panel b{display:block;color:#34efff;font-size:14px}
