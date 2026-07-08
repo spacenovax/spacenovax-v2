@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-4-2-real-gameover-final-buildfix-definitive",
-  "version": "13.4.2",
+  "name": "spacenovax-v2-main-crystal-fix",
+  "version": "13.4.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "Definitive build fix: only one createArcadeSounds function remains"
+  "description": "SpaceNovaX crystal collision fix: crystal/item pickup never destroys ship"
 }

@@ -721,8 +721,10 @@ function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent,
                 if (navigator.vibrate) navigator.vibrate(60);
                 onEvent?.('Shield absorbed the impact.');
               } else {
-                endGame(shipX, shipY);
-                break;
+                if (o.type === 'asteroid') {
+                  endGame(shipX, shipY);
+                  break;
+                }
               }
             } else {
               const points = o.type === 'boost' ? 25 : o.type === 'shield' ? 18 : o.crystalType === 'gold' ? 35 : o.crystalType === 'purple' ? 20 : 10;
@@ -917,7 +919,7 @@ function GamePage({ user, setUser }) {
       </div>
 
       <div className="game-help">
-        <span>☄️ Shield 없이 운석 충돌 = GAME OVER</span>
+        <span>💎 보석은 획득만 · ☄️ Shield 없이 운석 충돌 = GAME OVER</span>
         <span>🛡 Shield는 1회 방어 · 💎 Crystal 수집 · ⚡ Boost</span>
       </div>
       <div className="rank-row"><b>Score</b><span>Real Game Over Mode</span><strong>{score}</strong></div>
