@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'spacenovax-data.json');
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data.json');
 
 const MINING_DURATION = 24 * 60 * 60 * 1000;
 const BASE_MINING_REWARD = 24;
@@ -20,7 +20,6 @@ const DEFAULT_MISSIONS = [
   { id: 'discord', title: 'Join Discord', icon: '💬', reward: 300, type: 'one-time', url: 'https://discord.com/', enabled: true },
   { id: 'x_follow', title: 'Follow X', icon: '𝕏', reward: 300, type: 'one-time', url: 'https://x.com/', enabled: true },
   { id: 'youtube_sub', title: 'Subscribe YouTube', icon: '📺', reward: 300, type: 'one-time', url: 'https://youtube.com/', enabled: true },
-  { id: 'youtube_like', title: 'YouTube Like', icon: '👍', reward: 100, type: 'one-time', url: 'https://youtube.com/', enabled: true },
   { id: 'daily_checkin', title: 'Daily Check-in', icon: '🎁', reward: 20, type: 'daily', url: '', enabled: true }
 ];
 
@@ -40,6 +39,11 @@ function readData() {
         minConvert: 5000,
         fleetMaxBonus: 20,
         activeFleetDays: 7,
+        gameRewardsEnabled: true,
+        gameDailyLimit: 30,
+        novaAiEnabled: true,
+        novaDailyMessageLimit: 50,
+        maintenanceMode: false,
         totalSupply: 10000000000,
         miningPool: 3500000000
       }
@@ -61,7 +65,6 @@ function readData() {
     { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
     { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
-    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 20, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
     { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
   ];
   const missionMapV73 = Object.fromEntries((data.missions || []).map((m) => [m.id, m]));
@@ -81,7 +84,6 @@ function readData() {
     { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
     { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
-    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 20, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
     { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
   ];
   const existingMissions = Object.fromEntries((data.missions || []).map((m) => [m.id, m]));
@@ -91,18 +93,29 @@ function readData() {
   data.settings.miningSandboxMinutes ??= 5;
   data.settings.eventMultiplier ??= 1;
   data.settings.miningEngineVersion ??= '1.0.0';
+  data.settings.gameRewardsEnabled ??= true;
+  data.settings.gameDailyLimit ??= 30;
+  data.settings.novaAiEnabled ??= true;
+  data.settings.novaDailyMessageLimit ??= 50;
+  data.settings.maintenanceMode ??= false;
   data.convertRequests ||= [];
   data.distributions ||= [];
   return data;
 }
 
 function writeData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  const tempFile = `${DATA_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
+  fs.renameSync(tempFile, DATA_FILE);
 }
 
-function makeGuestUser() {
+function makeGuestUser(clientId = '') {
+  const stableId = String(clientId || '').trim();
+  const suffix = stableId
+    ? crypto.createHash('sha256').update(stableId).digest('hex').slice(0, 16)
+    : crypto.randomBytes(8).toString('hex');
   return {
-    id: `guest-${crypto.randomBytes(4).toString('hex')}`,
+    id: `guest-${suffix}`,
     telegramId: null,
     username: 'guest',
     firstName: 'Space Explorer',
@@ -112,7 +125,7 @@ function makeGuestUser() {
 }
 
 function normalizeTelegramUser(raw) {
-  if (!raw?.id) return makeGuestUser();
+  if (!raw?.id) return makeGuestUser(raw?.clientId);
   return {
     id: `tg-${raw.id}`,
     telegramId: String(raw.id),
@@ -121,6 +134,30 @@ function normalizeTelegramUser(raw) {
     lastName: raw.last_name || '',
     isGuest: false
   };
+}
+
+function verifiedTelegramUser(req) {
+  const initData = String(req.headers['x-telegram-init-data'] || '');
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!initData || !botToken) return null;
+  try {
+    const params = new URLSearchParams(initData);
+    const receivedHash = params.get('hash') || '';
+    params.delete('hash');
+    const authDate = Number(params.get('auth_date') || 0);
+    if (!authDate || Math.abs(Math.floor(Date.now() / 1000) - authDate) > 24 * 60 * 60) return null;
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n');
+    const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+    const expectedHash = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex');
+    if (!safeEqual(receivedHash, expectedHash)) return null;
+    const user = JSON.parse(params.get('user') || '{}');
+    return user?.id ? user : null;
+  } catch {
+    return null;
+  }
 }
 
 function fleetBonusPercent(activeFleet) {
@@ -259,16 +296,35 @@ function publicUser(data, user) {
 }
 
 function getSessionUser(req, data) {
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || req.query?.ref || '');
+  const telegramUser = verifiedTelegramUser(req);
+  const clientId = String(req.headers['x-spnx-client-id'] || req.body?.clientId || '');
+  const fallbackUser = IS_PRODUCTION ? { clientId } : (req.body?.telegramUser || { clientId });
+  const user = ensureUser(data, telegramUser || fallbackUser, req.body?.ref || req.query?.ref || '');
   return user;
 }
 
 app.use(express.json({ limit: '2mb' }));
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=()');
+  next();
+});
 
-const ADMIN_ID = process.env.ADMIN_ID || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
-const ADMIN_TOKEN_SECRET = process.env.JWT_SECRET || 'spacenovax-local-secret-change-on-render';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+const ADMIN_ID = process.env.ADMIN_ID || (IS_PRODUCTION ? '' : 'admin');
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? '' : 'ChangeMe123!');
+const ADMIN_TOKEN_SECRET = process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex');
 const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000;
+const adminLoginAttempts = new Map();
+
+function safeEqual(left, right) {
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 function signAdminToken(payload) {
   const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + ADMIN_SESSION_MS })).toString('base64url');
@@ -280,7 +336,7 @@ function verifyAdminToken(token = '') {
   const [body, sig] = String(token).split('.');
   if (!body || !sig) return null;
   const expected = crypto.createHmac('sha256', ADMIN_TOKEN_SECRET).update(body).digest('base64url');
-  if (sig !== expected) return null;
+  if (!safeEqual(sig, expected)) return null;
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     if (!payload.exp || payload.exp < Date.now()) return null;
@@ -350,12 +406,12 @@ app.post('/api/mining/claim', (req, res) => {
   res.json({ ok: true, message: `Claimed ${amount} SPNX Point.`, user: publicUser(data, user) });
 });
 
-app.get('/api/missions', (req, res) => {
+app.get('/api/legacy/missions', (req, res) => {
   const data = readData();
   res.json({ ok: true, missions: data.missions.filter((m) => m.enabled !== false) });
 });
 
-app.post('/api/missions/claim', (req, res) => {
+app.post('/api/legacy/missions/claim', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   const missionId = req.body?.missionId;
@@ -404,7 +460,7 @@ app.post('/api/ranking/me', (req, res) => {
   res.json({ ok: true, rank, totalUsers: users.length, user: publicUser(data, user) });
 });
 
-app.post('/api/wallet/save', (req, res) => {
+app.post('/api/legacy/wallet/save', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   const wallet = String(req.body?.wallet || '').trim();
@@ -483,14 +539,27 @@ function publicAdminUser(data, user) {
 app.post('/api/admin/login', (req, res) => {
   const id = String(req.body?.id || '').trim();
   const password = String(req.body?.password || '');
+  const attemptKey = String(req.ip || 'unknown');
+  const attempt = adminLoginAttempts.get(attemptKey) || { count: 0, resetAt: 0 };
+  if (attempt.resetAt > now() && attempt.count >= 5) {
+    return res.status(429).json({ ok: false, message: 'Too many login attempts. Try again later.' });
+  }
+  if (!ADMIN_ID || !ADMIN_PASSWORD) {
+    return res.status(503).json({ ok: false, message: 'Admin credentials are not configured on the server.' });
+  }
 
   const data = readData();
-  if (id !== ADMIN_ID || password !== ADMIN_PASSWORD) {
+  if (!safeEqual(id, ADMIN_ID) || !safeEqual(password, ADMIN_PASSWORD)) {
+    adminLoginAttempts.set(attemptKey, {
+      count: attempt.resetAt > now() ? attempt.count + 1 : 1,
+      resetAt: attempt.resetAt > now() ? attempt.resetAt : now() + 15 * 60 * 1000,
+    });
     data.events.push({ type: 'admin_login_failed', id, at: now() });
     writeData(data);
     return res.status(401).json({ ok: false, message: 'Invalid admin ID or password' });
   }
 
+  adminLoginAttempts.delete(attemptKey);
   const token = signAdminToken({ id, role: 'super_admin' });
   data.events.push({ type: 'admin_login_success', id, at: now() });
   writeData(data);
@@ -676,7 +745,7 @@ app.get('/api/admin/settings', requireAdmin, (req, res) => {
 app.post('/api/admin/settings/update', requireAdmin, (req, res) => {
   const data = readData();
   data.settings ||= {};
-  ['convertEnabled','minConvert','pointToTokenRate','fleetMaxBonus','activeFleetDays'].forEach((key) => {
+  ['convertEnabled','minConvert','pointToTokenRate','fleetMaxBonus','activeFleetDays','gameRewardsEnabled','gameDailyLimit','novaAiEnabled','novaDailyMessageLimit','maintenanceMode'].forEach((key) => {
     if (req.body?.[key] !== undefined) data.settings[key] = req.body[key];
   });
   data.events.push({ type: 'admin_settings_update', adminId: req.admin.id, settings: data.settings, at: now() });
@@ -775,6 +844,41 @@ app.post('/api/admin/mining/force-reset', requireAdmin, (req, res) => {
   res.json({ ok: true, user: publicAdminUser(data, user) });
 });
 
+app.get('/api/admin/operations', requireAdmin, (req, res) => {
+  const data = readData();
+  const since = now() - 24 * 60 * 60 * 1000;
+  const events = (data.events || []).filter((event) => Number(event.at || 0) >= since);
+  const users = Object.values(data.users || {});
+  const gameEvents = events.filter((event) => event.type === 'game_reward');
+  const novaEvents = events.filter((event) => event.type === 'nova_chat');
+  res.json({
+    ok: true,
+    operations: {
+      system: {
+        maintenanceMode: Boolean(data.settings?.maintenanceMode),
+        telegramUsers: users.filter((user) => user.telegramId).length,
+        guestUsers: users.filter((user) => !user.telegramId).length,
+      },
+      game: {
+        enabled: Boolean(data.settings?.gameRewardsEnabled),
+        dailyLimit: Number(data.settings?.gameDailyLimit || 30),
+        sessions24h: gameEvents.length,
+        rewards24h: gameEvents.reduce((sum, event) => sum + Number(event.reward || 0), 0),
+        uniquePlayers24h: new Set(gameEvents.map((event) => event.userId).filter(Boolean)).size,
+        topScore24h: Math.max(0, ...gameEvents.map((event) => Number(event.score || 0))),
+      },
+      nova: {
+        enabled: Boolean(data.settings?.novaAiEnabled),
+        dailyMessageLimit: Number(data.settings?.novaDailyMessageLimit || 50),
+        requests24h: novaEvents.length,
+        uniqueCaptains24h: new Set(novaEvents.map((event) => event.userId).filter(Boolean)).size,
+        configured: Boolean(process.env.OPENAI_API_KEY),
+        model: process.env.OPENAI_MODEL || 'gpt-5.6-sol',
+      },
+    },
+  });
+});
+
 
 // V8 Unified Platform API helpers
 function v8TodayKey() {
@@ -788,7 +892,6 @@ function v8EnsureMissions(data) {
     { id: 'x', icon: '𝕏', title: 'X Twitter', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
     { id: 'discord', icon: '💬', title: 'Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true },
-    { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 20, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE', enabled: true },
     { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN', enabled: true }
   ];
 }
@@ -804,7 +907,7 @@ function v8MissionStatus(user, mission) {
 app.get('/api/missions', (req, res) => {
   const data = readData();
   v8EnsureMissions(data);
-  const user = ensureUser(data, {}, '');
+  const user = getSessionUser(req, data);
   const missions = data.missions.filter((m) => m.enabled !== false).map((m) => ({ ...m, status: v8MissionStatus(user, m) }));
   writeData(data);
   res.json({ ok: true, missions });
@@ -813,7 +916,7 @@ app.get('/api/missions', (req, res) => {
 app.post('/api/missions/claim', (req, res) => {
   const data = readData();
   v8EnsureMissions(data);
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const user = getSessionUser(req, data);
   const mission = data.missions.find((m) => m.id === String(req.body?.missionId || '') && m.enabled !== false);
   if (!mission) return res.status(404).json({ ok: false, message: 'Mission not found' });
   if (v8MissionStatus(user, mission).completed) {
@@ -830,10 +933,11 @@ app.post('/api/missions/claim', (req, res) => {
 });
 
 
-// V8.2 Game reward daily cap: max 20 SPNX per day
+// V14.2 Game reward daily cap: controlled by Admin (default 30 SPNX/day)
 app.post('/api/game/reward', (req, res) => {
   const data = readData();
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  if (!data.settings?.gameRewardsEnabled) return res.status(503).json({ ok: false, message: 'Game rewards are temporarily disabled.' });
+  const user = getSessionUser(req, data);
   const today = new Date(Date.now()).toISOString().slice(0, 10);
   const requested = Math.max(0, Number(req.body?.reward || 0));
   const score = Math.max(0, Number(req.body?.score || 0));
@@ -843,7 +947,8 @@ app.post('/api/game/reward', (req, res) => {
     user.gameReward = { date: today, earnedToday: 0, bestScore: user.gameReward.bestScore || 0 };
   }
 
-  const remaining = Math.max(0, 20 - Number(user.gameReward.earnedToday || 0));
+  const dailyLimit = Math.max(0, Number(data.settings?.gameDailyLimit || 30));
+  const remaining = Math.max(0, dailyLimit - Number(user.gameReward.earnedToday || 0));
   const reward = Math.min(requested, remaining);
 
   if (reward <= 0) {
@@ -864,10 +969,10 @@ app.post('/api/game/reward', (req, res) => {
 });
 
 
-// V8.2 Token conversion request: 1 Point = 1 SPNX, KYC/admin review required
-app.post('/api/conversion/request', (req, res) => {
+// Legacy V8.2 conversion route retained only for migration compatibility.
+app.post('/api/legacy/conversion/request', (req, res) => {
   const data = readData();
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const user = getSessionUser(req, data);
   const amount = Math.max(0, Number(req.body?.amount || user.balance || 0));
 
   if (!user.solanaWallet) return res.status(400).json({ ok: false, message: 'Solana wallet required.' });
@@ -894,7 +999,7 @@ app.post('/api/conversion/request', (req, res) => {
 // V9 Ultimate KYC API
 app.post('/api/kyc/submit', (req, res) => {
   const data = readData();
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const user = getSessionUser(req, data);
   user.kyc = {
     status: 'pending',
     name: String(req.body?.name || ''),
@@ -911,7 +1016,7 @@ app.post('/api/kyc/submit', (req, res) => {
 // V9 Ultimate Wallet API
 app.post('/api/wallet/save', (req, res) => {
   const data = readData();
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const user = getSessionUser(req, data);
   const wallet = String(req.body?.wallet || '').trim();
 
   if (!wallet || wallet.length < 32 || wallet.length > 48) {
@@ -932,7 +1037,7 @@ app.post('/api/wallet/save', (req, res) => {
 // V9 Ultimate Token Conversion API
 app.post('/api/conversion/request', (req, res) => {
   const data = readData();
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  const user = getSessionUser(req, data);
   const amount = Math.max(0, Number(req.body?.amount || user.balance || 0));
 
   if (!user.solanaWallet) return res.status(400).json({ ok: false, message: 'Solana wallet required.' });
@@ -954,10 +1059,11 @@ app.post('/api/conversion/request', (req, res) => {
   res.json({ ok: true, request });
 });
 
-// V9 Ultimate Game Reward API: max 20 SPNX/day
-app.post('/api/game/reward', (req, res) => {
+// Legacy game route retained only for migration compatibility.
+app.post('/api/legacy/game/reward', (req, res) => {
   const data = readData();
-  const user = ensureUser(data, req.body?.telegramUser, req.body?.ref || '');
+  if (!data.settings?.gameRewardsEnabled) return res.status(503).json({ ok: false, message: 'Game rewards are temporarily disabled.' });
+  const user = getSessionUser(req, data);
   const today = new Date(Date.now()).toISOString().slice(0, 10);
   const requested = Math.max(0, Number(req.body?.reward || 0));
   const score = Math.max(0, Number(req.body?.score || 0));
@@ -967,7 +1073,8 @@ app.post('/api/game/reward', (req, res) => {
     user.gameReward = { date: today, earnedToday: 0, bestScore: user.gameReward.bestScore || 0 };
   }
 
-  const remaining = Math.max(0, 20 - Number(user.gameReward.earnedToday || 0));
+  const dailyLimit = Math.max(0, Number(data.settings?.gameDailyLimit || 30));
+  const remaining = Math.max(0, dailyLimit - Number(user.gameReward.earnedToday || 0));
   const reward = Math.min(requested, remaining);
 
   if (reward > 0) {
@@ -982,6 +1089,81 @@ app.post('/api/game/reward', (req, res) => {
   writeData(data);
 
   res.json({ ok: true, reward, user: publicUser(data, user) });
+});
+
+app.post('/api/nova/chat', async (req, res) => {
+  const data = readData();
+  if (!data.settings?.novaAiEnabled) {
+    return res.status(503).json({ ok: false, message: 'NOVA AI is temporarily disabled by Command.' });
+  }
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ ok: false, message: 'NOVA AI core is not configured.' });
+  }
+
+  const message = String(req.body?.message || '').trim().slice(0, 2000);
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-10) : [];
+  const captain = req.body?.captainContext || {};
+  const userId = String(captain.id || req.ip || 'anonymous').slice(0, 100);
+  const dayAgo = now() - 24 * 60 * 60 * 1000;
+  const recentUsage = (data.events || []).filter((event) => event.type === 'nova_chat' && event.userId === userId && Number(event.at || 0) >= dayAgo).length;
+  const dailyLimit = Math.max(1, Number(data.settings?.novaDailyMessageLimit || 50));
+  if (recentUsage >= dailyLimit) {
+    return res.status(429).json({ ok: false, message: 'Daily NOVA AI message limit reached.' });
+  }
+  if (!message) return res.status(400).json({ ok: false, message: 'Message is required.' });
+
+  const input = [
+    {
+      role: 'developer',
+      content: [{
+        type: 'input_text',
+        text: [
+          'You are NOVA, the official SpaceNovaX AI commander.',
+          'Help community Captains with SpaceNovaX, mining, missions, game strategy, Web3 education, and general questions.',
+          'Be concise, calm, futuristic, and useful. Reply in the language used by the Captain.',
+          'Never request passwords, seed phrases, wallet private keys, or Telegram login codes.',
+          'Do not claim that SPNX Points are guaranteed money or promise investment returns.',
+          `Captain context: level=${Number(captain.level || 1)}, balance=${Number(captain.balance || 0)}, miningActive=${Boolean(captain.mining?.active)}, gameRewardToday=${Number(captain.gameReward?.earnedToday || 0)}.`,
+        ].join('\n'),
+      }],
+    },
+    ...history
+      .filter((item) => item && ['user', 'assistant'].includes(item.role))
+      .map((item) => ({
+        role: item.role,
+        content: [{ type: 'input_text', text: String(item.text || '').slice(0, 2000) }],
+      })),
+  ];
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-5.6-sol',
+        input,
+        max_output_tokens: 700,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('NOVA AI error', response.status, result?.error?.message || 'unknown');
+      return res.status(502).json({ ok: false, message: 'NOVA AI is temporarily unavailable.' });
+    }
+    const reply = String(result.output_text || '').trim();
+    if (!reply) return res.status(502).json({ ok: false, message: 'NOVA AI returned no response.' });
+    const latestData = readData();
+    latestData.events.push({ type: 'nova_chat', userId, model: process.env.OPENAI_MODEL || 'gpt-5.6-sol', at: now() });
+    writeData(latestData);
+    res.json({ ok: true, reply });
+  } catch (error) {
+    console.error('NOVA AI connection error', error);
+    res.status(502).json({ ok: false, message: 'NOVA AI connection failed.' });
+  }
 });
 
 const distPath = path.join(__dirname, 'dist');

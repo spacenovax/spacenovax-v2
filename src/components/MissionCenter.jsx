@@ -6,7 +6,6 @@ const FALLBACK_MISSIONS = [
   { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN' },
   { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW' },
   { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE' },
-  { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE' },
   { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN' },
 ];
 

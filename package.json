@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v13-4-7-arcade-stable-min",
-  "version": "13.4.7",
+  "name": "spacenovax-v14-nova-command",
+  "version": "14.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,5 +16,5 @@
     "react-dom": "latest",
     "express": "latest"
   },
-  "description": "Arcade stable minimal: pickups no restart, asteroid game over"
+  "description": "SpaceNovaX Telegram mining app with NOVA AI Command Center and cinematic NOVA-X1"
 }

@@ -15,7 +15,6 @@ const MISSIONS = [
   { id: 'x', icon: '𝕏', title: 'X Twitter', reward: 300, url: OFFICIAL_LINKS.x, action: 'FOLLOW', type: 'one_time' },
   { id: 'discord', icon: '💬', title: 'Discord', reward: 300, url: OFFICIAL_LINKS.discord, action: 'JOIN', type: 'one_time' },
   { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', reward: 300, url: OFFICIAL_LINKS.youtube, action: 'SUBSCRIBE', type: 'one_time' },
-  { id: 'youtube_like', icon: '👍', title: 'YouTube Like', reward: 20, url: OFFICIAL_LINKS.youtube, action: 'LIKE', type: 'one_time' },
   { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', reward: 20, url: '', action: 'CHECK-IN', type: 'daily' },
 ];
 
@@ -72,8 +71,34 @@ function openUrl(url) {
   if (tg?.openLink) tg.openLink(url);
   else window.open(url, '_blank', 'noopener,noreferrer');
 }
+function getClientId() {
+  const key = 'spnx_client_id_v1';
+  let value = localStorage.getItem(key);
+  if (!value) {
+    value = globalThis.crypto?.randomUUID?.() || `spnx-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(key, value);
+  }
+  return value;
+}
 async function api(path, options = {}) {
-  const res = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
+  const clientId = getClientId();
+  const initData = window.Telegram?.WebApp?.initData || '';
+  let body = options.body;
+  if (body && typeof body === 'string') {
+    try {
+      body = JSON.stringify({ ...JSON.parse(body), clientId });
+    } catch {}
+  }
+  const res = await fetch(path, {
+    ...options,
+    body,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SPNX-Client-ID': clientId,
+      ...(initData ? { 'X-Telegram-Init-Data': initData } : {}),
+      ...(options.headers || {}),
+    },
+  });
   const data = await res.json();
   if (!res.ok || !data.ok) throw new Error(data.message || 'API failed');
   return data;
@@ -175,14 +200,18 @@ function HomePage({ user, startMining, claimMining, loading }) {
         <span className="planet planet-one" />
         <span className="planet planet-two" />
         <div className="system-online-chip">🟢 SYSTEM ONLINE</div>
-        <div className="ai-home-bubble">🤖 Every Captain has a story</div>
+        <div className="ai-home-bubble">NOVA AI · COMMAND ONLINE</div>
         <div className="balance-block">
           <small>TOTAL BALANCE</small>
           <strong>{fmt(user.balance)}</strong>
           <h2>SPNX Points</h2>
-          <p>Nova-X1 Cinematic Class</p>
+          <p>NOVA-X1 · GENESIS INTERCEPTOR</p>
         </div>
-        <CinematicShip active={isMining} />
+        <div className="nova-x1-hero" role="img" aria-label="NOVA-X1 Genesis Interceptor">
+          <img src="/nova-x1-hero-v14.png" alt="NOVA-X1 Genesis Interceptor" />
+          <span className="nova-x1-scan" />
+          <div className="nova-x1-label"><b>NOVA-X1</b><small>AI CONTROLLED FLAGSHIP</small></div>
+        </div>
         <div className="mining-glass">
           <div className="mining-main"><span>⛏️</span><div><small>Today's Mining</small><b>+{fmt(m.reward || 24)}</b><em>SPNX</em></div></div>
           <div className="mining-time"><small>{canClaim ? 'Claim Ready' : isMining ? 'Next Claim' : 'Ready'}</small><b>{canClaim ? '00:00:00' : time(m.remainingMs || 86400000)}</b></div>
@@ -191,7 +220,7 @@ function HomePage({ user, startMining, claimMining, loading }) {
         <div className="stat-strip">
           <div><small>Mining Speed</small><b>{fmt(m.speedPerHour || 1, 2)}x</b></div>
           <div><small>Fleet Bonus</small><b>+{m.fleetBonus || 0}%</b></div>
-          <div><small>Game Reward</small><b>20/day</b></div>
+          <div><small>Game Reward</small><b>30/day</b></div>
         </div>
       </div>
     </section>
@@ -222,7 +251,7 @@ function MiningPage({ user, startMining, claimMining, loading }) {
 
 function MissionsPage({ setUser }) {
   const [missions, setMissions] = useState(MISSIONS.map((m) => ({ ...m, status: { completed: false } })));
-  const [notice, setNotice] = useState('Official missions (Website, Telegram, X, Discord, YouTube Subscribe, YouTube Like +20) are rewarded ONLY ONCE per account for lifetime.');
+  const [notice, setNotice] = useState('Official missions (Website, Telegram, X, Discord, YouTube Subscribe) are rewarded ONLY ONCE per account for lifetime.');
   const [busy, setBusy] = useState('');
   const completed = missions.filter((m) => m.status?.completed).length;
   const progress = Math.round((completed / Math.max(1, missions.length)) * 100);
@@ -477,7 +506,7 @@ function NovaArcadeCanvas({ soundOn, onScore, onNotice, onGameOver, restartKey }
           over: true,
           score: s.score,
           crystals: s.crystals,
-          reward: Math.min(20, Math.floor(s.score/100)*5),
+          reward: Math.min(30, Math.floor(s.score/100)*5),
           rank: s.score >= 18560 ? 1 : 128,
         });
       }, 900);
@@ -618,7 +647,7 @@ function GamePage({ user, setUser }) {
   const today = new Date().toISOString().slice(0,10);
   const gs = user.gameReward || { date: today, earnedToday: 0, bestScore: 0 };
   const earned = gs.date === today ? Number(gs.earnedToday || 0) : 0;
-  const remaining = Math.max(0, 20 - earned);
+  const remaining = Math.max(0, 30 - earned);
   const [score, setScore] = useState(0);
   const [notice, setNotice] = useState('Stable Arcade · 보석은 획득만, 운석은 GAME OVER');
   const [soundOn, setSoundOn] = useState(true);
@@ -645,7 +674,7 @@ function GamePage({ user, setUser }) {
       </div>
 
       <div className="grid">
-        <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
+        <div><small>Daily Game Reward</small><b>{earned}/30 SPNX</b></div>
         <div><small>Remaining</small><b>{remaining} SPNX</b></div>
       </div>
 
@@ -683,13 +712,98 @@ function MorePage() {
   );
 }
 
+const NOVA_STARTERS = [
+  '오늘 채굴 상태를 분석해줘',
+  '게임 보상은 얼마나 남았어?',
+  'SpaceNovaX 프로젝트를 설명해줘',
+  '내 다음 임무를 추천해줘',
+];
+
+function NovaAIPage({ user }) {
+  const [messages, setMessages] = useState([
+    { role: 'assistant', text: `캡틴 ${getCaptainCode(user)}, NOVA AI 지휘 링크가 연결되었습니다. 채굴, 게임, 임무, SpaceNovaX 생태계에 관해 무엇이든 질문하십시오.` },
+  ]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function ask(text = input) {
+    const clean = String(text || '').trim();
+    if (!clean || busy) return;
+    const next = [...messages, { role: 'user', text: clean }];
+    setMessages(next);
+    setInput('');
+    setBusy(true);
+    try {
+      const data = await api('/api/nova/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          message: clean,
+          history: next.slice(-10),
+          captainContext: {
+            id: user.id,
+            level: user.level,
+            balance: user.balance,
+            mining: user.mining,
+            gameReward: user.gameReward,
+          },
+        }),
+      });
+      setMessages((v) => [...v, { role: 'assistant', text: data.reply }]);
+    } catch {
+      const mining = user.mining?.active
+        ? `현재 채굴은 진행 중이며 다음 정산까지 ${time(user.mining.remainingMs)} 남았습니다.`
+        : '현재 채굴 엔진은 대기 상태입니다.';
+      setMessages((v) => [...v, {
+        role: 'assistant',
+        text: `현재 NOVA 지식 코어가 오프라인 모드로 작동 중입니다. ${mining} 전체 AI 대화 기능은 서버에 OPENAI_API_KEY를 등록하면 활성화됩니다.`,
+      }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="page nova-ai-page">
+      <div className="nova-ai-console premium-card">
+        <header className="nova-ai-title">
+          <div className="nova-core-mark"><span>N</span></div>
+          <div><small>SPACENOVAX INTELLIGENCE CORE</small><h2>NOVA AI</h2><p>Mining · Game · Web3 · Community Command</p></div>
+          <i>ONLINE</i>
+        </header>
+        <div className="nova-ai-status">
+          <span>CAPTAIN {getCaptainCode(user)}</span>
+          <span>LEVEL {user.level || 1}</span>
+          <span>{fmt(user.balance)} SPNX</span>
+        </div>
+        <div className="nova-chat-log">
+          {messages.map((m, i) => (
+            <article className={`nova-message ${m.role}`} key={`${m.role}-${i}`}>
+              <small>{m.role === 'assistant' ? 'NOVA' : 'CAPTAIN'}</small>
+              <p>{m.text}</p>
+            </article>
+          ))}
+          {busy && <article className="nova-message assistant thinking"><small>NOVA</small><p>분석 중<span>•••</span></p></article>}
+        </div>
+        <div className="nova-starters">
+          {NOVA_STARTERS.map((item) => <button key={item} onClick={() => ask(item)}>{item}</button>)}
+        </div>
+        <form className="nova-composer" onSubmit={(e) => { e.preventDefault(); ask(); }}>
+          <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="NOVA AI에게 질문하세요…" rows="2" />
+          <button disabled={busy || !input.trim()} aria-label="Send message">➤</button>
+        </form>
+        <p className="nova-ai-note">NOVA는 커뮤니티 안내와 계정 분석을 지원합니다. 지갑 비밀키나 비밀번호는 절대 입력하지 마십시오.</p>
+      </div>
+    </section>
+  );
+}
+
 
 function captainAiMessages(user = defaultUser()) {
   const m = user.mining || {};
   const today = new Date().toISOString().slice(0, 10);
   const game = user.gameReward || { date: today, earnedToday: 0 };
   const gameEarned = game.date === today ? Number(game.earnedToday || 0) : 0;
-  const gameLeft = Math.max(0, 20 - gameEarned);
+  const gameLeft = Math.max(0, 30 - gameEarned);
   const claims = user.missionClaims || {};
   const rank = getRank(user.level || 1);
 
@@ -706,9 +820,9 @@ function captainAiMessages(user = defaultUser()) {
   else if (m.active) messages.unshift(`Mining in progress. Next claim in ${time(m.remainingMs || 0)}.`);
   else messages.unshift('Mining engine is ready. Start your 24-hour expedition.');
 
-  messages.push(`Game reward remaining today: ${gameLeft}/20 SPNX.`);
+  messages.push(`Game reward remaining today: ${gameLeft}/30 SPNX.`);
   messages.push('Today\'s Galaxy Champion is waiting to be challenged. Enter Arcade and climb the leaderboard.');
-  messages.push(`Mission progress: ${Object.keys(claims).length}/7 completed. Lifetime missions can be claimed only once.`);
+  messages.push(`Mission progress: ${Object.keys(claims).length}/6 completed. Lifetime missions can be claimed only once.`);
   messages.push(`Current rank: ${rank.title}. Sector: ${rank.sector}.`);
   messages.push(user.solanaWallet ? 'Solana wallet registered. You are preparing for the future conversion window.' : 'Register your Solana wallet to prepare for future SPNX conversion.');
   messages.push('Official Launch is coming. 1 SPNX Point = 1 SPNX during the official conversion period.');
@@ -748,6 +862,7 @@ function CaptainAI({ user }) {
 function BottomNav({ tab, setTab }) {
   const items = [
     ['home','🪐','HOME'],
+    ['nova','✦','NOVA AI'],
     ['mining','⛏','MINE'],
     ['missions','⭐','MISSIONS'],
     ['friends','👨‍🚀','FLEET'],
@@ -772,7 +887,47 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
+function LaunchSplash({ onComplete }) {
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const hold = window.setTimeout(() => setLeaving(true), reducedMotion ? 900 : 3200);
+    const done = window.setTimeout(onComplete, reducedMotion ? 1200 : 3900);
+    return () => {
+      window.clearTimeout(hold);
+      window.clearTimeout(done);
+    };
+  }, [onComplete]);
+
+  return (
+    <div className={leaving ? 'launch-splash leaving' : 'launch-splash'} role="status" aria-label="SpaceNovaX launching">
+      <div className="splash-stars" />
+      <div className="splash-horizon" />
+      <div className="splash-energy-ring ring-a" />
+      <div className="splash-energy-ring ring-b" />
+      <div className="splash-logo-shell">
+        <span className="splash-orbit orbit-a" />
+        <span className="splash-orbit orbit-b" />
+        <img src="/spacenovax-symbol.jpg" alt="SpaceNovaX official logo" />
+        <span className="splash-glint" />
+      </div>
+      <div className="splash-brand">
+        <small>WELCOME TO</small>
+        <h1>SPACENOVA<span>X</span></h1>
+        <p>EXPLORE · MINE · EVOLVE</p>
+      </div>
+      <div className="splash-system">
+        <span><i /> NOVA AI COMMAND LINK</span>
+        <div><b /></div>
+        <small>INITIALIZING CAPTAIN SYSTEMS</small>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [launched, setLaunched] = useState(false);
   const [tab, setTab] = useState('home');
   const [user, setUserState] = useState(defaultUser());
   const [loading, setLoading] = useState(false);
@@ -783,6 +938,7 @@ export default function App() {
   async function claimMining() { setLoading(true); try { const data = await api('/api/mining/claim', { method: 'POST', body: JSON.stringify({}) }); if (data.user) setUser(data.user); } catch(e) { alert(e.message); } setLoading(false); }
   const page = useMemo(() => {
     if (tab === 'home') return <HomePage user={user} startMining={startMining} claimMining={claimMining} loading={loading} />;
+    if (tab === 'nova') return <NovaAIPage user={user} />;
     if (tab === 'mining') return <MiningPage user={user} startMining={startMining} claimMining={claimMining} loading={loading} />;
     if (tab === 'missions') return <MissionsPage setUser={setUser} />;
     if (tab === 'friends') return <FriendsPage user={user} />;
@@ -792,6 +948,10 @@ export default function App() {
     if (tab === 'game') return <GamePage user={user} setUser={setUser} />;
     return <MorePage />;
   }, [tab, user, loading]);
-  return <div className="app-shell"><AppHeader user={user} />{page}<CaptainAI user={user} />
-      <BottomNav tab={tab} setTab={setTab} /></div>;
+  const finishLaunch = useCallback(() => setLaunched(true), []);
+  return <>
+    {!launched && <LaunchSplash onComplete={finishLaunch} />}
+    <div className={launched ? 'app-shell app-ready' : 'app-shell app-loading'}><AppHeader user={user} />{page}<CaptainAI user={user} />
+      <BottomNav tab={tab} setTab={setTab} /></div>
+  </>;
 }

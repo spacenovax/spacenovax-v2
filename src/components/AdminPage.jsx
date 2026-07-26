@@ -46,15 +46,24 @@ export default function AdminPage() {
   const [ranking, setRanking] = useState(null);
   const [missions, setMissions] = useState([]);
   const [miningEngine, setMiningEngine] = useState(null);
+  const [operations, setOperations] = useState(null);
   const [notice, setNotice] = useState('Checking admin session...');
   const [search, setSearch] = useState('');
   const [pointForm, setPointForm] = useState({ userId: '', amount: '100', reason: 'admin bonus' });
   const [kycForm, setKycForm] = useState({ userId: '', status: 'approved', note: '' });
-  const [settingsForm, setSettingsForm] = useState({ convertEnabled: false, minConvert: 5000 });
+  const [settingsForm, setSettingsForm] = useState({
+    convertEnabled: false,
+    minConvert: 5000,
+    gameRewardsEnabled: true,
+    gameDailyLimit: 30,
+    novaAiEnabled: true,
+    novaDailyMessageLimit: 50,
+    maintenanceMode: false,
+  });
 
   async function loadAdmin() {
     try {
-      const [a,b,c,d,e,f,g,h,i,j,k] = await Promise.all([
+      const [a,b,c,d,e,f,g,h,i,j,k,l] = await Promise.all([
         adminFetch('/api/admin/stats'),
         adminFetch('/api/admin/users/search?q=' + encodeURIComponent(search)),
         adminFetch('/api/admin/logs'),
@@ -65,11 +74,20 @@ export default function AdminPage() {
         adminFetch('/api/admin/distribution-simulator'),
         adminFetch('/api/admin/ranking/full'),
         adminFetch('/api/admin/missions'),
-        adminFetch('/api/admin/mining/engine')
+        adminFetch('/api/admin/mining/engine'),
+        adminFetch('/api/admin/operations')
       ]);
-      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine);
-      setSettingsForm({ convertEnabled: Boolean(f.settings?.convertEnabled), minConvert: f.settings?.minConvert || 5000 });
-      setNotice('Admin V7 Ultimate dashboard connected.');
+      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null);
+      setSettingsForm({
+        convertEnabled: Boolean(f.settings?.convertEnabled),
+        minConvert: f.settings?.minConvert || 5000,
+        gameRewardsEnabled: f.settings?.gameRewardsEnabled !== false,
+        gameDailyLimit: f.settings?.gameDailyLimit || 30,
+        novaAiEnabled: f.settings?.novaAiEnabled !== false,
+        novaDailyMessageLimit: f.settings?.novaDailyMessageLimit || 50,
+        maintenanceMode: Boolean(f.settings?.maintenanceMode),
+      });
+      setNotice('NOVA Command Admin V14.2 connected.');
     } catch (e) { setNotice(e.message); if (e.message.includes('required')) { clearToken(); setAdmin(null); } }
   }
 
@@ -101,15 +119,51 @@ export default function AdminPage() {
 
   if (!admin) return <AdminLogin onLogin={(a)=>{ setAdmin(a); loadAdmin(); }} />;
 
-  const tabs = ['dashboard','mining','users','kyc','risk','missions','ranking','convert','settings','logs'];
+  const tabs = ['dashboard','nova','game','mining','users','kyc','risk','missions','ranking','convert','settings','logs'];
 
   return <section className="admin-page glass">
-    <div className="admin-head"><div><h2>🛠 SpaceNovaX Admin V7</h2><p>{notice}</p><small>Logged in: {admin.id} · {admin.role}</small></div><div className="admin-actions"><button onClick={loadAdmin}>Refresh</button><button onClick={logout}>Logout</button></div></div>
+    <div className="admin-head"><div><h2>✦ NOVA Command Admin V14.2</h2><p>{notice}</p><small>Logged in: {admin.id} · {admin.role}</small></div><div className="admin-actions"><button onClick={loadAdmin}>Refresh</button><button onClick={logout}>Logout</button></div></div>
     <div className="admin-tabs">{tabs.map((x)=><button key={x} className={tab===x?'active':''} onClick={()=>setTab(x)}>{x.toUpperCase()}</button>)}</div>
 
     {tab==='dashboard' && <><div className="admin-stats">
       <div><small>Total Users</small><b>{stats?.totalUsers ?? '-'}</b></div><div><small>Online 10m</small><b>{monitor?.onlineUsers ?? '-'}</b></div><div><small>Active Mining</small><b>{stats?.activeMining ?? '-'}</b></div><div><small>Total Points</small><b>{fmt(stats?.totalBalance)} SPNX</b></div><div><small>New Users 24h</small><b>{monitor?.todayNewUsers ?? '-'}</b></div><div><small>Mission Claims</small><b>{stats?.todayMissions ?? '-'}</b></div><div><small>High Risk</small><b>{monitor?.highRisk ?? '-'}</b></div><div><small>Review</small><b>{monitor?.review ?? '-'}</b></div><div><small>Trusted</small><b>{monitor?.trusted ?? '-'}</b></div><div><small>Mining Phase</small><b>Phase {stats?.phase ?? '-'}</b></div><div><small>Pool Used</small><b>{((stats?.miningPoolRatio || 0)*100).toFixed(4)}%</b></div><div><small>Claims</small><b>{stats?.todayClaims ?? '-'}</b></div>
     </div><form className="admin-form" onSubmit={givePoints}><h3>Manual Point Control</h3><input placeholder="User ID" value={pointForm.userId} onChange={(e)=>setPointForm({...pointForm,userId:e.target.value})}/><input placeholder="Amount" type="number" value={pointForm.amount} onChange={(e)=>setPointForm({...pointForm,amount:e.target.value})}/><input placeholder="Reason" value={pointForm.reason} onChange={(e)=>setPointForm({...pointForm,reason:e.target.value})}/><button type="submit">Give Points</button></form></>}
+
+    {tab==='nova' && <div className="admin-users">
+      <h3>✦ NOVA AI Control</h3>
+      <div className="admin-stats">
+        <div><small>AI Core</small><b>{operations?.nova?.configured ? 'CONNECTED' : 'API KEY NEEDED'}</b></div>
+        <div><small>Service</small><b>{operations?.nova?.enabled ? 'ONLINE' : 'OFFLINE'}</b></div>
+        <div><small>Requests 24h</small><b>{operations?.nova?.requests24h || 0}</b></div>
+        <div><small>Captains 24h</small><b>{operations?.nova?.uniqueCaptains24h || 0}</b></div>
+        <div><small>Daily Limit</small><b>{operations?.nova?.dailyMessageLimit || 50}</b></div>
+        <div><small>Model</small><b>{operations?.nova?.model || '-'}</b></div>
+      </div>
+      <div className="admin-command-panel">
+        <p>NOVA AI 사용 상태와 일일 회원별 대화 한도를 통제합니다. API 키는 서버 환경변수에만 보관됩니다.</p>
+        <button onClick={async()=>{ const next={...settingsForm,novaAiEnabled:!settingsForm.novaAiEnabled}; setSettingsForm(next); try{await adminFetch('/api/admin/settings/update',{method:'POST',body:JSON.stringify(next)});loadAdmin();}catch(e){setNotice(e.message);} }}>
+          NOVA AI {settingsForm.novaAiEnabled ? 'DISABLE' : 'ENABLE'}
+        </button>
+      </div>
+    </div>}
+
+    {tab==='game' && <div className="admin-users">
+      <h3>🚀 Game Reward Control</h3>
+      <div className="admin-stats">
+        <div><small>Reward Service</small><b>{operations?.game?.enabled ? 'ONLINE' : 'OFFLINE'}</b></div>
+        <div><small>Sessions 24h</small><b>{operations?.game?.sessions24h || 0}</b></div>
+        <div><small>Players 24h</small><b>{operations?.game?.uniquePlayers24h || 0}</b></div>
+        <div><small>Rewards 24h</small><b>{fmt(operations?.game?.rewards24h || 0)}</b></div>
+        <div><small>Top Score 24h</small><b>{operations?.game?.topScore24h || 0}</b></div>
+        <div><small>Daily Limit</small><b>{operations?.game?.dailyLimit || 30} SPNX</b></div>
+      </div>
+      <div className="admin-command-panel">
+        <p>게임 보상은 일일 한도를 초과할 수 없으며 모든 지급 내역이 감사 로그에 기록됩니다.</p>
+        <button onClick={async()=>{ const next={...settingsForm,gameRewardsEnabled:!settingsForm.gameRewardsEnabled}; setSettingsForm(next); try{await adminFetch('/api/admin/settings/update',{method:'POST',body:JSON.stringify(next)});loadAdmin();}catch(e){setNotice(e.message);} }}>
+          GAME REWARDS {settingsForm.gameRewardsEnabled ? 'DISABLE' : 'ENABLE'}
+        </button>
+      </div>
+    </div>}
 
 
     {tab==='mining' && <div className="admin-users">
@@ -146,7 +200,16 @@ export default function AdminPage() {
 
     {tab==='convert' && <div className="admin-users"><h3>Convert / Distribution Queue</h3><div className="risk-summary"><div><small>Recipients</small><b>{simulator?.recipients || 0}</b></div><div><small>Total Amount</small><b>{fmt(simulator?.totalAmount || 0)}</b></div><div><small>Est. SOL Fee</small><b>{simulator?.estimatedSolFee || 0}</b></div></div><p className="admin-empty">{simulator?.note}</p>{queue.map((q)=><div className="admin-user-row admin-user-rich" key={q.id}><div><b>{q.id}</b><small>User: {q.userId}</small><small>Wallet: {q.wallet}</small><small>Status: {q.status}</small></div><div className="admin-user-side"><strong>{fmt(q.amount)} SPNX</strong><button onClick={()=>updateConvert(q.id,'approved')}>Approve</button><button onClick={()=>updateConvert(q.id,'rejected')}>Reject</button><button onClick={()=>updateConvert(q.id,'completed')}>Complete</button></div></div>)}</div>}
 
-    {tab==='settings' && <div className="admin-users"><h3>System Settings</h3><form className="admin-form" onSubmit={updateSettings}><label className="check-row"><input type="checkbox" checked={settingsForm.convertEnabled} onChange={(e)=>setSettingsForm({...settingsForm,convertEnabled:e.target.checked})}/> Convert Enabled after listing</label><input type="number" placeholder="Minimum Convert" value={settingsForm.minConvert} onChange={(e)=>setSettingsForm({...settingsForm,minConvert:Number(e.target.value)})}/><button>Save Settings</button></form><pre className="admin-json">{JSON.stringify(settings,null,2)}</pre></div>}
+    {tab==='settings' && <div className="admin-users"><h3>Unified System Settings</h3><form className="admin-form" onSubmit={updateSettings}>
+      <label className="check-row"><input type="checkbox" checked={settingsForm.maintenanceMode} onChange={(e)=>setSettingsForm({...settingsForm,maintenanceMode:e.target.checked})}/> Maintenance Mode</label>
+      <label className="check-row"><input type="checkbox" checked={settingsForm.novaAiEnabled} onChange={(e)=>setSettingsForm({...settingsForm,novaAiEnabled:e.target.checked})}/> NOVA AI Enabled</label>
+      <input type="number" min="1" max="500" placeholder="NOVA daily message limit" value={settingsForm.novaDailyMessageLimit} onChange={(e)=>setSettingsForm({...settingsForm,novaDailyMessageLimit:Number(e.target.value)})}/>
+      <label className="check-row"><input type="checkbox" checked={settingsForm.gameRewardsEnabled} onChange={(e)=>setSettingsForm({...settingsForm,gameRewardsEnabled:e.target.checked})}/> Game Rewards Enabled</label>
+      <input type="number" min="0" max="1000" placeholder="Game daily SPNX limit" value={settingsForm.gameDailyLimit} onChange={(e)=>setSettingsForm({...settingsForm,gameDailyLimit:Number(e.target.value)})}/>
+      <label className="check-row"><input type="checkbox" checked={settingsForm.convertEnabled} onChange={(e)=>setSettingsForm({...settingsForm,convertEnabled:e.target.checked})}/> Convert Enabled after listing</label>
+      <input type="number" placeholder="Minimum Convert" value={settingsForm.minConvert} onChange={(e)=>setSettingsForm({...settingsForm,minConvert:Number(e.target.value)})}/>
+      <button>Save Unified Settings</button>
+    </form><pre className="admin-json">{JSON.stringify(settings,null,2)}</pre></div>}
 
     {tab==='logs' && <div className="admin-logs"><h3>Audit Logs</h3>{logs.map((log,i)=><div className="admin-log-row" key={`${log.at}-${i}`}><b>{log.type}</b><small>{new Date(log.at).toLocaleString()}</small><code>{JSON.stringify(log)}</code></div>)}</div>}
   </section>;
