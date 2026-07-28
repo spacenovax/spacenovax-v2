@@ -28,7 +28,7 @@ const NOVA_DAILY_LIMIT = 10;
 const NOVA_PUBLIC_MODEL_NAME = 'NOVA Beta';
 const NOVA_DEFAULT_MODEL = 'gemini-2.5-flash';
 const NOVA_TTS_DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
-const NOVA_TTS_FALLBACK_MODEL = 'gemini-2.5-flash-preview-tts';
+const NOVA_TTS_DEFAULT_FALLBACK_MODEL = 'gemini-2.5-flash-preview-tts';
 const NOVA_TTS_API_REVISION = '2026-05-20';
 const NOVA_TTS_MAX_TEXT_LENGTH = 1200;
 const NOVA_TTS_RATE_WINDOW = 60 * 60 * 1000;
@@ -2168,6 +2168,13 @@ app.post('/api/nova/speech', async (req, res) => {
   const language = String(req.body?.language || 'en').toLowerCase().slice(0, 8);
   if (!text) return res.status(400).json({ ok: false, message: 'Speech text is required.' });
 
+  const cacheKey = crypto.createHash('sha256').update(`${language}\n${text}`).digest('hex');
+  const cached = novaTtsCache.get(cacheKey);
+  if (cached) {
+    res.set({ 'Content-Type': 'audio/wav', 'Cache-Control': 'private, max-age=86400', 'X-NOVA-Voice': 'cache' });
+    return res.send(cached);
+  }
+
   const clientKey = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
   const cutoff = now() - NOVA_TTS_RATE_WINDOW;
   const recent = (novaTtsUsage.get(clientKey) || []).filter((timestamp) => timestamp > cutoff);
@@ -2177,14 +2184,12 @@ app.post('/api/nova/speech', async (req, res) => {
   recent.push(now());
   novaTtsUsage.set(clientKey, recent);
 
-  const cacheKey = crypto.createHash('sha256').update(`${language}\n${text}`).digest('hex');
-  const cached = novaTtsCache.get(cacheKey);
-  if (cached) {
-    res.set({ 'Content-Type': 'audio/wav', 'Cache-Control': 'private, max-age=86400', 'X-NOVA-Voice': 'cache' });
-    return res.send(cached);
-  }
-
-  const languageName = language === 'ko' ? 'Korean' : 'English';
+  const languageNames = {
+    en: 'English', ko: 'Korean', ja: 'Japanese', zh: 'Mandarin Chinese',
+    es: 'Spanish', pt: 'Portuguese', de: 'German', fr: 'French',
+    ru: 'Russian', vi: 'Vietnamese', id: 'Indonesian',
+  };
+  const languageName = languageNames[language] || 'English';
   const prompt = [
     `Generate speech in ${languageName} using a calm, confident female AI commander voice.`,
     'Read only the transcript between the markers. Do not read these instructions.',
@@ -2195,7 +2200,7 @@ app.post('/api/nova/speech', async (req, res) => {
 
   try {
     const primaryModel = process.env.NOVA_TTS_MODEL || NOVA_TTS_DEFAULT_MODEL;
-    const fallbackModel = process.env.NOVA_TTS_FALLBACK_MODEL || NOVA_TTS_FALLBACK_MODEL;
+    const fallbackModel = process.env.NOVA_TTS_FALLBACK_MODEL || NOVA_TTS_DEFAULT_FALLBACK_MODEL;
     const apiBase = String(process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
     const attempts = [primaryModel, primaryModel];
     if (fallbackModel && fallbackModel !== primaryModel) attempts.push(fallbackModel);
