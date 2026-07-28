@@ -27,6 +27,12 @@ const GAME_DAILY_LIMIT = 30;
 const NOVA_DAILY_LIMIT = 10;
 const NOVA_PUBLIC_MODEL_NAME = 'NOVA Beta';
 const NOVA_DEFAULT_MODEL = 'gemini-2.5-flash';
+const NOVA_TTS_DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
+const NOVA_TTS_MAX_TEXT_LENGTH = 1200;
+const NOVA_TTS_RATE_WINDOW = 60 * 60 * 1000;
+const NOVA_TTS_RATE_LIMIT = 30;
+const novaTtsCache = new Map();
+const novaTtsUsage = new Map();
 const OFFICIAL_MISSION_IDS = ['website', 'telegram', 'discord', 'x', 'youtube_subscribe'];
 
 const DEFAULT_MISSIONS = [
@@ -39,6 +45,25 @@ const DEFAULT_MISSIONS = [
 
 function now() {
   return Date.now();
+}
+
+function pcmToWave(pcm, sampleRate = 24000) {
+  const header = Buffer.alloc(44);
+  const dataSize = pcm.length;
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
 }
 
 function readData() {
@@ -2084,6 +2109,82 @@ app.post('/api/nova/chat', async (req, res) => {
     console.error('NOVA AI connection error', error);
     releaseReservation();
     res.status(502).json({ ok: false, message: 'NOVA AI connection failed.' });
+  }
+});
+
+app.post('/api/nova/speech', async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ ok: false, message: 'NOVA voice core is not configured.' });
+  }
+
+  const text = String(req.body?.text || '').trim().slice(0, NOVA_TTS_MAX_TEXT_LENGTH);
+  const language = String(req.body?.language || 'en').toLowerCase().slice(0, 8);
+  if (!text) return res.status(400).json({ ok: false, message: 'Speech text is required.' });
+
+  const clientKey = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+  const cutoff = now() - NOVA_TTS_RATE_WINDOW;
+  const recent = (novaTtsUsage.get(clientKey) || []).filter((timestamp) => timestamp > cutoff);
+  if (recent.length >= NOVA_TTS_RATE_LIMIT) {
+    return res.status(429).json({ ok: false, message: 'NOVA voice limit reached. Please try again later.' });
+  }
+  recent.push(now());
+  novaTtsUsage.set(clientKey, recent);
+
+  const cacheKey = crypto.createHash('sha256').update(`${language}\n${text}`).digest('hex');
+  const cached = novaTtsCache.get(cacheKey);
+  if (cached) {
+    res.set({ 'Content-Type': 'audio/wav', 'Cache-Control': 'private, max-age=86400', 'X-NOVA-Voice': 'cache' });
+    return res.send(cached);
+  }
+
+  const languageName = language === 'ko' ? 'Korean' : 'English';
+  const prompt = [
+    `Generate speech in ${languageName} using a calm, confident female AI commander voice.`,
+    'Read only the transcript between the markers. Do not read these instructions.',
+    '--- TRANSCRIPT ---',
+    text,
+    '--- END TRANSCRIPT ---',
+  ].join('\n');
+
+  try {
+    const model = process.env.NOVA_TTS_MODEL || NOVA_TTS_DEFAULT_MODEL;
+    const apiBase = String(process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+    const response = await fetch(`${apiBase}/v1beta/interactions`, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: prompt,
+        response_format: { type: 'audio' },
+        generation_config: {
+          speech_config: [{ voice: 'Kore' }],
+        },
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('NOVA voice upstream error', response.status, result?.error?.message || 'unknown');
+      return res.status(502).json({ ok: false, message: 'NOVA voice is temporarily unavailable.' });
+    }
+
+    const encodedAudio = result?.output_audio?.data || result?.outputAudio?.data;
+    if (!encodedAudio) {
+      console.error('NOVA voice returned no audio');
+      return res.status(502).json({ ok: false, message: 'NOVA voice returned no audio.' });
+    }
+
+    const wave = pcmToWave(Buffer.from(encodedAudio, 'base64'));
+    novaTtsCache.set(cacheKey, wave);
+    if (novaTtsCache.size > 100) novaTtsCache.delete(novaTtsCache.keys().next().value);
+    res.set({ 'Content-Type': 'audio/wav', 'Cache-Control': 'private, max-age=86400', 'X-NOVA-Voice': 'generated' });
+    res.send(wave);
+  } catch (error) {
+    console.error('NOVA voice connection error', error);
+    res.status(502).json({ ok: false, message: 'NOVA voice connection failed.' });
   }
 });
 
