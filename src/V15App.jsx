@@ -102,6 +102,74 @@ function clock(ms) {
     .map((part) => String(part).padStart(2, '0')).join(':');
 }
 
+const NOVA_SPEECH_LOCALES = {
+  en: 'en-US',
+  ko: 'ko-KR',
+};
+
+let novaSpeechRequest = 0;
+
+function speakNova(value, language = 'en', rate = .95) {
+  const synthesis = window.speechSynthesis;
+  const Utterance = window.SpeechSynthesisUtterance;
+  if (!synthesis || !Utterance) {
+    window.alert(language === 'ko'
+      ? '이 브라우저에서는 음성 안내를 지원하지 않습니다.'
+      : 'Voice guidance is not supported in this browser.');
+    return false;
+  }
+
+  const text = String(value || '').trim();
+  if (!text) return false;
+
+  const requestId = ++novaSpeechRequest;
+  const locale = NOVA_SPEECH_LOCALES[language] || 'en-US';
+  let started = false;
+  let fallbackTimer;
+
+  const removeVoiceListener = () => {
+    clearTimeout(fallbackTimer);
+    synthesis.removeEventListener?.('voiceschanged', start);
+  };
+  const start = () => {
+    if (started || requestId !== novaSpeechRequest) return;
+    started = true;
+    removeVoiceListener();
+
+    const utterance = new Utterance(text);
+    const voices = synthesis.getVoices?.() || [];
+    const exactVoice = voices.find((voice) => voice.lang?.toLowerCase() === locale.toLowerCase());
+    const languageVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
+    utterance.voice = exactVoice || languageVoice || null;
+    utterance.lang = utterance.voice?.lang || locale;
+    utterance.rate = rate;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.onerror = (event) => {
+      if (!['canceled', 'interrupted'].includes(event.error)) {
+        console.warn('NOVA voice playback failed:', event.error);
+      }
+    };
+
+    synthesis.cancel();
+    synthesis.resume();
+    window.setTimeout(() => {
+      if (requestId !== novaSpeechRequest) return;
+      synthesis.speak(utterance);
+      // Chrome can leave the engine paused after a prior cancellation.
+      window.setTimeout(() => synthesis.resume(), 100);
+    }, 60);
+  };
+
+  const voices = synthesis.getVoices?.() || [];
+  if (voices.length) start();
+  else {
+    synthesis.addEventListener?.('voiceschanged', start, { once: true });
+    fallbackTimer = window.setTimeout(start, 350);
+  }
+  return true;
+}
+
 function Icon({ name, size = 22 }) {
   const paths = {
     home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9 20v-6h6v6"/></>,
@@ -324,12 +392,7 @@ function Missions({ user, setUser, t, language }) {
     ? '캡틴, 공식 웹사이트, 텔레그램, 디스코드, 엑스, 유튜브의 다섯 가지 미션을 모두 완료하세요. 여러분의 참여는 공식 채널 성장, 콘텐츠 도달률, 게임과 노바 AI의 지속적인 개발 기반을 강화합니다. 총 1,300 SPNX 포인트와 미션 패스포트가 지급되며, 기본 채굴 속도가 영구적으로 5퍼센트 증가합니다. 최종 토큰 전환은 KYC와 보안 검증을 통과한 계정만 가능합니다.'
     : 'Captain, complete all five missions: the official website, Telegram, Discord, X, and YouTube. Your participation strengthens official channel growth, content reach, and the sustainable development of our games and NOVA AI. You will receive 1,300 SPNX Points and a Mission Passport that permanently increases base mining speed by five percent. Final token conversion requires KYC and security approval.';
   function explainMission() {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const voice = new SpeechSynthesisUtterance(missionBrief);
-    voice.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-    voice.rate = .94;
-    window.speechSynthesis.speak(voice);
+    speakNova(missionBrief, language, .94);
   }
   async function claim(mission) {
     if (mission.status?.completed || claiming) return;
@@ -399,12 +462,7 @@ function Game({ user, t, language }) {
     ? '캡틴, 게임 보상 안내입니다. 다이아몬드 300개를 모으면 10 SPNX 포인트를 받으며 하루 최대 두 번 적용됩니다. 보급함은 하루 한 번, 1에서 5 SPNX 포인트를 무작위로 지급합니다. 보스 최초 처치 보상은 하루 한 번 5 SPNX 포인트입니다. 게임 보상은 하루 최대 30 SPNX 포인트이며, 미국 동부시간 오전 6시에 새로 시작됩니다. 모든 보상은 서버 검증 후 원장에 기록됩니다.'
     : 'Captain, here is your game reward briefing. Collect three hundred diamonds to earn ten SPNX Points, up to twice per day. A supply crate grants a random one to five SPNX Points once per day. Your first boss defeat grants five SPNX Points once per day. Total game rewards are capped at thirty SPNX Points per day and reset at six A M Eastern Time. Every reward is server verified and recorded in the ledger.';
   function playRewardBriefing() {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const voice = new SpeechSynthesisUtterance(rewardBriefing);
-    voice.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-    voice.rate = .94;
-    window.speechSynthesis.speak(voice);
+    speakNova(rewardBriefing, language, .94);
   }
   return <main className="v15-page">
     <section className="command-card game-portal game-theme">
@@ -445,12 +503,7 @@ function NovaAI({ user, t, language }) {
     setBusy(false); setText(''); setMessages([initialMessage()]);
   }
   function speak(value) {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-    utterance.rate = 1; utterance.pitch = 1;
-    window.speechSynthesis.speak(utterance);
+    speakNova(value, language, 1);
   }
   function voiceInput() {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -573,15 +626,10 @@ function Community({ user, language, setTab }) {
     else copyInvite();
   }
   function explainCommunityFleet() {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
     const text = ko
       ? '캡틴, 이곳에서 본인의 함대 초대 코드와 링크를 복사하거나 공유할 수 있습니다. 초대한 회원이 실제로 채굴하면 활성 함대원으로 집계되고 채굴 속도 보너스가 적용됩니다. 최종 솔라나 SPNX 전환에는 본인 KYC와 추천인의 KYC 승인이 필요합니다. 주간 함대 순위는 함대원들의 게임 종합 점수로 결정되며, 게임 개인 순위도 이 화면에서 확인할 수 있습니다. 함대 전체 관리 버튼을 누르면 보안 서클, 함대 채팅, 비활성 회원 알림과 전체 리그를 이용할 수 있습니다.'
       : 'Captain, copy or share your fleet invitation code and link here. Invited members count as active fleet members when they actually mine, activating the mining speed bonus. Final Solana SPNX conversion requires your KYC and KYC approval for qualifying referrals. Weekly fleet ranking is based on the fleet game score, and your personal game rank is also shown here. Open Fleet Management for Security Circle, fleet chat, inactive-member reminders, and the complete league.';
-    const voice = new SpeechSynthesisUtterance(text);
-    voice.lang = ko ? 'ko-KR' : 'en-US';
-    voice.rate = .94;
-    window.speechSynthesis.speak(voice);
+    speakNova(text, language, .94);
   }
   async function prepareImage(file) {
     if (!file) return setForm((current) => ({ ...current, imageData: '', imageName: '' }));
@@ -871,12 +919,7 @@ function NovaGuide({ tab, language, setTab }) {
   };
   const guide = (guides[language] || guides.en)[tab] || (guides[language] || guides.en).more;
   function speak(value = guide) {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const voice = new SpeechSynthesisUtterance(value);
-    voice.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-    voice.rate = .95;
-    window.speechSynthesis.speak(voice);
+    speakNova(value, language, .95);
   }
   function listen() {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
