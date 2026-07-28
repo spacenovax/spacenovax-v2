@@ -22,8 +22,13 @@ const upstream = http.createServer(async (req, res) => {
   for await (const chunk of req) chunks.push(chunk);
   const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
   upstreamRequests.push({ url: req.url, headers: req.headers, body });
-  res.writeHead(200, { 'content-type': 'application/json' });
   if (req.url === '/v1beta/interactions') {
+    if (body.model === 'gemini-3.1-flash-tts-preview') {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Transient preview TTS failure.' } }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       status: 'completed',
       steps: [{
@@ -38,6 +43,7 @@ const upstream = http.createServer(async (req, res) => {
     }));
     return;
   }
+  res.writeHead(200, { 'content-type': 'application/json' });
   res.end(JSON.stringify({
     candidates: [{ content: { role: 'model', parts: [{ text: 'NOVA AI test response.' }] } }],
   }));
@@ -156,8 +162,12 @@ try {
   const chatRequests = upstreamRequests.filter((request) => request.url.includes(':generateContent'));
   const speechRequests = upstreamRequests.filter((request) => request.url === '/v1beta/interactions');
   if (chatRequests.length !== 20) throw new Error(`Expected 20 chat upstream calls, received ${chatRequests.length}`);
-  if (speechRequests.length !== 1 || speechRequests[0].body.model !== 'gemini-3.1-flash-tts-preview') {
-    throw new Error('NOVA speech did not use the expected server-side TTS adapter.');
+  if (speechRequests.length !== 3
+    || speechRequests[0].body.model !== 'gemini-3.1-flash-tts-preview'
+    || speechRequests[1].body.model !== 'gemini-3.1-flash-tts-preview'
+    || speechRequests[2].body.model !== 'gemini-2.5-flash-preview-tts'
+    || speechRequests.some((request) => request.headers['api-revision'] !== '2026-05-20')) {
+    throw new Error('NOVA speech retry/fallback adapter did not use the expected models and API revision.');
   }
   const first = chatRequests[0];
   if (first.headers['x-goog-api-key'] !== 'test-secret') throw new Error('NOVA server did not authenticate upstream correctly.');
