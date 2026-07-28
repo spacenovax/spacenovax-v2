@@ -17,7 +17,16 @@ const upstream = http.createServer(async (req, res) => {
   res.writeHead(200, { 'content-type': 'application/json' });
   if (req.url === '/v1beta/interactions') {
     res.end(JSON.stringify({
-      output_audio: { data: Buffer.from([0, 0, 0, 0]).toString('base64') },
+      status: 'completed',
+      steps: [{
+        type: 'model_output',
+        content: [{
+          type: 'audio',
+          mime_type: 'audio/l16',
+          sample_rate: 24000,
+          data: Buffer.from([0, 0, 0, 0]).toString('base64'),
+        }],
+      }],
     }));
     return;
   }
