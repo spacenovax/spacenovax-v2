@@ -13,7 +13,11 @@ const clientSource = fs.readFileSync(new URL('../src/V15App.jsx', import.meta.ur
 if (!clientSource.includes('function unlockNovaAudio()')
   || !clientSource.includes('context.decodeAudioData')
   || !clientSource.includes('Boolean(window.Telegram?.WebApp)')
-  || !clientSource.includes('playNovaServerVoice(text, language, requestId, audioContextPromise)')) {
+  || !clientSource.includes('playNovaServerVoice(text, language, requestId, audioContextPromise)')
+  || !clientSource.includes("player.setAttribute('playsinline', '')")
+  || !clientSource.includes("player.setAttribute('webkit-playsinline', '')")
+  || !clientSource.includes('NOVA_SILENT_WAV')
+  || !clientSource.includes('await player.play()')) {
   throw new Error('Telegram mobile NOVA audio unlock/playback path is missing.');
 }
 
