@@ -66,6 +66,23 @@ function pcmToWave(pcm, sampleRate = 24000) {
   return Buffer.concat([header, pcm]);
 }
 
+function extractInteractionAudio(result) {
+  const sdkAudio = result?.output_audio || result?.outputAudio;
+  if (sdkAudio?.data) return sdkAudio;
+
+  const steps = Array.isArray(result?.steps) ? result.steps : [];
+  for (let stepIndex = steps.length - 1; stepIndex >= 0; stepIndex -= 1) {
+    const content = Array.isArray(steps[stepIndex]?.content) ? steps[stepIndex].content : [];
+    for (let contentIndex = content.length - 1; contentIndex >= 0; contentIndex -= 1) {
+      const block = content[contentIndex];
+      if ((block?.type === 'audio' || block?.mime_type?.startsWith('audio/')) && block?.data) {
+        return block;
+      }
+    }
+  }
+  return null;
+}
+
 function readData() {
   if (!fs.existsSync(DATA_FILE)) {
     const initial = {
@@ -2171,13 +2188,16 @@ app.post('/api/nova/speech', async (req, res) => {
       return res.status(502).json({ ok: false, message: 'NOVA voice is temporarily unavailable.' });
     }
 
-    const encodedAudio = result?.output_audio?.data || result?.outputAudio?.data;
-    if (!encodedAudio) {
+    const audio = extractInteractionAudio(result);
+    if (!audio?.data) {
       console.error('NOVA voice returned no audio');
       return res.status(502).json({ ok: false, message: 'NOVA voice returned no audio.' });
     }
 
-    const wave = pcmToWave(Buffer.from(encodedAudio, 'base64'));
+    const decoded = Buffer.from(audio.data, 'base64');
+    const mimeType = String(audio.mime_type || audio.mimeType || 'audio/l16').toLowerCase();
+    const sampleRate = Number(audio.sample_rate || audio.sampleRate || 24000);
+    const wave = mimeType === 'audio/wav' ? decoded : pcmToWave(decoded, sampleRate);
     novaTtsCache.set(cacheKey, wave);
     if (novaTtsCache.size > 100) novaTtsCache.delete(novaTtsCache.keys().next().value);
     res.set({ 'Content-Type': 'audio/wav', 'Cache-Control': 'private, max-age=86400', 'X-NOVA-Voice': 'generated' });
