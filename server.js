@@ -28,6 +28,8 @@ const NOVA_DAILY_LIMIT = 10;
 const NOVA_PUBLIC_MODEL_NAME = 'NOVA Beta';
 const NOVA_DEFAULT_MODEL = 'gemini-2.5-flash';
 const NOVA_TTS_DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
+const NOVA_TTS_FALLBACK_MODEL = 'gemini-2.5-flash-preview-tts';
+const NOVA_TTS_API_REVISION = '2026-05-20';
 const NOVA_TTS_MAX_TEXT_LENGTH = 1200;
 const NOVA_TTS_RATE_WINDOW = 60 * 60 * 1000;
 const NOVA_TTS_RATE_LIMIT = 30;
@@ -81,6 +83,33 @@ function extractInteractionAudio(result) {
     }
   }
   return null;
+}
+
+async function requestNovaSpeech({ apiBase, apiKey, model, prompt }) {
+  const response = await fetch(`${apiBase}/v1beta/interactions`, {
+    method: 'POST',
+    headers: {
+      'x-goog-api-key': apiKey,
+      'Content-Type': 'application/json',
+      'Api-Revision': NOVA_TTS_API_REVISION,
+    },
+    body: JSON.stringify({
+      model,
+      input: prompt,
+      response_format: { type: 'audio' },
+      generation_config: {
+        speech_config: [{ voice: 'Kore' }],
+      },
+    }),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  return {
+    ok: response.ok,
+    status: response.status,
+    message: result?.error?.message || '',
+    audio: response.ok ? extractInteractionAudio(result) : null,
+  };
 }
 
 function readData() {
@@ -2165,32 +2194,28 @@ app.post('/api/nova/speech', async (req, res) => {
   ].join('\n');
 
   try {
-    const model = process.env.NOVA_TTS_MODEL || NOVA_TTS_DEFAULT_MODEL;
+    const primaryModel = process.env.NOVA_TTS_MODEL || NOVA_TTS_DEFAULT_MODEL;
+    const fallbackModel = process.env.NOVA_TTS_FALLBACK_MODEL || NOVA_TTS_FALLBACK_MODEL;
     const apiBase = String(process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
-    const response = await fetch(`${apiBase}/v1beta/interactions`, {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        input: prompt,
-        response_format: { type: 'audio' },
-        generation_config: {
-          speech_config: [{ voice: 'Kore' }],
-        },
-      }),
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      console.error('NOVA voice upstream error', response.status, result?.error?.message || 'unknown');
-      return res.status(502).json({ ok: false, message: 'NOVA voice is temporarily unavailable.' });
+    const attempts = [primaryModel, primaryModel];
+    if (fallbackModel && fallbackModel !== primaryModel) attempts.push(fallbackModel);
+
+    let audio = null;
+    let selectedModel = primaryModel;
+    let lastFailure = { status: 502, message: 'No audio returned.' };
+    for (const model of attempts) {
+      const result = await requestNovaSpeech({ apiBase, apiKey, model, prompt });
+      if (result.ok && result.audio?.data) {
+        audio = result.audio;
+        selectedModel = model;
+        break;
+      }
+      lastFailure = { status: result.status, message: result.message || 'No audio returned.' };
+      console.error('NOVA voice upstream attempt failed', model, lastFailure.status, lastFailure.message);
     }
 
-    const audio = extractInteractionAudio(result);
     if (!audio?.data) {
-      console.error('NOVA voice returned no audio');
+      console.error('NOVA voice exhausted all models', lastFailure.status, lastFailure.message);
       return res.status(502).json({ ok: false, message: 'NOVA voice returned no audio.' });
     }
 
@@ -2200,7 +2225,12 @@ app.post('/api/nova/speech', async (req, res) => {
     const wave = mimeType === 'audio/wav' ? decoded : pcmToWave(decoded, sampleRate);
     novaTtsCache.set(cacheKey, wave);
     if (novaTtsCache.size > 100) novaTtsCache.delete(novaTtsCache.keys().next().value);
-    res.set({ 'Content-Type': 'audio/wav', 'Cache-Control': 'private, max-age=86400', 'X-NOVA-Voice': 'generated' });
+    res.set({
+      'Content-Type': 'audio/wav',
+      'Cache-Control': 'private, max-age=86400',
+      'X-NOVA-Voice': 'generated',
+      'X-NOVA-Voice-Model': selectedModel === primaryModel ? 'primary' : 'fallback',
+    });
     res.send(wave);
   } catch (error) {
     console.error('NOVA voice connection error', error);
