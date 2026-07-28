@@ -105,6 +105,15 @@ function clock(ms) {
 const NOVA_SPEECH_LOCALES = {
   en: 'en-US',
   ko: 'ko-KR',
+  ja: 'ja-JP',
+  zh: 'zh-CN',
+  es: 'es-ES',
+  pt: 'pt-BR',
+  de: 'de-DE',
+  fr: 'fr-FR',
+  ru: 'ru-RU',
+  vi: 'vi-VN',
+  id: 'id-ID',
 };
 
 let novaSpeechRequest = 0;
@@ -112,34 +121,56 @@ let novaAudioPlayer;
 let novaAudioContext;
 let novaAudioSource;
 let novaAudioObjectUrl;
+let novaAudioUnlocked = false;
+let novaAudioKeepAliveSource;
+let novaAudioKeepAliveGain;
 
 const NOVA_SILENT_WAV = 'data:audio/wav;base64,UklGRuwAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YcgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+
+function configureNovaPlayer(player) {
+  player.preload = 'auto';
+  player.playsInline = true;
+  player.setAttribute('playsinline', '');
+  player.setAttribute('webkit-playsinline', '');
+}
+
+function keepNovaMediaSessionAlive(player) {
+  if (player.dataset.novaReal === 'true') return;
+  player.loop = true;
+  player.volume = .01;
+  if (player.src !== NOVA_SILENT_WAV) player.src = NOVA_SILENT_WAV;
+  player.play()
+    .then(() => { novaAudioUnlocked = true; })
+    .catch((error) => {
+      novaAudioUnlocked = false;
+      console.warn('NOVA media session keep-alive failed:', error);
+    });
+}
 
 function unlockNovaAudio() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const player = novaAudioPlayer || new Audio();
   novaAudioPlayer = player;
-  player.preload = 'auto';
-  player.playsInline = true;
-  player.setAttribute('playsinline', '');
-  player.setAttribute('webkit-playsinline', '');
-  player.src = NOVA_SILENT_WAV;
-  player.volume = .01;
+  configureNovaPlayer(player);
 
-  // Reusing the exact media element that was started by this tap is required
-  // by Telegram's Android WebView. A new Audio() after fetch() is blocked.
-  const mediaUnlock = player.play()
-    .then(() => {
-      player.pause();
-      player.currentTime = 0;
-      player.volume = 1;
-      return true;
-    })
-    .catch((error) => {
-      console.warn('NOVA HTML audio unlock failed:', error);
-      player.volume = 1;
-      return false;
-    });
+  // Telegram Android and iOS WebViews grant playback only inside the original
+  // tap. Keep this same element silently active while speech is downloaded.
+  let mediaUnlock = Promise.resolve(novaAudioUnlocked);
+  if (player.dataset.novaReal !== 'true' && (player.paused || !novaAudioUnlocked)) {
+    player.loop = true;
+    player.volume = .01;
+    player.src = NOVA_SILENT_WAV;
+    mediaUnlock = player.play()
+      .then(() => {
+        novaAudioUnlocked = true;
+        return true;
+      })
+      .catch((error) => {
+        novaAudioUnlocked = false;
+        console.warn('NOVA HTML audio unlock failed:', error);
+        return false;
+      });
+  }
 
   if (!AudioContext) {
     return Promise.resolve(mediaUnlock).then((mediaUnlocked) => ({
@@ -155,13 +186,19 @@ function unlockNovaAudio() {
       ? context.resume()
       : Promise.resolve();
 
-    // Telegram's Android WebView only grants audio permission during the
-    // original tap. Starting a silent buffer here keeps that user gesture
-    // attached while the real NOVA voice is downloaded.
-    const silentSource = context.createBufferSource();
-    silentSource.buffer = context.createBuffer(1, 1, context.sampleRate);
-    silentSource.connect(context.destination);
-    silentSource.start(0);
+    // A one-sample buffer ends immediately and WebKit may suspend before the
+    // network response arrives. One near-silent loop preserves the global
+    // NOVA audio session across every section and sequential playback.
+    if (!novaAudioKeepAliveSource) {
+      novaAudioKeepAliveGain = context.createGain();
+      novaAudioKeepAliveGain.gain.value = .00001;
+      novaAudioKeepAliveGain.connect(context.destination);
+      novaAudioKeepAliveSource = context.createBufferSource();
+      novaAudioKeepAliveSource.buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+      novaAudioKeepAliveSource.loop = true;
+      novaAudioKeepAliveSource.connect(novaAudioKeepAliveGain);
+      novaAudioKeepAliveSource.start(0);
+    }
 
     return Promise.all([resumePromise, mediaUnlock]).then(([, mediaUnlocked]) => ({
       context,
@@ -176,7 +213,32 @@ function unlockNovaAudio() {
   }
 }
 
-async function playNovaServerVoice(text, language, requestId, audioContextPromise) {
+function playNovaDeviceVoice(text, language, rate = .95) {
+  const synthesis = window.speechSynthesis;
+  const Utterance = window.SpeechSynthesisUtterance;
+  if (!synthesis || !Utterance) return false;
+  try {
+    const locale = NOVA_SPEECH_LOCALES[language] || 'en-US';
+    const utterance = new Utterance(text);
+    const voices = synthesis.getVoices?.() || [];
+    utterance.voice = voices.find((voice) => voice.lang?.toLowerCase() === locale.toLowerCase())
+      || voices.find((voice) => voice.lang?.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()))
+      || null;
+    utterance.lang = utterance.voice?.lang || locale;
+    utterance.rate = rate;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    synthesis.cancel();
+    synthesis.resume();
+    synthesis.speak(utterance);
+    return true;
+  } catch (error) {
+    console.warn('NOVA device voice fallback failed:', error);
+    return false;
+  }
+}
+
+async function playNovaServerVoice(text, language, requestId, audioContextPromise, rate = .95) {
   let audioUrl;
   try {
     novaAudioSource?.stop();
@@ -199,22 +261,26 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
     audioUrl = URL.createObjectURL(new Blob([audioData], { type: 'audio/wav' }));
     if (novaAudioObjectUrl) URL.revokeObjectURL(novaAudioObjectUrl);
     novaAudioObjectUrl = audioUrl;
+    player.onended = null;
+    player.onerror = null;
     player.pause();
-    player.preload = 'auto';
-    player.playsInline = true;
-    player.setAttribute('playsinline', '');
-    player.setAttribute('webkit-playsinline', '');
+    configureNovaPlayer(player);
+    player.dataset.novaReal = 'true';
+    player.loop = false;
     player.src = audioUrl;
     player.volume = 1;
     player.load();
 
     try {
       await player.play();
+      novaAudioUnlocked = true;
       player.onended = () => {
         if (novaAudioObjectUrl === audioUrl) {
           URL.revokeObjectURL(audioUrl);
           novaAudioObjectUrl = undefined;
         }
+        player.dataset.novaReal = 'false';
+        keepNovaMediaSessionAlive(player);
       };
       return true;
     } catch (mediaError) {
@@ -245,10 +311,11 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
   } catch (error) {
     if (audioUrl && novaAudioObjectUrl !== audioUrl) URL.revokeObjectURL(audioUrl);
     console.warn('NOVA mobile voice playback failed:', error);
-    window.alert(language === 'ko'
-      ? 'NOVA 음성을 재생할 수 없습니다. 잠시 후 다시 시도하거나 기기의 미디어 음량을 확인해 주세요.'
-      : 'NOVA voice could not be played. Please try again or check your media volume.');
-    return false;
+    const usedDeviceVoice = playNovaDeviceVoice(text, language, rate);
+    window.dispatchEvent(new CustomEvent('nova-voice-status', {
+      detail: { ok: usedDeviceVoice, fallback: usedDeviceVoice },
+    }));
+    return usedDeviceVoice;
   }
 }
 
@@ -263,7 +330,7 @@ function speakNova(value, language = 'en', rate = .95) {
   const mobileOrTelegram = Boolean(window.Telegram?.WebApp)
     || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   if (mobileOrTelegram || !synthesis || !Utterance) {
-    playNovaServerVoice(text, language, requestId, audioContextPromise);
+    playNovaServerVoice(text, language, requestId, audioContextPromise, rate);
     return true;
   }
 
