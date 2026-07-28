@@ -108,21 +108,53 @@ const NOVA_SPEECH_LOCALES = {
 };
 
 let novaSpeechRequest = 0;
+let novaAudioPlayer;
 
-function speakNova(value, language = 'en', rate = .95) {
-  const synthesis = window.speechSynthesis;
-  const Utterance = window.SpeechSynthesisUtterance;
-  if (!synthesis || !Utterance) {
+async function playNovaServerVoice(text, language, requestId) {
+  try {
+    novaAudioPlayer?.pause();
+    const response = await fetch('/api/nova/speech', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language }),
+    });
+    if (!response.ok) throw new Error(`voice-${response.status}`);
+    const audioUrl = URL.createObjectURL(await response.blob());
+    if (requestId !== novaSpeechRequest) {
+      URL.revokeObjectURL(audioUrl);
+      return false;
+    }
+    const player = new Audio(audioUrl);
+    novaAudioPlayer = player;
+    player.playsInline = true;
+    player.onended = player.onerror = () => {
+      URL.revokeObjectURL(audioUrl);
+      if (novaAudioPlayer === player) novaAudioPlayer = undefined;
+    };
+    await player.play();
+    return true;
+  } catch (error) {
+    console.warn('NOVA mobile voice playback failed:', error);
     window.alert(language === 'ko'
-      ? '이 브라우저에서는 음성 안내를 지원하지 않습니다.'
-      : 'Voice guidance is not supported in this browser.');
+      ? 'NOVA 음성을 재생할 수 없습니다. 잠시 후 다시 시도하거나 기기의 미디어 음량을 확인해 주세요.'
+      : 'NOVA voice could not be played. Please try again or check your media volume.');
     return false;
   }
+}
 
+function speakNova(value, language = 'en', rate = .95) {
   const text = String(value || '').trim();
   if (!text) return false;
 
   const requestId = ++novaSpeechRequest;
+  const synthesis = window.speechSynthesis;
+  const Utterance = window.SpeechSynthesisUtterance;
+  if (!synthesis || !Utterance) {
+    playNovaServerVoice(text, language, requestId);
+    return true;
+  }
+
   const locale = NOVA_SPEECH_LOCALES[language] || 'en-US';
   let started = false;
   let fallbackTimer;
