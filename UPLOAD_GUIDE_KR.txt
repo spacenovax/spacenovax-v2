@@ -1,0 +1,28 @@
+SpaceNovaX NOVA 모바일 음성 수정본
+
+적용 대상 저장소:
+spacenovax/spacenovax-v2
+
+포함 파일:
+src/V15App.jsx
+tests/nova-ai-gemini.mjs
+
+업로드 순서:
+1. GitHub의 spacenovax-v2 저장소 첫 화면을 엽니다.
+2. Add file > Upload files를 누릅니다.
+3. 이 압축파일을 푼 뒤 src 폴더와 tests 폴더를 함께 끌어다 놓습니다.
+4. Commit message에 Fix NOVA voice in Telegram mobile 을 입력합니다.
+5. Commit directly to the main branch를 선택합니다.
+6. Commit changes를 누릅니다.
+7. Render 자동 배포가 Live가 될 때까지 기다립니다.
+8. Telegram 앱을 완전히 닫았다가 다시 열고 NOVA 음성을 시험합니다.
+
+검증 결과:
+npm test 통과
+Vite build 통과
+Backend integrity 통과
+NOVA AI Gemini 테스트 통과
+
+주의:
+이 수정은 모바일/Telegram NOVA 음성 재생 처리만 변경합니다.
+게임, 채굴, 미션, 랭킹, 지갑, 레퍼럴, 관리자 기능은 변경하지 않습니다.

@@ -8,6 +8,14 @@ const base = `http://127.0.0.1:${appPort}`;
 const upstreamBase = `http://127.0.0.1:${upstreamPort}`;
 const dataFile = `/tmp/spnx-v166-nova-${process.pid}.json`;
 const upstreamRequests = [];
+const clientSource = fs.readFileSync(new URL('../src/V15App.jsx', import.meta.url), 'utf8');
+
+if (!clientSource.includes('function unlockNovaAudio()')
+  || !clientSource.includes('context.decodeAudioData')
+  || !clientSource.includes('Boolean(window.Telegram?.WebApp)')
+  || !clientSource.includes('playNovaServerVoice(text, language, requestId, audioContextPromise)')) {
+  throw new Error('Telegram mobile NOVA audio unlock/playback path is missing.');
+}
 
 const upstream = http.createServer(async (req, res) => {
   const chunks = [];
@@ -174,6 +182,7 @@ try {
     serverAccountIdentity: true,
     multilingualPrompt: true,
     mobileSpeechFallback: true,
+    telegramAudioUnlock: true,
   }));
 } finally {
   cleanup();
