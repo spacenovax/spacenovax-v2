@@ -15,6 +15,12 @@ const upstream = http.createServer(async (req, res) => {
   const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
   upstreamRequests.push({ url: req.url, headers: req.headers, body });
   res.writeHead(200, { 'content-type': 'application/json' });
+  if (req.url === '/v1beta/interactions') {
+    res.end(JSON.stringify({
+      output_audio: { data: Buffer.from([0, 0, 0, 0]).toString('base64') },
+    }));
+    return;
+  }
   res.end(JSON.stringify({
     candidates: [{ content: { role: 'model', parts: [{ text: 'NOVA AI test response.' }] } }],
   }));
@@ -69,6 +75,16 @@ try {
     throw new Error(`Unexpected NOVA status: ${JSON.stringify(status)}`);
   }
 
+  const speechResponse = await fetch(`${base}/api/nova/speech`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ text: '안녕하세요, 캡틴.', language: 'ko' }),
+  });
+  const speech = Buffer.from(await speechResponse.arrayBuffer());
+  if (!speechResponse.ok || speechResponse.headers.get('content-type') !== 'audio/wav' || speech.subarray(0, 4).toString() !== 'RIFF') {
+    throw new Error(`NOVA speech fallback failed: ${speechResponse.status}`);
+  }
+
   for (let index = 0; index < 10; index += 1) {
     const response = await fetch(`${base}/api/nova/chat`, {
       method: 'POST',
@@ -120,8 +136,13 @@ try {
     throw new Error(`English limit message mismatch: ${englishLimitedResponse.status} ${JSON.stringify(englishLimited)}`);
   }
 
-  if (upstreamRequests.length !== 20) throw new Error(`Expected 20 upstream calls, received ${upstreamRequests.length}`);
-  const first = upstreamRequests[0];
+  const chatRequests = upstreamRequests.filter((request) => request.url.includes(':generateContent'));
+  const speechRequests = upstreamRequests.filter((request) => request.url === '/v1beta/interactions');
+  if (chatRequests.length !== 20) throw new Error(`Expected 20 chat upstream calls, received ${chatRequests.length}`);
+  if (speechRequests.length !== 1 || speechRequests[0].body.model !== 'gemini-3.1-flash-tts-preview') {
+    throw new Error('NOVA speech did not use the expected server-side TTS adapter.');
+  }
+  const first = chatRequests[0];
   if (first.headers['x-goog-api-key'] !== 'test-secret') throw new Error('NOVA server did not authenticate upstream correctly.');
   if (!first.url.includes('/v1beta/models/gemini-test-model:generateContent')) throw new Error(`Unexpected upstream URL: ${first.url}`);
   if (!first.body.system_instruction?.parts?.[0]?.text?.includes('Always identify yourself only as NOVA AI')) {
@@ -143,6 +164,7 @@ try {
     englishLimitCopy: true,
     serverAccountIdentity: true,
     multilingualPrompt: true,
+    mobileSpeechFallback: true,
   }));
 } finally {
   cleanup();
