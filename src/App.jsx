@@ -11,7 +11,7 @@ const OFFICIAL_LINKS = {
 
 const MISSIONS = [
   { id: 'website', icon: '🌐', title: 'Website', reward: 100, url: OFFICIAL_LINKS.website, action: 'OPEN', type: 'one_time' },
-  { id: 'telegram', icon: '📢', title: 'Telegram', reward: 300, url: OFFICIAL_LINKS.telegram, action: 'JOIN', type: 'one_time' },
+  { id: 'telegram', icon: '📢', title: 'Join SpaceNovaX Telegram Channel', reward: 300, url: OFFICIAL_LINKS.telegram, action: 'JOIN CHANNEL', type: 'one_time' },
   { id: 'x', icon: '𝕏', title: 'X Twitter', reward: 300, url: OFFICIAL_LINKS.x, action: 'FOLLOW', type: 'one_time' },
   { id: 'discord', icon: '💬', title: 'Discord', reward: 300, url: OFFICIAL_LINKS.discord, action: 'JOIN', type: 'one_time' },
   { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', reward: 300, url: OFFICIAL_LINKS.youtube, action: 'SUBSCRIBE', type: 'one_time' },
@@ -346,14 +346,9 @@ function WalletPage({ user, setUser }) {
   );
 }
 
-function KycPage({ user, setUser }) {
-  const [form, setForm] = useState({ name: '', country: '', note: '' });
-  const [notice, setNotice] = useState('Token conversion requires KYC/security review.');
-  async function submit() {
-    try { const data = await api('/api/kyc/submit', { method: 'POST', body: JSON.stringify(form) }); if (data.user) setUser(data.user); setNotice('KYC submitted. 관리자 검토 대기 중입니다.'); } catch (e) { setNotice(e.message); }
-  }
+function KycPage() {
   return (
-    <section className="page premium-card content-card"><h2>🛡️ KYC Center</h2><p>{notice}</p><div className="grid"><div><small>Status</small><b>{user.kyc?.status || 'not_submitted'}</b></div><div><small>Purpose</small><b>Conversion</b></div></div><input className="input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="input" placeholder="Country" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} /><input className="input" placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /><button className="wide" onClick={submit}>Submit KYC</button></section>
+    <section className="page premium-card content-card"><h2>🛡️ KYC · Coming Soon</h2><p>SpaceNovaX does not currently collect identity information. Professional provider verification will open after community activation.</p><div className="grid"><div><small>Status</small><b>NOT AVAILABLE</b></div><div><small>Data collection</small><b>DISABLED</b></div></div><button className="wide" disabled>Verification not yet available</button></section>
   );
 }
 
@@ -755,7 +750,7 @@ function NovaAIPage({ user }) {
         : '현재 채굴 엔진은 대기 상태입니다.';
       setMessages((v) => [...v, {
         role: 'assistant',
-        text: `현재 NOVA 지식 코어가 오프라인 모드로 작동 중입니다. ${mining} 전체 AI 대화 기능은 서버에 OPENAI_API_KEY를 등록하면 활성화됩니다.`,
+        text: `현재 NOVA 지식 코어가 오프라인 모드로 작동 중입니다. ${mining} 전체 AI 대화 기능은 서버에 NOVA AI 키를 등록하면 활성화됩니다.`,
       }]);
     } finally {
       setBusy(false);
