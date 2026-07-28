@@ -111,10 +111,42 @@ let novaSpeechRequest = 0;
 let novaAudioPlayer;
 let novaAudioContext;
 let novaAudioSource;
+let novaAudioObjectUrl;
+
+const NOVA_SILENT_WAV = 'data:audio/wav;base64,UklGRuwAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YcgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
 function unlockNovaAudio() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) return Promise.resolve(undefined);
+  const player = novaAudioPlayer || new Audio();
+  novaAudioPlayer = player;
+  player.preload = 'auto';
+  player.playsInline = true;
+  player.setAttribute('playsinline', '');
+  player.setAttribute('webkit-playsinline', '');
+  player.src = NOVA_SILENT_WAV;
+  player.volume = .01;
+
+  // Reusing the exact media element that was started by this tap is required
+  // by Telegram's Android WebView. A new Audio() after fetch() is blocked.
+  const mediaUnlock = player.play()
+    .then(() => {
+      player.pause();
+      player.currentTime = 0;
+      player.volume = 1;
+      return true;
+    })
+    .catch((error) => {
+      console.warn('NOVA HTML audio unlock failed:', error);
+      player.volume = 1;
+      return false;
+    });
+
+  if (!AudioContext) {
+    return Promise.resolve(mediaUnlock).then((mediaUnlocked) => ({
+      context: undefined,
+      mediaUnlocked,
+    }));
+  }
 
   try {
     novaAudioContext ||= new AudioContext();
@@ -131,18 +163,24 @@ function unlockNovaAudio() {
     silentSource.connect(context.destination);
     silentSource.start(0);
 
-    return Promise.resolve(resumePromise).then(() => context);
+    return Promise.all([resumePromise, mediaUnlock]).then(([, mediaUnlocked]) => ({
+      context,
+      mediaUnlocked,
+    }));
   } catch (error) {
     console.warn('NOVA audio unlock failed:', error);
-    return Promise.resolve(undefined);
+    return Promise.resolve(mediaUnlock).then((mediaUnlocked) => ({
+      context: undefined,
+      mediaUnlocked,
+    }));
   }
 }
 
 async function playNovaServerVoice(text, language, requestId, audioContextPromise) {
+  let audioUrl;
   try {
     novaAudioSource?.stop();
     novaAudioSource = undefined;
-    novaAudioPlayer?.pause();
     const response = await fetch('/api/nova/speech', {
       method: 'POST',
       credentials: 'same-origin',
@@ -155,33 +193,57 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
       return false;
     }
 
-    const context = await audioContextPromise;
-    if (context) {
-      if (context.state === 'suspended') await context.resume();
-      const decodedAudio = await context.decodeAudioData(audioData.slice(0));
-      if (requestId !== novaSpeechRequest) return false;
-
-      const source = context.createBufferSource();
-      source.buffer = decodedAudio;
-      source.connect(context.destination);
-      source.onended = () => {
-        if (novaAudioSource === source) novaAudioSource = undefined;
-      };
-      novaAudioSource = source;
-      source.start(0);
-      return true;
-    }
-
-    // Compatibility fallback for browsers without Web Audio.
-    const audioUrl = URL.createObjectURL(new Blob([audioData], { type: 'audio/wav' }));
+    const unlocked = await audioContextPromise;
     const player = novaAudioPlayer || new Audio();
     novaAudioPlayer = player;
+    audioUrl = URL.createObjectURL(new Blob([audioData], { type: 'audio/wav' }));
+    if (novaAudioObjectUrl) URL.revokeObjectURL(novaAudioObjectUrl);
+    novaAudioObjectUrl = audioUrl;
+    player.pause();
+    player.preload = 'auto';
     player.playsInline = true;
+    player.setAttribute('playsinline', '');
+    player.setAttribute('webkit-playsinline', '');
     player.src = audioUrl;
-    player.onended = player.onerror = () => URL.revokeObjectURL(audioUrl);
-    await player.play();
+    player.volume = 1;
+    player.load();
+
+    try {
+      await player.play();
+      player.onended = () => {
+        if (novaAudioObjectUrl === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          novaAudioObjectUrl = undefined;
+        }
+      };
+      return true;
+    } catch (mediaError) {
+      console.warn('NOVA HTML audio playback failed; trying Web Audio:', mediaError);
+    }
+
+    // Samsung/Telegram versions differ: if the unlocked HTML media element is
+    // still blocked, decode the same WAV through the already-resumed context.
+    const context = unlocked?.context;
+    if (!context) throw new Error('voice-playback-blocked');
+    if (context.state === 'suspended') await context.resume();
+    const decodedAudio = await context.decodeAudioData(audioData.slice(0));
+    if (requestId !== novaSpeechRequest) return false;
+
+    const source = context.createBufferSource();
+    source.buffer = decodedAudio;
+    source.connect(context.destination);
+    source.onended = () => {
+      if (novaAudioSource === source) novaAudioSource = undefined;
+      if (novaAudioObjectUrl === audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        novaAudioObjectUrl = undefined;
+      }
+    };
+    novaAudioSource = source;
+    source.start(0);
     return true;
   } catch (error) {
+    if (audioUrl && novaAudioObjectUrl !== audioUrl) URL.revokeObjectURL(audioUrl);
     console.warn('NOVA mobile voice playback failed:', error);
     window.alert(language === 'ko'
       ? 'NOVA 음성을 재생할 수 없습니다. 잠시 후 다시 시도하거나 기기의 미디어 음량을 확인해 주세요.'
