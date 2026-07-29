@@ -79,7 +79,7 @@
 /* One deliberate game entry: silent portal preview -> isolated full-screen game. */
 .game-launch-preview{position:relative;height:330px;margin:20px 0 0;border:1px solid rgba(83,231,255,.24);border-radius:22px;overflow:hidden;background:radial-gradient(circle at 50% 55%,rgba(47,115,255,.32),transparent 46%),linear-gradient(160deg,#06172b,#020611 72%);isolation:isolate}
 .game-launch-preview:before{content:"";position:absolute;z-index:2;inset:0;background:linear-gradient(180deg,rgba(1,5,13,.02),rgba(1,6,16,.08) 48%,rgba(1,6,16,.92)),linear-gradient(90deg,rgba(1,6,16,.34),transparent 42%,rgba(1,6,16,.08));pointer-events:none}
-.game-launch-preview:after{content:"";position:absolute;z-index:3;inset:0;background:linear-gradient(90deg,transparent 49.7%,rgba(83,231,255,.18) 50%,transparent 50.3%);background-size:100% 58px;opacity:.45;pointer-events:none}
+.game-launch-preview:after{content:"";position:absolute;z-index:3;inset:0;background:repeating-linear-gradient(180deg,transparent 0 57px,rgba(83,231,255,.045) 58px);opacity:.35;pointer-events:none}
 .game-launch-preview>img{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 50%;filter:saturate(1.08) contrast(1.04);transform:scale(1.015);transition:transform 6s ease}
 .game-launch-preview:hover>img{transform:scale(1.055)}
 .game-ship-brand{position:absolute;z-index:4;right:22px;top:22px;display:grid;justify-items:end;padding:12px 0 12px 18px;border-right:3px solid #55eaff;text-align:right;text-shadow:0 3px 18px #000}
