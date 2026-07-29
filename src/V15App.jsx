@@ -679,6 +679,19 @@ function Game({ user, t, language }) {
   const [gameOpen, setGameOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const gameUrl = `${GAME_URL}/?source=mining-app&captain=${encodeURIComponent(user.id || 'guest')}&mode=fullscreen`;
+  const launchBriefings = {
+    en: 'Captain, NOVA-X launch sequence is ready. Beginning the Genesis Gate defense operation.',
+    ko: '캡틴, NOVA-X 출격 준비가 완료되었습니다. 제네시스 게이트 방어 작전을 시작합니다.',
+    ja: 'キャプテン、NOVA-Xの発進準備が完了しました。ジェネシスゲート防衛作戦を開始します。',
+    zh: '舰长，NOVA-X 已准备起飞。现在开始创世纪之门防御行动。',
+    es: 'Capitán, la secuencia de lanzamiento de NOVA-X está lista. Iniciando la defensa de la Puerta Génesis.',
+    pt: 'Capitão, a sequência de lançamento da NOVA-X está pronta. Iniciando a defesa do Portal Gênesis.',
+    de: 'Captain, die NOVA-X ist startbereit. Die Verteidigung des Genesis-Tors beginnt.',
+    fr: 'Capitaine, la séquence de lancement de NOVA-X est prête. Début de la défense de la Porte Genesis.',
+    ru: 'Капитан, NOVA-X готов к запуску. Начинаем оборону Врат Генезиса.',
+    vi: 'Thuyền trưởng, NOVA-X đã sẵn sàng xuất kích. Bắt đầu chiến dịch bảo vệ Cổng Genesis.',
+    id: 'Kapten, urutan peluncuran NOVA-X siap. Memulai operasi pertahanan Gerbang Genesis.',
+  };
   const rewardBriefing = language === 'ko'
     ? '캡틴, 게임 보상 안내입니다. 다이아몬드 300개를 모으면 10 SPNX 포인트를 받으며 하루 최대 두 번 적용됩니다. 보급함은 하루 한 번, 1에서 5 SPNX 포인트를 무작위로 지급합니다. 보스 최초 처치 보상은 하루 한 번 5 SPNX 포인트입니다. 게임 보상은 하루 최대 30 SPNX 포인트이며, 미국 동부시간 오전 6시에 새로 시작됩니다. 모든 보상은 서버 검증 후 원장에 기록됩니다.'
     : 'Captain, here is your game reward briefing. Collect three hundred diamonds to earn ten SPNX Points, up to twice per day. A supply crate grants a random one to five SPNX Points once per day. Your first boss defeat grants five SPNX Points once per day. Total game rewards are capped at thirty SPNX Points per day and reset at six A M Eastern Time. Every reward is server verified and recorded in the ledger.';
@@ -708,7 +721,9 @@ function Game({ user, t, language }) {
     };
   }, [gameOpen]);
   function launchGame() {
-    window.speechSynthesis?.cancel();
+    // Keep this inside the user's tap handler so mobile and Telegram WebViews
+    // grant audio playback permission before the cross-origin game is mounted.
+    speakNova(launchBriefings[language] || launchBriefings.en, language, .96);
     setLoaded(false);
     setGameOpen(true);
   }
