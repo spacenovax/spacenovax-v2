@@ -676,10 +676,46 @@ function Missions({ user, setUser, t, language }) {
 }
 
 function Game({ user, t, language }) {
+  const [gameOpen, setGameOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const gameUrl = `${GAME_URL}/?source=mining-app&captain=${encodeURIComponent(user.id || 'guest')}&mode=fullscreen`;
   const rewardBriefing = language === 'ko'
     ? '캡틴, 게임 보상 안내입니다. 다이아몬드 300개를 모으면 10 SPNX 포인트를 받으며 하루 최대 두 번 적용됩니다. 보급함은 하루 한 번, 1에서 5 SPNX 포인트를 무작위로 지급합니다. 보스 최초 처치 보상은 하루 한 번 5 SPNX 포인트입니다. 게임 보상은 하루 최대 30 SPNX 포인트이며, 미국 동부시간 오전 6시에 새로 시작됩니다. 모든 보상은 서버 검증 후 원장에 기록됩니다.'
     : 'Captain, here is your game reward briefing. Collect three hundred diamonds to earn ten SPNX Points, up to twice per day. A supply crate grants a random one to five SPNX Points once per day. Your first boss defeat grants five SPNX Points once per day. Total game rewards are capped at thirty SPNX Points per day and reset at six A M Eastern Time. Every reward is server verified and recorded in the ledger.';
+  useEffect(() => {
+    if (!gameOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.Telegram?.WebApp?.expand?.();
+    const closeOnBackground = () => {
+      if (document.hidden) {
+        setGameOpen(false);
+        setLoaded(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        setGameOpen(false);
+        setLoaded(false);
+      }
+    };
+    document.addEventListener('visibilitychange', closeOnBackground);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('visibilitychange', closeOnBackground);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [gameOpen]);
+  function launchGame() {
+    window.speechSynthesis?.cancel();
+    setLoaded(false);
+    setGameOpen(true);
+  }
+  function closeGame() {
+    setGameOpen(false);
+    setLoaded(false);
+  }
   function playRewardBriefing() {
     speakNova(rewardBriefing, language, .94);
   }
@@ -687,15 +723,27 @@ function Game({ user, t, language }) {
     <section className="command-card game-portal game-theme">
       <div className="section-heading"><div><small>{t.realGame}</small><h2>{t.game}</h2></div><span className="live-state"><i/>LIVE</span></div>
       <p>{t.gameCopy}</p>
-      <div className="game-frame-shell">
-        {!loaded && <div className="game-loading"><img src="/spacenovax-symbol.jpg" alt=""/><b>CONNECTING TO FLIGHT SERVER</b><span><i/></span></div>}
-        <iframe title="SpaceNovaX official game" src={`${GAME_URL}/?source=mining-app&captain=${encodeURIComponent(user.id || 'guest')}`} onLoad={() => setLoaded(true)} allow="autoplay; fullscreen; gamepad" />
+      <div className="game-launch-preview" aria-label={language === 'ko' ? 'NOVA-X 게임 미리보기' : 'NOVA-X game preview'}>
+        <img src="/nova-x1-cinematic.svg" alt="NOVA-X Genesis Defense fighter"/>
+        <div className="game-launch-copy">
+          <small>NOVA-X · GENESIS DEFENSE</small>
+          <strong>{language === 'ko' ? '전체화면 전투 관제' : 'FULL-SCREEN FLIGHT COMMAND'}</strong>
+          <span>{language === 'ko' ? '게임을 시작할 때만 화면과 배경음악이 활성화됩니다.' : 'The game display and soundtrack activate only after launch.'}</span>
+        </div>
       </div>
-      <button className="primary-action" onClick={() => window.open(GAME_URL, '_blank', 'noopener,noreferrer')}><Icon name="game"/>{t.openGame}<Icon name="arrow"/></button>
+      <button className="primary-action game-single-launch" onClick={launchGame}><Icon name="game"/>{language === 'ko' ? 'NOVA-X 게임 시작' : 'LAUNCH NOVA-X'}<Icon name="arrow"/></button>
       <div className="nova-reward-briefing"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/><div><small>NOVA · REWARD COMMAND</small><b>{language === 'ko' ? '게임 운영 및 보상 안내' : 'Game operations and reward briefing'}</b><p>{rewardBriefing}</p></div><button onClick={playRewardBriefing}><Icon name="speaker" size={17}/>{language === 'ko' ? '음성 안내' : 'PLAY VOICE'}</button></div>
       <div className="game-reward-grid"><span><small>300 DIAMONDS</small><b>+10 SPNX × 2</b></span><span><small>SUPPLY CRATE · ONCE</small><b>+1~5 SPNX</b></span><span><small>FIRST BOSS · ONCE</small><b>+5 SPNX</b></span><span><small>DAILY RESET</small><b>06:00 AM ET</b></span></div>
       <div className="game-stats"><span><small>{t.dailyCap}</small><b>{Number(user.gameReward?.earnedToday || 0)} / 30 SPNX</b></span><span><small>BEST SCORE</small><b>{Number(user.gameReward?.bestScore || 0).toLocaleString()}</b></span></div>
     </section>
+    {gameOpen && <div className="game-fullscreen" role="dialog" aria-modal="true" aria-label="NOVA-X">
+      <div className="game-fullscreen-bar">
+        <div><img src="/spacenovax-symbol.jpg" alt=""/><span><small>SPACENOVAX</small><b>NOVA-X</b></span></div>
+        <button onClick={closeGame} aria-label={language === 'ko' ? '게임 닫기' : 'Close game'}>×</button>
+      </div>
+      {!loaded && <div className="game-loading game-fullscreen-loading"><img src="/spacenovax-symbol.jpg" alt=""/><b>CONNECTING TO FLIGHT SERVER</b><span><i/></span></div>}
+      <iframe title="SpaceNovaX official game" src={gameUrl} onLoad={() => setLoaded(true)} allow="autoplay; fullscreen; gamepad" />
+    </div>}
   </main>;
 }
 
