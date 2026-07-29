@@ -124,6 +124,7 @@ let novaAudioObjectUrl;
 let novaAudioUnlocked = false;
 let novaAudioKeepAliveSource;
 let novaAudioKeepAliveGain;
+let novaDeviceVoices = [];
 
 const NOVA_SILENT_WAV = 'data:audio/wav;base64,UklGRuwAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YcgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
@@ -213,27 +214,67 @@ function unlockNovaAudio() {
   }
 }
 
-function playNovaDeviceVoice(text, language, rate = .95) {
+function refreshNovaDeviceVoices() {
+  const voices = window.speechSynthesis?.getVoices?.() || [];
+  if (voices.length) novaDeviceVoices = voices;
+  return novaDeviceVoices;
+}
+
+function findNovaDeviceVoice(locale) {
+  const voices = refreshNovaDeviceVoices();
+  const normalizedLocale = locale.toLowerCase();
+  const languagePrefix = normalizedLocale.slice(0, 2);
+  return voices.find((voice) => voice.lang?.toLowerCase() === normalizedLocale)
+    || voices.find((voice) => voice.lang?.toLowerCase().startsWith(languagePrefix))
+    || null;
+}
+
+window.speechSynthesis?.addEventListener?.('voiceschanged', refreshNovaDeviceVoices);
+refreshNovaDeviceVoices();
+
+function playNovaDeviceVoice(text, language, rate = .95, onFailure) {
   const synthesis = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   if (!synthesis || !Utterance) return false;
   try {
     const locale = NOVA_SPEECH_LOCALES[language] || 'en-US';
     const utterance = new Utterance(text);
-    const voices = synthesis.getVoices?.() || [];
-    utterance.voice = voices.find((voice) => voice.lang?.toLowerCase() === locale.toLowerCase())
-      || voices.find((voice) => voice.lang?.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()))
-      || null;
+    utterance.voice = findNovaDeviceVoice(locale);
     utterance.lang = utterance.voice?.lang || locale;
     utterance.rate = rate;
     utterance.pitch = 1;
     utterance.volume = 1;
-    synthesis.cancel();
+    let started = false;
+    let failed = false;
+    const fail = () => {
+      if (failed) return;
+      failed = true;
+      onFailure?.();
+    };
+    const startWatchdog = window.setTimeout(() => {
+      if (started) return;
+      synthesis.cancel();
+      fail();
+    }, 500);
+    utterance.onstart = () => {
+      started = true;
+      clearTimeout(startWatchdog);
+    };
+    utterance.onend = () => clearTimeout(startWatchdog);
+    utterance.onerror = (event) => {
+      clearTimeout(startWatchdog);
+      if (!['canceled', 'interrupted'].includes(event.error)) {
+        console.warn('NOVA device voice playback failed:', event.error);
+      }
+      fail();
+    };
+    if (synthesis.speaking || synthesis.pending) synthesis.cancel();
     synthesis.resume();
     synthesis.speak(utterance);
     return true;
   } catch (error) {
     console.warn('NOVA device voice fallback failed:', error);
+    onFailure?.();
     return false;
   }
 }
@@ -323,6 +364,7 @@ function speakNova(value, language = 'en', rate = .95) {
   const text = String(value || '').trim();
   if (!text) return false;
 
+  const normalizedLanguage = String(language || 'en').toLowerCase();
   const requestId = ++novaSpeechRequest;
   const audioContextPromise = unlockNovaAudio();
   const synthesis = window.speechSynthesis;
@@ -330,55 +372,21 @@ function speakNova(value, language = 'en', rate = .95) {
   const mobileOrTelegram = Boolean(window.Telegram?.WebApp)
     || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   if (mobileOrTelegram || !synthesis || !Utterance) {
-    playNovaServerVoice(text, language, requestId, audioContextPromise, rate);
+    if (synthesis && Utterance && ['en', 'ko'].includes(normalizedLanguage)) {
+      let fallbackStarted = false;
+      const startServerFallback = () => {
+        if (fallbackStarted || requestId !== novaSpeechRequest) return;
+        fallbackStarted = true;
+        playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate);
+      };
+      if (playNovaDeviceVoice(text, normalizedLanguage, rate, startServerFallback)) return true;
+      if (fallbackStarted) return true;
+    }
+    playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate);
     return true;
   }
 
-  const locale = NOVA_SPEECH_LOCALES[language] || 'en-US';
-  let started = false;
-  let fallbackTimer;
-
-  const removeVoiceListener = () => {
-    clearTimeout(fallbackTimer);
-    synthesis.removeEventListener?.('voiceschanged', start);
-  };
-  const start = () => {
-    if (started || requestId !== novaSpeechRequest) return;
-    started = true;
-    removeVoiceListener();
-
-    const utterance = new Utterance(text);
-    const voices = synthesis.getVoices?.() || [];
-    const exactVoice = voices.find((voice) => voice.lang?.toLowerCase() === locale.toLowerCase());
-    const languageVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
-    utterance.voice = exactVoice || languageVoice || null;
-    utterance.lang = utterance.voice?.lang || locale;
-    utterance.rate = rate;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    utterance.onerror = (event) => {
-      if (!['canceled', 'interrupted'].includes(event.error)) {
-        console.warn('NOVA voice playback failed:', event.error);
-      }
-    };
-
-    synthesis.cancel();
-    synthesis.resume();
-    window.setTimeout(() => {
-      if (requestId !== novaSpeechRequest) return;
-      synthesis.speak(utterance);
-      // Chrome can leave the engine paused after a prior cancellation.
-      window.setTimeout(() => synthesis.resume(), 100);
-    }, 60);
-  };
-
-  const voices = synthesis.getVoices?.() || [];
-  if (voices.length) start();
-  else {
-    synthesis.addEventListener?.('voiceschanged', start, { once: true });
-    fallbackTimer = window.setTimeout(start, 350);
-  }
-  return true;
+  return playNovaDeviceVoice(text, normalizedLanguage, rate);
 }
 
 function Icon({ name, size = 22 }) {
