@@ -78,9 +78,14 @@
 
 /* One deliberate game entry: silent portal preview -> isolated full-screen game. */
 .game-launch-preview{position:relative;height:330px;margin:20px 0 0;border:1px solid rgba(83,231,255,.24);border-radius:22px;overflow:hidden;background:radial-gradient(circle at 50% 55%,rgba(47,115,255,.32),transparent 46%),linear-gradient(160deg,#06172b,#020611 72%);isolation:isolate}
-.game-launch-preview:before{content:"";position:absolute;z-index:2;inset:0;background:linear-gradient(180deg,rgba(1,5,13,.08),rgba(1,6,16,.12) 48%,rgba(1,6,16,.94));pointer-events:none}
+.game-launch-preview:before{content:"";position:absolute;z-index:2;inset:0;background:linear-gradient(180deg,rgba(1,5,13,.02),rgba(1,6,16,.08) 48%,rgba(1,6,16,.92)),linear-gradient(90deg,rgba(1,6,16,.34),transparent 42%,rgba(1,6,16,.08));pointer-events:none}
 .game-launch-preview:after{content:"";position:absolute;z-index:3;inset:0;background:linear-gradient(90deg,transparent 49.7%,rgba(83,231,255,.18) 50%,transparent 50.3%);background-size:100% 58px;opacity:.45;pointer-events:none}
-.game-launch-preview>img{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:contain;object-position:center 38%;filter:drop-shadow(0 18px 34px #000) saturate(1.08);transform:scale(.9)}
+.game-launch-preview>img{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 50%;filter:saturate(1.08) contrast(1.04);transform:scale(1.015);transition:transform 6s ease}
+.game-launch-preview:hover>img{transform:scale(1.055)}
+.game-ship-brand{position:absolute;z-index:4;right:22px;top:22px;display:grid;justify-items:end;padding:12px 0 12px 18px;border-right:3px solid #55eaff;text-align:right;text-shadow:0 3px 18px #000}
+.game-ship-brand small{color:#8dbbd0;font-size:7px;font-weight:900;letter-spacing:.2em}
+.game-ship-brand b{font-size:32px;line-height:1;color:#f4fbff;letter-spacing:.08em}
+.game-ship-brand span{margin-top:5px;color:#65eaff;font-size:8px;font-weight:800;letter-spacing:.17em}
 .game-launch-copy{position:absolute;z-index:4;left:20px;right:20px;bottom:18px;display:grid;gap:5px}
 .game-launch-copy small{color:#63ecff;font-size:8px;font-weight:900;letter-spacing:.18em}
 .game-launch-copy strong{font-size:18px;letter-spacing:.03em}
@@ -93,7 +98,10 @@
 .game-fullscreen-loading{position:absolute;z-index:3;inset:58px 0 0}
 @media(max-width:520px){
   .game-launch-preview{height:260px;margin-top:15px;border-radius:18px}
-  .game-launch-preview>img{transform:scale(.98)}
+  .game-launch-preview>img{object-position:center 50%;transform:scale(1.02)}
+  .game-launch-preview:hover>img{transform:scale(1.02)}
+  .game-ship-brand{right:13px;top:13px;padding:8px 0 8px 11px;border-right-width:2px}
+  .game-ship-brand small{font-size:5px}.game-ship-brand b{font-size:21px}.game-ship-brand span{font-size:6px}
   .game-launch-copy{left:14px;right:14px;bottom:13px}
   .game-launch-copy strong{font-size:15px}.game-launch-copy span{font-size:8px}
   .game-single-launch{min-height:58px;font-size:12px}
