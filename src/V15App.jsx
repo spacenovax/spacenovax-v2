@@ -724,9 +724,14 @@ function Game({ user, t, language }) {
       <div className="section-heading"><div><small>{t.realGame}</small><h2>{t.game}</h2></div><span className="live-state"><i/>LIVE</span></div>
       <p>{t.gameCopy}</p>
       <div className="game-launch-preview" aria-label={language === 'ko' ? 'NOVA-X 게임 미리보기' : 'NOVA-X game preview'}>
-        <img src="/nova-x1-cinematic.svg" alt="NOVA-X Genesis Defense fighter"/>
+        <img src="/nova-x-launch-cinematic-v1.svg" alt="NOVA-X Genesis Defense flagship at the SpaceNovaX orbital base"/>
+        <div className="game-ship-brand" aria-hidden="true">
+          <small>SPACENOVAX FLAGSHIP</small>
+          <b>NOVA-X</b>
+          <span>GENESIS DEFENSE</span>
+        </div>
         <div className="game-launch-copy">
-          <small>NOVA-X · GENESIS DEFENSE</small>
+          <small>ORBITAL FLIGHT COMMAND</small>
           <strong>{language === 'ko' ? '전체화면 전투 관제' : 'FULL-SCREEN FLIGHT COMMAND'}</strong>
           <span>{language === 'ko' ? '게임을 시작할 때만 화면과 배경음악이 활성화됩니다.' : 'The game display and soundtrack activate only after launch.'}</span>
         </div>
