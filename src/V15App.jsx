@@ -504,9 +504,8 @@ function Splash({ done }) {
     return () => { clearTimeout(a); clearTimeout(b); };
   }, [done]);
   return <div className={`v15-splash ${exit ? 'exit' : ''}`}>
-    <div className="splash-nebula" /><div className="splash-planet" /><div className="splash-stars-v15" />
+    <div className="splash-nebula" /><div className="splash-stars-v15" />
     <div className="v15-mark">
-      <span className="mark-orbit one"/><span className="mark-orbit two"/>
       <img src="/spacenovax-symbol.jpg" alt="SpaceNovaX" />
     </div>
     <div className="v15-splash-copy"><small>NOVA NETWORK PRESENTS</small><h1>SPACENOVA<span>X</span></h1><p>EXPLORE · MINE · EVOLVE</p></div>
@@ -643,7 +642,9 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
         <small>{t.balance}</small><strong>{format(user.balance)}</strong><h1>SPNX POINTS</h1>
         <p>NOVA-X1 / AI CONTROLLED GENESIS FLAGSHIP</p>
       </div>
-      <img className="hero-station" src="/spacenovax-orbital-hq-v15.png" alt="SpaceNovaX Orbital Headquarters" />
+      <img className="hero-station" src="/spacenovax-orbital-hq-live-v16.webp" alt="SpaceNovaX Orbital Headquarters above Earth" />
+      <div className="hero-live-light" aria-hidden="true"/>
+      <div className="distant-meteor-cloud" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <i key={index}/>)}</div>
       <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
       <div className="orbital-satellite" aria-hidden="true"><i/><b/><span/></div>
       <div className="station-brand"><span>ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · HQ-01</small></div>
@@ -724,7 +725,7 @@ function Missions({ user, setUser, t, language }) {
       <div><small>{t.rewardAvailable}</small><strong>+{totalReward.toLocaleString()} SPNX POINT</strong><p>{language === 'ko' ? '5개 공식 미션을 모두 완료하면 Mission Passport와 기본 채굴 속도 +5%가 영구 적용됩니다.' : 'Complete all five official missions to permanently unlock the Mission Passport +5% base mining speed bonus.'}</p></div>
     </div>
     <div className={`mission-passport ${passportComplete ? 'unlocked' : ''}`}>
-      <img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/>
+      <img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA AI"/>
       <div><small>NOVA AI · MISSION BRIEFING</small><b>{passportComplete ? (language === 'ko' ? 'MISSION PASSPORT 인증 완료' : 'MISSION PASSPORT VERIFIED') : (language === 'ko' ? '5개 미션 완수 시 채굴률 +5%' : 'COMPLETE 5 MISSIONS · +5% MINING')}</b><p>{missionBrief}</p></div>
       <button className={`nova-voice-control voice-${voiceState}`} onClick={explainMission} aria-live="polite"><Icon name="speaker" size={17}/>{voiceLabel(voiceState, language, 'NOVA 설명 듣기', 'HEAR NOVA')}</button>
     </div>
@@ -829,7 +830,7 @@ function Game({ user, t, language }) {
         </div>
       </div>
       <button className="primary-action game-single-launch" onClick={launchGame}><Icon name="game"/>{language === 'ko' ? 'NOVA-X 게임 시작' : 'LAUNCH NOVA-X'}<Icon name="arrow"/></button>
-      <div className="nova-reward-briefing"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/><div><small>NOVA · REWARD COMMAND</small><b>{language === 'ko' ? '게임 운영 및 보상 안내' : 'Game operations and reward briefing'}</b><p>{rewardBriefing}</p></div><button className={`nova-voice-control voice-${voiceState}`} onClick={playRewardBriefing} aria-live="polite"><Icon name="speaker" size={17}/>{voiceLabel(voiceState, language, '음성 안내', 'PLAY VOICE')}</button></div>
+      <div className="nova-reward-briefing"><img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA AI"/><div><small>NOVA · REWARD COMMAND</small><b>{language === 'ko' ? '게임 운영 및 보상 안내' : 'Game operations and reward briefing'}</b><p>{rewardBriefing}</p></div><button className={`nova-voice-control voice-${voiceState}`} onClick={playRewardBriefing} aria-live="polite"><Icon name="speaker" size={17}/>{voiceLabel(voiceState, language, '음성 안내', 'PLAY VOICE')}</button></div>
       <div className="game-reward-grid"><span><small>300 DIAMONDS</small><b>+10 SPNX × 2</b></span><span><small>SUPPLY CRATE · ONCE</small><b>+1~5 SPNX</b></span><span><small>FIRST BOSS · ONCE</small><b>+5 SPNX</b></span><span><small>DAILY RESET</small><b>06:00 AM ET</b></span></div>
       <div className="game-stats"><span><small>{t.dailyCap}</small><b>{Number(user.gameReward?.earnedToday || 0)} / 30 SPNX</b></span><span><small>BEST SCORE</small><b>{Number(user.gameReward?.bestScore || 0).toLocaleString()}</b></span></div>
     </section>
@@ -918,15 +919,15 @@ function NovaAI({ user, t, language }) {
   }
   return <main className="v15-page"><section className="command-card ai-console ai-theme">
     <div className="section-heading ai-heading"><div><small>SPACENOVAX INTELLIGENCE CORE</small><h2>{t.ai}</h2></div><div className="ai-head-actions"><span className={`live-state ${aiStatus.configured && aiStatus.enabled ? 'pulse' : 'setup'}`}><i/>{aiStatus.configured && aiStatus.enabled ? 'LIVE AI' : 'SETUP REQUIRED'}</span><button onClick={newChat} title={t.newChat}><Icon name="plus" size={18}/><span>{t.newChat}</span></button></div></div>
-    <div className="ai-identity"><div className="nova-portrait"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI command model"/><i/><i/></div><div><b>NOVA</b><small>SpaceNovaX Proprietary AI · Web3 · Mining · GameFi{aiStatus.model ? ` · ${aiStatus.model}` : ''}</small></div></div>
+    <div className="ai-identity"><div className="nova-portrait"><img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA AI command model"/><i/><i/></div><div><b>NOVA</b><small>SpaceNovaX Proprietary AI · Web3 · Mining · GameFi{aiStatus.model ? ` · ${aiStatus.model}` : ''}</small></div></div>
     {!aiStatus.configured && <div className="ai-setup-notice"><Icon name="shield"/><div><b>Live intelligence is not connected</b><p>Restart START_PREVIEW.bat and enter a valid server-side NOVA AI key. The key is never stored in the browser.</p></div></div>}
     <div className="ai-messages">{messages.map((m) => <article className={m.role} key={m.id}>
-      <div className={`message-avatar ${m.role === 'nova' ? 'nova-message-avatar' : ''}`}>{m.role === 'nova' ? <img src="/nova-ai-official-mascot-v16.png" alt=""/> : (user.firstName || 'C').slice(0,1).toUpperCase()}</div>
+      <div className={`message-avatar ${m.role === 'nova' ? 'nova-message-avatar' : ''}`}>{m.role === 'nova' ? <img src="/nova-ai-command-intelligence-v17.webp" alt=""/> : (user.firstName || 'C').slice(0,1).toUpperCase()}</div>
       <div className="message-body"><small>{m.role === 'nova' ? 'NOVA' : t.captain}</small><p>{m.text}</p>
         <div className="message-tools"><button onClick={() => navigator.clipboard?.writeText(m.text)}><Icon name="copy" size={14}/>{t.copy}</button>{m.role === 'nova' && <button className={`nova-voice-control ${speakingMessageId === m.id ? `voice-${voiceState}` : 'voice-idle'}`} onClick={() => speak(m.text, m.id)} aria-live="polite"><Icon name="speaker" size={14}/>{speakingMessageId === m.id ? voiceLabel(voiceState, language, '음성으로 듣기', 'READ ALOUD') : t.read}</button>}</div>
       </div>
     </article>)}
-      {busy && <article className="nova thinking"><div className="message-avatar nova-message-avatar"><img src="/nova-ai-official-mascot-v16.png" alt=""/></div><div className="message-body"><small>NOVA</small><p><span className="typing"><i/><i/><i/></span>{t.thinking}</p></div></article>}
+      {busy && <article className="nova thinking"><div className="message-avatar nova-message-avatar"><img src="/nova-ai-command-intelligence-v17.webp" alt=""/></div><div className="message-body"><small>NOVA</small><p><span className="typing"><i/><i/><i/></span>{t.thinking}</p></div></article>}
       <div ref={endRef}/>
     </div>
     <div className="ai-composer">
@@ -1028,7 +1029,7 @@ function Community({ user, language, setTab }) {
   const categories = [['all', ko ? '전체' : 'All'],['nova-ai','NOVA AI'],['game',ko ? '게임' : 'Game'],['mining',ko ? '채굴' : 'Mining'],['guide',ko ? '가이드' : 'Guides'],['community',ko ? '커뮤니티' : 'Community']];
   return <main className="v15-page"><section className="command-card ops-module community-theme">
     <div className="section-heading"><div><small>CAPTAIN KNOWLEDGE NETWORK</small><h2>{ko ? '캡틴 커뮤니티' : 'Captain Community'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>TRUST GATED</span></div>
-    <div className="community-intro"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA"/><div><small>NOVA MODERATED INTELLIGENCE</small><h3>{ko ? '유용한 지식이 함대를 성장시킵니다.' : 'Useful knowledge strengthens every fleet.'}</h3><p>{ko ? 'NOVA AI, 게임 전략, 채굴 가이드와 SpaceNovaX 생태계 정보를 공유하세요. 모든 회원은 읽을 수 있으며 KYC 보안 서클 5명을 확보한 캡틴만 게시할 수 있습니다.' : 'Share NOVA AI knowledge, game strategy, mining guides, and SpaceNovaX ecosystem information. Everyone can read; posting requires five KYC-approved Security Circle members.'}</p></div></div>
+    <div className="community-intro"><img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA"/><div><small>NOVA MODERATED INTELLIGENCE</small><h3>{ko ? '유용한 지식이 함대를 성장시킵니다.' : 'Useful knowledge strengthens every fleet.'}</h3><p>{ko ? 'NOVA AI, 게임 전략, 채굴 가이드와 SpaceNovaX 생태계 정보를 공유하세요. 모든 회원은 읽을 수 있으며 KYC 보안 서클 5명을 확보한 캡틴만 게시할 수 있습니다.' : 'Share NOVA AI knowledge, game strategy, mining guides, and SpaceNovaX ecosystem information. Everyone can read; posting requires five KYC-approved Security Circle members.'}</p></div></div>
     <section className="community-fleet-command">
       <div className="community-fleet-head"><div><small>COMMUNITY GROWTH COMMAND</small><h3>{ko ? '나의 초대 코드와 함대 현황' : 'My Invite Code & Fleet Status'}</h3><p>{ko ? '초대 링크를 공유해 검증된 캡틴 함대를 성장시키고 주간 함대·게임 순위를 확인하세요.' : 'Share your invitation, grow a verified Captain fleet, and track weekly fleet and game rankings.'}</p></div><div className="community-fleet-actions"><button className={`nova-voice-control voice-${voiceState}`} onClick={explainCommunityFleet} aria-live="polite"><Icon name="speaker" size={16}/>{voiceLabel(voiceState, language, 'NOVA 설명', 'NOVA BRIEF')}</button><button onClick={() => setTab('fleet')}>{ko ? '함대 전체 관리' : 'OPEN FLEET'}<Icon name="arrow" size={16}/></button></div></div>
       <div className="community-referral-code"><div><small>YOUR FLEET CODE</small><strong>{dashboard?.referralCode || user.referralCode || 'SYNCING'}</strong></div><input readOnly value={dashboard?.referralLink || 'Synchronizing invitation link…'}/><button onClick={copyInvite}><Icon name="copy" size={16}/>{ko ? '복사' : 'COPY'}</button><button onClick={shareInvite}><Icon name="external" size={16}/>{ko ? '공유' : 'SHARE'}</button></div>
@@ -1051,7 +1052,7 @@ function Whitepaper({ language }) {
   const ko = language === 'ko';
   return <main className="v15-page"><section className="command-card ops-module whitepaper-theme">
     <div className="section-heading"><div><small>SPACENOVAX CORPORATE MANIFESTO</small><h2>{ko ? '백서 및 비전' : 'Whitepaper & Vision'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>OFFICIAL</span></div>
-    <div className="manifesto-hero"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/><div><small>OUR IDENTITY</small><h3>{ko ? '우리는 코인을 판매하는 회사가 아닙니다.' : 'We are not a coin-selling company.'}</h3><p>{ko ? 'SpaceNovaX는 NOVA AI와 게임을 개발하는 기술 회사입니다. SPNX는 제품과 커뮤니티 참여를 연결하는 생태계 유틸리티입니다.' : 'SpaceNovaX is a technology company building NOVA AI and games. SPNX is an ecosystem utility connecting products with verified community participation.'}</p></div></div>
+    <div className="manifesto-hero"><img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA AI"/><div><small>OUR IDENTITY</small><h3>{ko ? '우리는 코인을 판매하는 회사가 아닙니다.' : 'We are not a coin-selling company.'}</h3><p>{ko ? 'SpaceNovaX는 NOVA AI와 게임을 개발하는 기술 회사입니다. SPNX는 제품과 커뮤니티 참여를 연결하는 생태계 유틸리티입니다.' : 'SpaceNovaX is a technology company building NOVA AI and games. SPNX is an ecosystem utility connecting products with verified community participation.'}</p></div></div>
     <div className="vision-pillars">
       <article><b>01</b><div><h3>NOVA AI</h3><p>{ko ? 'Web3·게임·커뮤니티 운영을 지원하는 SpaceNovaX 전용 인공지능 플랫폼.' : 'A proprietary AI platform for Web3, games, and community operations.'}</p></div></article>
       <article><b>02</b><div><h3>GAME STUDIO</h3><p>{ko ? 'NOVA-X 세계관을 기반으로 완성도 높은 GameFi 경험을 개발합니다.' : 'Premium GameFi experiences built around the NOVA-X universe.'}</p></div></article>
@@ -1322,10 +1323,11 @@ function NovaGuide({ tab, language, setTab }) {
       <div className="guide-actions"><button className={`nova-voice-control voice-${voiceState}`} onClick={() => speak()} aria-live="polite"><Icon name="speaker" size={16}/>{voiceLabel(voiceState, language, '안내 듣기', 'PLAY GUIDE')}</button><button className={`nova-voice-control ${listening ? 'listening voice-playing' : 'voice-idle'}`} onClick={listen}><Icon name="mic" size={16}/>{listening ? (language === 'ko' ? '듣는 중' : 'LISTENING') : (language === 'ko' ? '음성 명령' : 'VOICE COMMAND')}</button></div>
       <small className="nova-drag-tip">{language === 'ko' ? 'NOVA 이미지를 손가락이나 마우스로 원하는 위치에 옮길 수 있습니다.' : 'Drag NOVA anywhere with your finger or mouse.'}</small>
     </div>}
-    <button className="nova-guide-avatar" onPointerDown={startDrag} onClick={() => { if (dragRef.current.moved) { dragRef.current.moved = false; return; } setOpen((value) => !value); if (!open) speak(); }} aria-label="Move or open NOVA guide">
-      <img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI" draggable="false"/>
+    <button className={`nova-guide-avatar voice-${voiceState} ${listening ? 'listening' : ''}`} onPointerDown={startDrag} onClick={() => { if (dragRef.current.moved) { dragRef.current.moved = false; return; } setOpen((value) => !value); if (!open) speak(); }} aria-label="Move or open NOVA guide">
+      <img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA AI" draggable="false"/>
       <em className="nova-holo-scan"/><em className="nova-eye-light"/>
-      <span><i/>NOVA</span>
+      <em className="nova-core-node"/>
+      <span><i/>NOVA AI</span>
     </button>
   </aside>;
 }
