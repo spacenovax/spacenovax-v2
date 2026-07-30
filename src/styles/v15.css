@@ -29,7 +29,7 @@
 }
 .header-website{flex:0 0 auto}
 @media(max-width:520px){.header-website{width:36px;min-width:36px;padding:0}.header-website span{display:none}}
-@media(prefers-reduced-motion:reduce){.orbital-satellite,.orbital-shuttle,.orbital-signal,.orbital-event>i,.contact-orbit i,.nova-guide-avatar img,.nova-guide-avatar:before,.nova-holo-scan,.nova-eye-light{animation:none!important}.nova-guide-avatar,.header-website{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.orbital-satellite,.orbital-shuttle,.orbital-signal,.orbital-event>i,.contact-orbit i,.nova-guide-avatar img,.nova-guide-avatar:before,.nova-holo-scan,.nova-eye-light,.nova-voice-control{animation:none!important}.nova-guide-avatar,.header-website,.nova-voice-control{transition:none!important}}
 .live-state.setup{color:#ffc15e;border-color:rgba(255,193,94,.3)}
 .live-state.setup i{background:#ffc15e;box-shadow:0 0 9px #ffc15e}
 .ai-setup-notice{display:flex;align-items:flex-start;gap:11px;margin:12px 22px 0;padding:13px;border:1px solid rgba(255,193,94,.25);border-radius:14px;background:rgba(255,168,51,.07);color:#ffc15e}
@@ -157,6 +157,16 @@
 .guide-actions button{min-height:39px;border:1px solid rgba(83,231,255,.24);border-radius:12px;background:linear-gradient(120deg,rgba(24,120,255,.28),rgba(123,92,255,.25));color:#e8f9ff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:6px}
 .guide-actions button:last-child{background:linear-gradient(120deg,rgba(123,92,255,.36),rgba(255,78,157,.24));border-color:rgba(169,121,255,.32)}
 .guide-actions button.listening{color:#fff;border-color:#ff5b9e;box-shadow:0 0 18px rgba(255,78,157,.32);animation:v15pulse 1s infinite}
+.nova-voice-control{position:relative;isolation:isolate;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:transform .12s ease,filter .12s ease,border-color .18s ease,box-shadow .18s ease,color .18s ease!important}
+.nova-voice-control:before{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(105deg,transparent 22%,rgba(255,255,255,.24) 48%,transparent 72%);transform:translateX(-125%);opacity:0}
+.nova-voice-control:active{transform:scale(.94)!important;filter:brightness(1.3)}
+.nova-voice-control.voice-loading{color:#b9f8ff!important;border-color:#53e7ff!important;box-shadow:0 0 0 2px rgba(83,231,255,.12),0 0 22px rgba(83,231,255,.28)!important}
+.nova-voice-control.voice-loading:before{opacity:1;animation:voiceTouchScan .75s linear infinite}
+.nova-voice-control.voice-playing{color:#fff!important;border-color:#55f2ad!important;box-shadow:0 0 0 2px rgba(85,242,173,.13),0 0 25px rgba(85,242,173,.35)!important;animation:voiceTouchPulse .9s ease-in-out infinite}
+.nova-voice-control.voice-complete{color:#8fffc6!important;border-color:#55f2ad!important;box-shadow:0 0 20px rgba(85,242,173,.28)!important}
+.nova-voice-control.voice-error{color:#ff9bb1!important;border-color:#ff5f82!important;box-shadow:0 0 20px rgba(255,78,112,.3)!important}
+.nova-voice-control.voice-stopped{color:#ffd27a!important;border-color:#ffbd65!important}
+@keyframes voiceTouchScan{to{transform:translateX(125%)}}@keyframes voiceTouchPulse{50%{transform:scale(1.025);filter:brightness(1.22)}}
 @keyframes guideOpen{from{opacity:0;transform:translateY(10px) scale(.96)}}
 @keyframes novaBreath{0%,100%{transform:scale(1.01) translateY(0)}50%{transform:scale(1.055) translateY(-1px)}}@keyframes novaScan{to{transform:translateY(640%)}}@keyframes holoFlicker{0%,91%,100%{opacity:.7}92%{opacity:.2}94%{opacity:.85}}@keyframes eyeWake{0%,42%,48%,100%{opacity:.16}45%{opacity:.95;box-shadow:-9px 0 8px #8cefff,9px 0 8px #8cefff}}
 
