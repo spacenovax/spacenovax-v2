@@ -13,7 +13,7 @@ const clientSource = fs.readFileSync(new URL('../src/V15App.jsx', import.meta.ur
 if (!clientSource.includes('function unlockNovaAudio()')
   || !clientSource.includes('context.decodeAudioData')
   || !clientSource.includes('Boolean(window.Telegram?.WebApp)')
-  || !clientSource.includes('playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate)')
+  || !clientSource.includes('playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source)')
   || !clientSource.includes("['en', 'ko'].includes(normalizedLanguage)")
   || !clientSource.includes('startServerFallback')
   || !clientSource.includes('}, 500)')

@@ -125,8 +125,36 @@ let novaAudioUnlocked = false;
 let novaAudioKeepAliveSource;
 let novaAudioKeepAliveGain;
 let novaDeviceVoices = [];
+let activeNovaVoiceSource = '';
 
 const NOVA_SILENT_WAV = 'data:audio/wav;base64,UklGRuwAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YcgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+
+function triggerNovaHaptic(style = 'light') {
+  try {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(style);
+  } catch {}
+  if (!window.Telegram?.WebApp?.HapticFeedback && navigator.vibrate) {
+    navigator.vibrate(style === 'medium' ? 18 : 10);
+  }
+}
+
+function emitNovaVoiceStatus(source, status, requestId = novaSpeechRequest) {
+  if (requestId !== novaSpeechRequest && status !== 'stopped') return;
+  window.dispatchEvent(new CustomEvent('nova-voice-status', {
+    detail: { source, status, requestId },
+  }));
+  if (['complete', 'error', 'stopped'].includes(status) && activeNovaVoiceSource === source) {
+    activeNovaVoiceSource = '';
+  }
+}
+
+function beginNovaVoice(source, requestId) {
+  if (activeNovaVoiceSource && activeNovaVoiceSource !== source) {
+    emitNovaVoiceStatus(activeNovaVoiceSource, 'stopped', requestId);
+  }
+  activeNovaVoiceSource = source;
+  emitNovaVoiceStatus(source, 'loading', requestId);
+}
 
 function configureNovaPlayer(player) {
   player.preload = 'auto';
@@ -232,7 +260,7 @@ function findNovaDeviceVoice(locale) {
 window.speechSynthesis?.addEventListener?.('voiceschanged', refreshNovaDeviceVoices);
 refreshNovaDeviceVoices();
 
-function playNovaDeviceVoice(text, language, rate = .95, onFailure) {
+function playNovaDeviceVoice(text, language, rate = .95, onFailure, lifecycle = {}) {
   const synthesis = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   if (!synthesis || !Utterance) return false;
@@ -259,8 +287,12 @@ function playNovaDeviceVoice(text, language, rate = .95, onFailure) {
     utterance.onstart = () => {
       started = true;
       clearTimeout(startWatchdog);
+      lifecycle.onStart?.();
     };
-    utterance.onend = () => clearTimeout(startWatchdog);
+    utterance.onend = () => {
+      clearTimeout(startWatchdog);
+      lifecycle.onEnd?.();
+    };
     utterance.onerror = (event) => {
       clearTimeout(startWatchdog);
       if (!['canceled', 'interrupted'].includes(event.error)) {
@@ -279,7 +311,7 @@ function playNovaDeviceVoice(text, language, rate = .95, onFailure) {
   }
 }
 
-async function playNovaServerVoice(text, language, requestId, audioContextPromise, rate = .95) {
+async function playNovaServerVoice(text, language, requestId, audioContextPromise, rate = .95, statusSource = 'nova-global') {
   let audioUrl;
   try {
     novaAudioSource?.stop();
@@ -315,6 +347,7 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
     try {
       await player.play();
       novaAudioUnlocked = true;
+      emitNovaVoiceStatus(statusSource, 'playing', requestId);
       player.onended = () => {
         if (novaAudioObjectUrl === audioUrl) {
           URL.revokeObjectURL(audioUrl);
@@ -322,6 +355,7 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
         }
         player.dataset.novaReal = 'false';
         keepNovaMediaSessionAlive(player);
+        emitNovaVoiceStatus(statusSource, 'complete', requestId);
       };
       return true;
     } catch (mediaError) {
@@ -345,27 +379,33 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
         URL.revokeObjectURL(audioUrl);
         novaAudioObjectUrl = undefined;
       }
+      emitNovaVoiceStatus(statusSource, 'complete', requestId);
     };
     novaAudioSource = source;
+    emitNovaVoiceStatus(statusSource, 'playing', requestId);
     source.start(0);
     return true;
   } catch (error) {
     if (audioUrl && novaAudioObjectUrl !== audioUrl) URL.revokeObjectURL(audioUrl);
     console.warn('NOVA mobile voice playback failed:', error);
-    const usedDeviceVoice = playNovaDeviceVoice(text, language, rate);
-    window.dispatchEvent(new CustomEvent('nova-voice-status', {
-      detail: { ok: usedDeviceVoice, fallback: usedDeviceVoice },
-    }));
+    const usedDeviceVoice = playNovaDeviceVoice(text, language, rate, () => {
+      emitNovaVoiceStatus(statusSource, 'error', requestId);
+    }, {
+      onStart: () => emitNovaVoiceStatus(statusSource, 'playing', requestId),
+      onEnd: () => emitNovaVoiceStatus(statusSource, 'complete', requestId),
+    });
+    if (!usedDeviceVoice) emitNovaVoiceStatus(statusSource, 'error', requestId);
     return usedDeviceVoice;
   }
 }
 
-function speakNova(value, language = 'en', rate = .95) {
+function speakNova(value, language = 'en', rate = .95, source = 'nova-global') {
   const text = String(value || '').trim();
   if (!text) return false;
 
   const normalizedLanguage = String(language || 'en').toLowerCase();
   const requestId = ++novaSpeechRequest;
+  beginNovaVoice(source, requestId);
   const audioContextPromise = unlockNovaAudio();
   const synthesis = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
@@ -377,16 +417,58 @@ function speakNova(value, language = 'en', rate = .95) {
       const startServerFallback = () => {
         if (fallbackStarted || requestId !== novaSpeechRequest) return;
         fallbackStarted = true;
-        playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate);
+        playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source);
       };
-      if (playNovaDeviceVoice(text, normalizedLanguage, rate, startServerFallback)) return true;
+      if (playNovaDeviceVoice(text, normalizedLanguage, rate, startServerFallback, {
+        onStart: () => emitNovaVoiceStatus(source, 'playing', requestId),
+        onEnd: () => emitNovaVoiceStatus(source, 'complete', requestId),
+      })) return true;
       if (fallbackStarted) return true;
     }
-    playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate);
+    playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source);
     return true;
   }
 
-  return playNovaDeviceVoice(text, normalizedLanguage, rate);
+  const startServerFallback = () => playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source);
+  return playNovaDeviceVoice(text, normalizedLanguage, rate, startServerFallback, {
+    onStart: () => emitNovaVoiceStatus(source, 'playing', requestId),
+    onEnd: () => emitNovaVoiceStatus(source, 'complete', requestId),
+  });
+}
+
+function useNovaVoiceFeedback(source) {
+  const [voiceState, setVoiceState] = useState('idle');
+  useEffect(() => {
+    let resetTimer;
+    const update = (event) => {
+      if (event.detail?.source !== source) return;
+      clearTimeout(resetTimer);
+      setVoiceState(event.detail.status || 'idle');
+      if (['complete', 'error', 'stopped'].includes(event.detail.status)) {
+        resetTimer = window.setTimeout(() => setVoiceState('idle'), 1500);
+      }
+    };
+    window.addEventListener('nova-voice-status', update);
+    return () => {
+      clearTimeout(resetTimer);
+      window.removeEventListener('nova-voice-status', update);
+    };
+  }, [source]);
+  const play = useCallback((text, language, rate = .95) => {
+    triggerNovaHaptic('light');
+    return speakNova(text, language, rate, source);
+  }, [source]);
+  return { voiceState, play };
+}
+
+function voiceLabel(state, language, idleKo, idleEn) {
+  const ko = language === 'ko';
+  if (state === 'loading') return ko ? '음성 연결 중' : 'CONNECTING';
+  if (state === 'playing') return ko ? '재생 중' : 'PLAYING';
+  if (state === 'complete') return ko ? '재생 완료' : 'COMPLETE';
+  if (state === 'error') return ko ? '음성 오류' : 'VOICE ERROR';
+  if (state === 'stopped') return ko ? '재생 중지' : 'STOPPED';
+  return ko ? idleKo : idleEn;
 }
 
 function Icon({ name, size = 22 }) {
@@ -599,6 +681,7 @@ function Missions({ user, setUser, t, language }) {
   const [missions, setMissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState('');
+  const { voiceState, play: playMissionVoice } = useNovaVoiceFeedback('missions-briefing');
   useEffect(() => {
     let live = true;
     api('/api/missions').then((data) => { if (live) setMissions(data.missions || []); }).catch(() => {}).finally(() => live && setLoading(false));
@@ -611,7 +694,7 @@ function Missions({ user, setUser, t, language }) {
     ? '캡틴, 공식 웹사이트, 텔레그램, 디스코드, 엑스, 유튜브의 다섯 가지 미션을 모두 완료하세요. 여러분의 참여는 공식 채널 성장, 콘텐츠 도달률, 게임과 노바 AI의 지속적인 개발 기반을 강화합니다. 총 1,300 SPNX 포인트와 미션 패스포트가 지급되며, 기본 채굴 속도가 영구적으로 5퍼센트 증가합니다. 최종 토큰 전환은 KYC와 보안 검증을 통과한 계정만 가능합니다.'
     : 'Captain, complete all five missions: the official website, Telegram, Discord, X, and YouTube. Your participation strengthens official channel growth, content reach, and the sustainable development of our games and NOVA AI. You will receive 1,300 SPNX Points and a Mission Passport that permanently increases base mining speed by five percent. Final token conversion requires KYC and security approval.';
   function explainMission() {
-    speakNova(missionBrief, language, .94);
+    playMissionVoice(missionBrief, language, .94);
   }
   async function claim(mission) {
     if (mission.status?.completed || claiming) return;
@@ -651,7 +734,7 @@ function Missions({ user, setUser, t, language }) {
     <div className={`mission-passport ${passportComplete ? 'unlocked' : ''}`}>
       <img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/>
       <div><small>NOVA AI · MISSION BRIEFING</small><b>{passportComplete ? (language === 'ko' ? 'MISSION PASSPORT 인증 완료' : 'MISSION PASSPORT VERIFIED') : (language === 'ko' ? '5개 미션 완수 시 채굴률 +5%' : 'COMPLETE 5 MISSIONS · +5% MINING')}</b><p>{missionBrief}</p></div>
-      <button onClick={explainMission}><Icon name="speaker" size={17}/>{language === 'ko' ? 'NOVA 설명 듣기' : 'HEAR NOVA'}</button>
+      <button className={`nova-voice-control voice-${voiceState}`} onClick={explainMission} aria-live="polite"><Icon name="speaker" size={17}/>{voiceLabel(voiceState, language, 'NOVA 설명 듣기', 'HEAR NOVA')}</button>
     </div>
     <div className="community-growth-loop">
       <div><small>01 · PARTICIPATE</small><b>{language === 'ko' ? '공식 채널 참여' : 'Official participation'}</b><p>{language === 'ko' ? '검증된 회원이 SpaceNovaX 공식 채널에 참여합니다.' : 'Verified Captains join official SpaceNovaX channels.'}</p></div>
@@ -678,6 +761,7 @@ function Missions({ user, setUser, t, language }) {
 function Game({ user, t, language }) {
   const [gameOpen, setGameOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const { voiceState, play: playGameVoice } = useNovaVoiceFeedback('game-reward-briefing');
   const gameUrl = `${GAME_URL}/?source=mining-app&captain=${encodeURIComponent(user.id || 'guest')}&mode=fullscreen`;
   const launchBriefings = {
     en: 'Captain, NOVA-X launch sequence is ready. Beginning the Genesis Gate defense operation.',
@@ -723,7 +807,8 @@ function Game({ user, t, language }) {
   function launchGame() {
     // Keep this inside the user's tap handler so mobile and Telegram WebViews
     // grant audio playback permission before the cross-origin game is mounted.
-    speakNova(launchBriefings[language] || launchBriefings.en, language, .96);
+    triggerNovaHaptic('medium');
+    speakNova(launchBriefings[language] || launchBriefings.en, language, .96, 'game-launch');
     setLoaded(false);
     setGameOpen(true);
   }
@@ -732,7 +817,7 @@ function Game({ user, t, language }) {
     setLoaded(false);
   }
   function playRewardBriefing() {
-    speakNova(rewardBriefing, language, .94);
+    playGameVoice(rewardBriefing, language, .94);
   }
   return <main className="v15-page">
     <section className="command-card game-portal game-theme">
@@ -752,7 +837,7 @@ function Game({ user, t, language }) {
         </div>
       </div>
       <button className="primary-action game-single-launch" onClick={launchGame}><Icon name="game"/>{language === 'ko' ? 'NOVA-X 게임 시작' : 'LAUNCH NOVA-X'}<Icon name="arrow"/></button>
-      <div className="nova-reward-briefing"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/><div><small>NOVA · REWARD COMMAND</small><b>{language === 'ko' ? '게임 운영 및 보상 안내' : 'Game operations and reward briefing'}</b><p>{rewardBriefing}</p></div><button onClick={playRewardBriefing}><Icon name="speaker" size={17}/>{language === 'ko' ? '음성 안내' : 'PLAY VOICE'}</button></div>
+      <div className="nova-reward-briefing"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA AI"/><div><small>NOVA · REWARD COMMAND</small><b>{language === 'ko' ? '게임 운영 및 보상 안내' : 'Game operations and reward briefing'}</b><p>{rewardBriefing}</p></div><button className={`nova-voice-control voice-${voiceState}`} onClick={playRewardBriefing} aria-live="polite"><Icon name="speaker" size={17}/>{voiceLabel(voiceState, language, '음성 안내', 'PLAY VOICE')}</button></div>
       <div className="game-reward-grid"><span><small>300 DIAMONDS</small><b>+10 SPNX × 2</b></span><span><small>SUPPLY CRATE · ONCE</small><b>+1~5 SPNX</b></span><span><small>FIRST BOSS · ONCE</small><b>+5 SPNX</b></span><span><small>DAILY RESET</small><b>06:00 AM ET</b></span></div>
       <div className="game-stats"><span><small>{t.dailyCap}</small><b>{Number(user.gameReward?.earnedToday || 0)} / 30 SPNX</b></span><span><small>BEST SCORE</small><b>{Number(user.gameReward?.bestScore || 0).toLocaleString()}</b></span></div>
     </section>
@@ -778,7 +863,9 @@ function NovaAI({ user, t, language }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState('');
   const [aiStatus, setAiStatus] = useState({ configured: false, enabled: true, model: '' });
+  const { voiceState, play: playAiVoice } = useNovaVoiceFeedback('nova-ai-message');
   const endRef = useRef(null);
   const abortRef = useRef(null);
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(messages.slice(-50))); endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, storageKey]);
@@ -789,10 +876,12 @@ function NovaAI({ user, t, language }) {
     window.speechSynthesis?.cancel();
     setBusy(false); setText(''); setMessages([initialMessage()]);
   }
-  function speak(value) {
-    speakNova(value, language, 1);
+  function speak(value, messageId) {
+    setSpeakingMessageId(messageId || '');
+    playAiVoice(value, language, 1);
   }
   function voiceInput() {
+    triggerNovaHaptic('medium');
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return window.alert('Voice input is not supported in this browser.');
     const recognition = new Recognition();
@@ -842,7 +931,7 @@ function NovaAI({ user, t, language }) {
     <div className="ai-messages">{messages.map((m) => <article className={m.role} key={m.id}>
       <div className={`message-avatar ${m.role === 'nova' ? 'nova-message-avatar' : ''}`}>{m.role === 'nova' ? <img src="/nova-ai-official-mascot-v16.png" alt=""/> : (user.firstName || 'C').slice(0,1).toUpperCase()}</div>
       <div className="message-body"><small>{m.role === 'nova' ? 'NOVA' : t.captain}</small><p>{m.text}</p>
-        <div className="message-tools"><button onClick={() => navigator.clipboard?.writeText(m.text)}><Icon name="copy" size={14}/>{t.copy}</button>{m.role === 'nova' && <button onClick={() => speak(m.text)}><Icon name="speaker" size={14}/>{t.read}</button>}</div>
+        <div className="message-tools"><button onClick={() => navigator.clipboard?.writeText(m.text)}><Icon name="copy" size={14}/>{t.copy}</button>{m.role === 'nova' && <button className={`nova-voice-control ${speakingMessageId === m.id ? `voice-${voiceState}` : 'voice-idle'}`} onClick={() => speak(m.text, m.id)} aria-live="polite"><Icon name="speaker" size={14}/>{speakingMessageId === m.id ? voiceLabel(voiceState, language, '음성으로 듣기', 'READ ALOUD') : t.read}</button>}</div>
       </div>
     </article>)}
       {busy && <article className="nova thinking"><div className="message-avatar nova-message-avatar"><img src="/nova-ai-official-mascot-v16.png" alt=""/></div><div className="message-body"><small>NOVA</small><p><span className="typing"><i/><i/><i/></span>{t.thinking}</p></div></article>}
@@ -882,7 +971,7 @@ function More({ t, setTab, language }) {
     <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>Open module</small></span><Icon name="arrow" size={18}/></button>)}</div>
     <h3>{t.official}</h3><div className="official-links"><a className="official-primary" href="https://spacenovax.com" target="_blank" rel="noreferrer"><Icon name="globe" size={15}/>OFFICIAL WEBSITE</a><a href="https://t.me/spacenovaxteam" target="_blank" rel="noreferrer">TELEGRAM</a><a href="https://x.com/spacenovaxteam" target="_blank" rel="noreferrer">X</a><a href="https://discord.gg/rxVNWMC8e8" target="_blank" rel="noreferrer">DISCORD</a></div>
     <section className="collaboration-contact">
-      <div className="contact-orbit"><i/><span>SNX</span></div>
+      <div className="contact-orbit"><i/><span>SPNX</span></div>
       <div><small>PARTNERSHIP · MEDIA · TECHNOLOGY</small><h3>{ko ? 'SpaceNovaX와 미래를 함께 만드세요.' : 'Build the future with SpaceNovaX.'}</h3><p>{ko ? 'AI, GameFi, 콘텐츠, 기술 협업 및 공식 사업 문의 전용 창구입니다.' : 'Official contact for AI, GameFi, content, technology collaboration, and business inquiries.'}</p></div>
       <div className="contact-actions"><a href="mailto:spacenovax@hotmail.com?subject=SpaceNovaX%20Collaboration%20Inquiry"><Icon name="external" size={16}/>spacenovax@hotmail.com</a><a href="https://spacenovax.com" target="_blank" rel="noreferrer"><Icon name="globe" size={16}/>spacenovax.com</a></div>
     </section>
@@ -897,6 +986,7 @@ function Community({ user, language, setTab }) {
   const [form, setForm] = useState({ category: 'nova-ai', title: '', body: '', imageData: '', imageName: '' });
   const [notice, setNotice] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const { voiceState, play: playCommunityVoice } = useNovaVoiceFeedback('community-briefing');
   const ko = language === 'ko';
   const load = useCallback(() => api('/api/community/feed', { method: 'POST', body: { category } }).then((data) => { setPosts(data.posts || []); setPermission(data.permission || permission); }).catch((error) => setNotice(error.message)), [category]);
   useEffect(() => {
@@ -916,7 +1006,7 @@ function Community({ user, language, setTab }) {
     const text = ko
       ? '캡틴, 이곳에서 본인의 함대 초대 코드와 링크를 복사하거나 공유할 수 있습니다. 초대한 회원이 실제로 채굴하면 활성 함대원으로 집계되고 채굴 속도 보너스가 적용됩니다. 최종 솔라나 SPNX 전환에는 본인 KYC와 추천인의 KYC 승인이 필요합니다. 주간 함대 순위는 함대원들의 게임 종합 점수로 결정되며, 게임 개인 순위도 이 화면에서 확인할 수 있습니다. 함대 전체 관리 버튼을 누르면 보안 서클, 함대 채팅, 비활성 회원 알림과 전체 리그를 이용할 수 있습니다.'
       : 'Captain, copy or share your fleet invitation code and link here. Invited members count as active fleet members when they actually mine, activating the mining speed bonus. Final Solana SPNX conversion requires your KYC and KYC approval for qualifying referrals. Weekly fleet ranking is based on the fleet game score, and your personal game rank is also shown here. Open Fleet Management for Security Circle, fleet chat, inactive-member reminders, and the complete league.';
-    speakNova(text, language, .94);
+    playCommunityVoice(text, language, .94);
   }
   async function prepareImage(file) {
     if (!file) return setForm((current) => ({ ...current, imageData: '', imageName: '' }));
@@ -948,7 +1038,7 @@ function Community({ user, language, setTab }) {
     <div className="section-heading"><div><small>CAPTAIN KNOWLEDGE NETWORK</small><h2>{ko ? '캡틴 커뮤니티' : 'Captain Community'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>TRUST GATED</span></div>
     <div className="community-intro"><img src="/nova-ai-official-mascot-v16.png" alt="NOVA"/><div><small>NOVA MODERATED INTELLIGENCE</small><h3>{ko ? '유용한 지식이 함대를 성장시킵니다.' : 'Useful knowledge strengthens every fleet.'}</h3><p>{ko ? 'NOVA AI, 게임 전략, 채굴 가이드와 SpaceNovaX 생태계 정보를 공유하세요. 모든 회원은 읽을 수 있으며 KYC 보안 서클 5명을 확보한 캡틴만 게시할 수 있습니다.' : 'Share NOVA AI knowledge, game strategy, mining guides, and SpaceNovaX ecosystem information. Everyone can read; posting requires five KYC-approved Security Circle members.'}</p></div></div>
     <section className="community-fleet-command">
-      <div className="community-fleet-head"><div><small>COMMUNITY GROWTH COMMAND</small><h3>{ko ? '나의 초대 코드와 함대 현황' : 'My Invite Code & Fleet Status'}</h3><p>{ko ? '초대 링크를 공유해 검증된 캡틴 함대를 성장시키고 주간 함대·게임 순위를 확인하세요.' : 'Share your invitation, grow a verified Captain fleet, and track weekly fleet and game rankings.'}</p></div><div className="community-fleet-actions"><button onClick={explainCommunityFleet}><Icon name="speaker" size={16}/>{ko ? 'NOVA 설명' : 'NOVA BRIEF'}</button><button onClick={() => setTab('fleet')}>{ko ? '함대 전체 관리' : 'OPEN FLEET'}<Icon name="arrow" size={16}/></button></div></div>
+      <div className="community-fleet-head"><div><small>COMMUNITY GROWTH COMMAND</small><h3>{ko ? '나의 초대 코드와 함대 현황' : 'My Invite Code & Fleet Status'}</h3><p>{ko ? '초대 링크를 공유해 검증된 캡틴 함대를 성장시키고 주간 함대·게임 순위를 확인하세요.' : 'Share your invitation, grow a verified Captain fleet, and track weekly fleet and game rankings.'}</p></div><div className="community-fleet-actions"><button className={`nova-voice-control voice-${voiceState}`} onClick={explainCommunityFleet} aria-live="polite"><Icon name="speaker" size={16}/>{voiceLabel(voiceState, language, 'NOVA 설명', 'NOVA BRIEF')}</button><button onClick={() => setTab('fleet')}>{ko ? '함대 전체 관리' : 'OPEN FLEET'}<Icon name="arrow" size={16}/></button></div></div>
       <div className="community-referral-code"><div><small>YOUR FLEET CODE</small><strong>{dashboard?.referralCode || user.referralCode || 'SYNCING'}</strong></div><input readOnly value={dashboard?.referralLink || 'Synchronizing invitation link…'}/><button onClick={copyInvite}><Icon name="copy" size={16}/>{ko ? '복사' : 'COPY'}</button><button onClick={shareInvite}><Icon name="external" size={16}/>{ko ? '공유' : 'SHARE'}</button></div>
       <div className="community-fleet-stats"><span><small>{ko ? '총 초대' : 'TOTAL INVITES'}</small><b>{dashboard?.totalInvites ?? user.referrals?.length ?? 0}</b></span><span><small>{ko ? '활성 함대' : 'ACTIVE FLEET'}</small><b>{dashboard?.activeFleet ?? user.activeFleet ?? 0}</b></span><span><small>{ko ? '채굴 보너스' : 'MINING BONUS'}</small><b>+{dashboard?.fleetBonus ?? user.fleetBonus ?? 0}%</b></span><span><small>{ko ? '주간 함대 순위' : 'FLEET RANK'}</small><b>{dashboard?.fleetRank ? `#${dashboard.fleetRank}` : '—'}</b></span><span><small>{ko ? '게임 순위' : 'GAME RANK'}</small><b>{dashboard?.gameRank ? `#${dashboard.gameRank}` : '—'}</b></span><span><small>{ko ? '최고 게임 점수' : 'BEST GAME SCORE'}</small><b>{Number(dashboard?.gameScore || 0).toLocaleString()}</b></span></div>
       <div className="community-rank-panels">
@@ -1134,6 +1224,7 @@ function Nav({ tab, setTab, t }) {
 function NovaGuide({ tab, language, setTab }) {
   const [open, setOpen] = useState(false);
   const [listening, setListening] = useState(false);
+  const { voiceState, play: playGuideVoice } = useNovaVoiceFeedback('floating-guide');
   const [position, setPosition] = useState(() => {
     try { return JSON.parse(localStorage.getItem('spnx_nova_position_v1')) || { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; }
   });
@@ -1206,9 +1297,10 @@ function NovaGuide({ tab, language, setTab }) {
   };
   const guide = (guides[language] || guides.en)[tab] || (guides[language] || guides.en).more;
   function speak(value = guide) {
-    speakNova(value, language, .95);
+    playGuideVoice(value, language, .95);
   }
   function listen() {
+    triggerNovaHaptic('medium');
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return window.alert('Voice control is not supported in this browser.');
     const recognition = new Recognition();
@@ -1235,7 +1327,7 @@ function NovaGuide({ tab, language, setTab }) {
     {open && <div className="nova-guide-panel">
       <button className="guide-close" onClick={() => setOpen(false)} aria-label="Close"><Icon name="close" size={15}/></button>
       <div><small>NOVA GUIDANCE ONLINE</small><b>{language === 'ko' ? '무엇을 도와드릴까요?' : 'How may I assist?'}</b><p>{guide}</p></div>
-      <div className="guide-actions"><button onClick={() => speak()}><Icon name="speaker" size={16}/>{language === 'ko' ? '안내 듣기' : 'Play guide'}</button><button className={listening ? 'listening' : ''} onClick={listen}><Icon name="mic" size={16}/>{language === 'ko' ? '음성 명령' : 'Voice command'}</button></div>
+      <div className="guide-actions"><button className={`nova-voice-control voice-${voiceState}`} onClick={() => speak()} aria-live="polite"><Icon name="speaker" size={16}/>{voiceLabel(voiceState, language, '안내 듣기', 'PLAY GUIDE')}</button><button className={`nova-voice-control ${listening ? 'listening voice-playing' : 'voice-idle'}`} onClick={listen}><Icon name="mic" size={16}/>{listening ? (language === 'ko' ? '듣는 중' : 'LISTENING') : (language === 'ko' ? '음성 명령' : 'VOICE COMMAND')}</button></div>
       <small className="nova-drag-tip">{language === 'ko' ? 'NOVA 이미지를 손가락이나 마우스로 원하는 위치에 옮길 수 있습니다.' : 'Drag NOVA anywhere with your finger or mouse.'}</small>
     </div>}
     <button className="nova-guide-avatar" onPointerDown={startDrag} onClick={() => { if (dragRef.current.moved) { dragRef.current.moved = false; return; } setOpen((value) => !value); if (!open) speak(); }} aria-label="Move or open NOVA guide">
