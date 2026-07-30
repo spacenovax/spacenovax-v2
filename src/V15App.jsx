@@ -637,23 +637,15 @@ function ActivityLedger({ balance, t }) {
 function Home({ user, t, onStart, onClaim, busy, setTab }) {
   return <main className="v15-page">
     <section className="hero-command">
-      <div className="hero-space"><span className="hero-planet"/><span className="hero-scan"/></div>
+      <div className="hero-space"/>
       <div className="hero-copy">
         <span className="eyebrow"><i />{t.verified}</span>
         <small>{t.balance}</small><strong>{format(user.balance)}</strong><h1>SPNX POINTS</h1>
         <p>NOVA-X1 / AI CONTROLLED GENESIS FLAGSHIP</p>
       </div>
       <img className="hero-station" src="/spacenovax-orbital-hq-v15.png" alt="SpaceNovaX Orbital Headquarters" />
-      <div className="orbital-nebula nebula-a" aria-hidden="true"/>
-      <div className="orbital-nebula nebula-b" aria-hidden="true"/>
-      <div className="orbital-ring ring-a" aria-hidden="true"/>
-      <div className="orbital-ring ring-b" aria-hidden="true"/>
-      <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 22 }, (_, index) => <i key={index}/>)}</div>
-      <div className="orbital-meteor meteor-a" aria-hidden="true"/><div className="orbital-meteor meteor-b" aria-hidden="true"/>
+      <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
       <div className="orbital-satellite" aria-hidden="true"><i/><b/><span/></div>
-      <div className="orbital-shuttle" aria-hidden="true"><i/></div>
-      <div className="orbital-signal signal-one" aria-hidden="true"/><div className="orbital-signal signal-two" aria-hidden="true"/>
-      <div className="orbital-event"><i/><span><small>LIVE ORBITAL EVENT</small><b>QUANTUM RELAY ALIGNMENT</b></span></div>
       <div className="station-brand"><span>ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
