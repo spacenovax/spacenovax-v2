@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/v15.css';
+import './styles/home-orbital-hero.css';
 
 const GAME_URL = 'https://game.spacenovax.com';
 const PREVIEW_BUILD = import.meta.env.VITE_PREVIEW_BUILD === 'true' || new URLSearchParams(window.location.search).get('preview') === '1';
