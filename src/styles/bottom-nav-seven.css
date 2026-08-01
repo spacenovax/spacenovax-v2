@@ -1,0 +1,39 @@
+/* Keep every primary destination visible after Orbit was added. */
+.v15-nav {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.v15-nav button[data-nav='orbit'] {
+  --nav-color: #53e7ff;
+  color: #75b7c9;
+}
+
+.v15-nav button {
+  min-width: 0;
+}
+
+.v15-nav button small {
+  min-width: 0;
+  padding-inline: 1px;
+}
+
+@media (max-width: 520px) {
+  .v15-nav {
+    padding-inline: 4px;
+  }
+
+  .v15-nav button {
+    padding-inline: 1px;
+  }
+
+  .v15-nav button small {
+    font-size: 6px;
+    letter-spacing: -0.02em;
+  }
+}
+
+@media (max-width: 360px) {
+  .v15-nav button small {
+    font-size: 5.5px;
+  }
+}
