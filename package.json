@@ -1,6 +1,6 @@
 {
-  "name": "spacenovax-v15-command-network",
-  "version": "16.6.0-preview.13",
+  "name": "spacenovax-v17-earth-navigation",
+  "version": "17.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "build:preview": "vite build --mode preview",
     "start": "node server.js",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs"
+    "test": "npm run build && node --test tests/backend-integrity.mjs tests/critical-reward-flow.mjs tests/frontend-lifecycle.mjs tests/nova-ai-gemini.mjs"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
@@ -20,8 +20,10 @@
     "express": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "satellite.js": "^5.0.0",
+    "three": "^0.160.0",
     "tweetnacl": "^1.0.3",
     "vite": "latest"
   },
-  "description": "SpaceNovaX V15 English-first mining command network with multilingual UI, NOVA AI and official game portal"
+  "description": "SpaceNovaX V15 English-first mining command network with multilingual UI, NOVA AI, official game portal, and Orbit Control (NOVA Earth Intelligence)"
 }
