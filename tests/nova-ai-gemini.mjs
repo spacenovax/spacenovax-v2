@@ -8,13 +8,16 @@ const base = `http://127.0.0.1:${appPort}`;
 const upstreamBase = `http://127.0.0.1:${upstreamPort}`;
 const dataFile = `/tmp/spnx-v166-nova-${process.pid}.json`;
 const upstreamRequests = [];
+const completeTestReply = 'NOVA AI test response with enough detail to verify that ordinary informational answers remain complete, useful, and self-contained without triggering an unnecessary expansion request.';
+const expandedTestReply = 'NOVA AI expanded response with the key facts, practical next steps, and an important limitation. This verifies that a short first answer is automatically replaced by a more complete response without consuming another daily message.';
 const clientSource = fs.readFileSync(new URL('../src/V15App.jsx', import.meta.url), 'utf8');
 
 if (!clientSource.includes('function unlockNovaAudio()')
   || !clientSource.includes('context.decodeAudioData')
   || !clientSource.includes('Boolean(window.Telegram?.WebApp)')
   || !clientSource.includes('playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source)')
-  || !clientSource.includes("['en', 'ko'].includes(normalizedLanguage)")
+  || clientSource.includes("['en', 'ko'].includes(normalizedLanguage)")
+  || !clientSource.includes('NOVA_SPEECH_LOCALES[requestedLanguage]')
   || !clientSource.includes('startServerFallback')
   || !clientSource.includes('}, 500)')
   || !clientSource.includes("player.setAttribute('playsinline', '')")
@@ -55,9 +58,12 @@ const upstream = http.createServer(async (req, res) => {
     }));
     return;
   }
+  const latestText = String(body.contents?.at(-1)?.parts?.[0]?.text || '');
+  const isExpansionPrompt = latestText.includes('Please provide a complete answer');
+  const isShortAnswerFixture = body.contents?.some((item) => item?.parts?.some((part) => String(part?.text || '').includes('Needs expansion')));
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(JSON.stringify({
-    candidates: [{ content: { role: 'model', parts: [{ text: 'NOVA AI test response.' }] } }],
+    candidates: [{ content: { role: 'model', parts: [{ text: isShortAnswerFixture ? (isExpansionPrompt ? expandedTestReply : 'Too short.') : completeTestReply }] } }],
   }));
 });
 await new Promise((resolve) => upstream.listen(Number(upstreamPort), '127.0.0.1', resolve));
@@ -132,7 +138,7 @@ try {
       }),
     });
     const body = await response.json();
-    if (!response.ok || body.reply !== 'NOVA AI test response.' || body.usage?.used !== index + 1) {
+    if (!response.ok || body.reply !== completeTestReply || body.usage?.used !== index + 1) {
       throw new Error(`NOVA request ${index + 1} failed: ${response.status} ${JSON.stringify(body)}`);
     }
   }
@@ -171,9 +177,23 @@ try {
     throw new Error(`English limit message mismatch: ${englishLimitedResponse.status} ${JSON.stringify(englishLimited)}`);
   }
 
+  const expansionHeaders = {
+    ...headers,
+    'x-spnx-client-id': `nova-qa-expansion-${Date.now()}`,
+  };
+  const expansionResponse = await fetch(`${base}/api/nova/chat`, {
+    method: 'POST',
+    headers: expansionHeaders,
+    body: JSON.stringify({ message: 'Needs expansion because this is a substantive informational question.', language: 'en' }),
+  });
+  const expansion = await expansionResponse.json();
+  if (!expansionResponse.ok || expansion.reply !== expandedTestReply || expansion.usage?.used !== 1) {
+    throw new Error(`NOVA short-answer expansion failed: ${expansionResponse.status} ${JSON.stringify(expansion)}`);
+  }
+
   const chatRequests = upstreamRequests.filter((request) => request.url.includes(':generateContent'));
   const speechRequests = upstreamRequests.filter((request) => request.url === '/v1beta/interactions');
-  if (chatRequests.length !== 20) throw new Error(`Expected 20 chat upstream calls, received ${chatRequests.length}`);
+  if (chatRequests.length !== 22) throw new Error(`Expected 22 chat upstream calls including one answer expansion, received ${chatRequests.length}`);
   if (speechRequests.length !== 3
     || speechRequests[0].body.model !== 'gemini-3.1-flash-tts-preview'
     || speechRequests[1].body.model !== 'gemini-3.1-flash-tts-preview'
@@ -187,11 +207,20 @@ try {
   if (!first.body.system_instruction?.parts?.[0]?.text?.includes('Always identify yourself only as NOVA AI')) {
     throw new Error('NOVA identity instruction missing.');
   }
+  if (!first.body.system_instruction?.parts?.[0]?.text?.includes('Always answer in Spanish')) {
+    throw new Error('NOVA selected-language instruction missing.');
+  }
+  if (!first.body.system_instruction?.parts?.[0]?.text?.includes('3 to 6 useful sentences')) {
+    throw new Error('NOVA complete-answer instruction missing.');
+  }
+  if (Number(first.body.generationConfig?.maxOutputTokens || 0) < 1200) {
+    throw new Error('NOVA output token budget is too small for complete answers.');
+  }
   if (first.body.contents?.at(-1)?.role !== 'user') throw new Error('Conversation payload was not converted correctly.');
 
   const stored = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   const userIds = new Set(stored.events.filter((event) => event.type === 'nova_chat').map((event) => event.userId));
-  if (userIds.size !== 2 || [...userIds].some((userId) => userId.startsWith('spoofed-'))) {
+  if (userIds.size !== 3 || [...userIds].some((userId) => userId.startsWith('spoofed-'))) {
     throw new Error('NOVA daily quota trusted client-provided identity.');
   }
 
@@ -203,6 +232,8 @@ try {
     englishLimitCopy: true,
     serverAccountIdentity: true,
     multilingualPrompt: true,
+    completeAnswerPrompt: true,
+    shortAnswerExpansion: true,
     mobileSpeechFallback: true,
     telegramAudioUnlock: true,
   }));
