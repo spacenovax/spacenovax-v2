@@ -1,0 +1,84 @@
+/* Home-only cinematic framing for the orbital headquarters. */
+.hero-command {
+  height: 610px;
+  isolation: isolate;
+  background: #020812;
+}
+
+.hero-command .hero-station {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 54% center;
+  filter: saturate(1.08) contrast(1.1) brightness(1.12)
+    drop-shadow(0 0 26px rgba(74, 186, 255, 0.16));
+  animation-name: orbitalHeadquartersCamera;
+}
+
+.hero-command .hero-live-light {
+  opacity: 0.72;
+  background:
+    radial-gradient(ellipse at 56% 58%, rgba(72, 183, 255, 0.25), transparent 31%),
+    linear-gradient(106deg, transparent 29%, rgba(201, 239, 255, 0.12) 49%, transparent 66%);
+}
+
+.hero-command::after {
+  background:
+    linear-gradient(90deg, rgba(1, 8, 18, 0.82) 0%, rgba(1, 8, 18, 0.42) 32%, transparent 65%),
+    linear-gradient(180deg, rgba(1, 6, 14, 0.14), transparent 45%),
+    linear-gradient(0deg, rgba(1, 7, 15, 0.78), transparent 32%),
+    radial-gradient(ellipse at 54% 52%, transparent 48%, rgba(0, 3, 9, 0.22) 100%);
+}
+
+.hero-command .hero-copy {
+  width: min(54%, 340px);
+  text-shadow: 0 2px 18px rgba(0, 3, 12, 0.95);
+}
+
+.hero-command .station-brand {
+  left: auto;
+  right: 24px;
+  bottom: 91px;
+  text-align: right;
+  border-left: 0;
+  border-right: 2px solid rgba(83, 231, 255, 0.82);
+  background: linear-gradient(270deg, rgba(2, 11, 22, 0.84), transparent);
+}
+
+.hero-command .captain-strip {
+  background: rgba(2, 9, 18, 0.9);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+@keyframes orbitalHeadquartersCamera {
+  0% { transform: scale(1.025) translate3d(-0.25%, 0.15%, 0); }
+  100% { transform: scale(1.065) translate3d(0.35%, -0.25%, 0); }
+}
+
+@media (max-width: 520px) {
+  .hero-command {
+    height: 560px;
+  }
+
+  .hero-command .hero-station {
+    object-position: 56% center;
+    filter: saturate(1.06) contrast(1.08) brightness(1.09);
+  }
+
+  .hero-command .hero-copy {
+    width: 72%;
+  }
+
+  .hero-command .station-brand {
+    left: auto;
+    right: 14px;
+    bottom: 82px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-command .hero-station {
+    transform: scale(1.04);
+  }
+}

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/v15.css';
+import './styles/home-orbital-hero.css';
+import './styles/bottom-nav-seven.css';
+import OrbitV20 from './orbit/OrbitV20/OrbitV20.jsx';
 
 const GAME_URL = 'https://game.spacenovax.com';
 const PREVIEW_BUILD = import.meta.env.VITE_PREVIEW_BUILD === 'true' || new URLSearchParams(window.location.search).get('preview') === '1';
@@ -66,7 +69,7 @@ function getClientId() {
   return value;
 }
 
-async function api(path, options = {}) {
+export async function api(path, options = {}) {
   const initData = window.Telegram?.WebApp?.initData || '';
   let body = options.body;
   if (typeof body === 'object' && body !== null) body = JSON.stringify({ ...body, clientId: getClientId() });
@@ -129,7 +132,7 @@ let activeNovaVoiceSource = '';
 
 const NOVA_SILENT_WAV = 'data:audio/wav;base64,UklGRuwAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YcgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
-function triggerNovaHaptic(style = 'light') {
+export function triggerNovaHaptic(style = 'light') {
   try {
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(style);
   } catch {}
@@ -399,11 +402,12 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
   }
 }
 
-function speakNova(value, language = 'en', rate = .95, source = 'nova-global') {
+export function speakNova(value, language = 'en', rate = .95, source = 'nova-global') {
   const text = String(value || '').trim();
   if (!text) return false;
 
-  const normalizedLanguage = String(language || 'en').toLowerCase();
+  const requestedLanguage = String(language || 'en').trim().toLowerCase().replace(/_/g, '-').split('-')[0];
+  const normalizedLanguage = NOVA_SPEECH_LOCALES[requestedLanguage] ? requestedLanguage : 'en';
   const requestId = ++novaSpeechRequest;
   beginNovaVoice(source, requestId);
   const audioContextPromise = unlockNovaAudio();
@@ -412,7 +416,10 @@ function speakNova(value, language = 'en', rate = .95, source = 'nova-global') {
   const mobileOrTelegram = Boolean(window.Telegram?.WebApp)
     || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   if (mobileOrTelegram || !synthesis || !Utterance) {
-    if (synthesis && Utterance && ['en', 'ko'].includes(normalizedLanguage)) {
+    // Try the selected device language first for every supported locale. If
+    // that voice is unavailable or does not start promptly, use NOVA server
+    // speech with the same language instead of silently falling back to EN/KO.
+    if (synthesis && Utterance) {
       let fallbackStarted = false;
       const startServerFallback = () => {
         if (fallbackStarted || requestId !== novaSpeechRequest) return;
@@ -436,7 +443,7 @@ function speakNova(value, language = 'en', rate = .95, source = 'nova-global') {
   });
 }
 
-function useNovaVoiceFeedback(source) {
+export function useNovaVoiceFeedback(source) {
   const [voiceState, setVoiceState] = useState('idle');
   useEffect(() => {
     let resetTimer;
@@ -461,7 +468,7 @@ function useNovaVoiceFeedback(source) {
   return { voiceState, play };
 }
 
-function voiceLabel(state, language, idleKo, idleEn) {
+export function voiceLabel(state, language, idleKo, idleEn) {
   const ko = language === 'ko';
   if (state === 'loading') return ko ? '음성 연결 중' : 'CONNECTING';
   if (state === 'playing') return ko ? '재생 중' : 'PLAYING';
@@ -546,7 +553,7 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
       active={active}
       progress={pct}
       detailed={detailed}
-      onActivate={!active && !busy ? onStart : claimable && !busy ? onClaim : undefined}
+      onActivate={claimable && !busy ? onClaim : !active && !busy ? onStart : undefined}
       actionLabel={claimable ? t.claim : t.start}
     />
     <div className="cycle-visual">
@@ -878,7 +885,7 @@ function NovaAI({ user, t, language }) {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return window.alert('Voice input is not supported in this browser.');
     const recognition = new Recognition();
-    recognition.lang = language === 'ko' ? 'ko-KR' : 'en-US';
+    recognition.lang = NOVA_SPEECH_LOCALES[language] || NOVA_SPEECH_LOCALES.en;
     recognition.interimResults = true;
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => setText(Array.from(event.results).map((r) => r[0].transcript).join(''));
@@ -920,7 +927,7 @@ function NovaAI({ user, t, language }) {
   return <main className="v15-page"><section className="command-card ai-console ai-theme">
     <div className="section-heading ai-heading"><div><small>SPACENOVAX INTELLIGENCE CORE</small><h2>{t.ai}</h2></div><div className="ai-head-actions"><span className={`live-state ${aiStatus.configured && aiStatus.enabled ? 'pulse' : 'setup'}`}><i/>{aiStatus.configured && aiStatus.enabled ? 'LIVE AI' : 'SETUP REQUIRED'}</span><button onClick={newChat} title={t.newChat}><Icon name="plus" size={18}/><span>{t.newChat}</span></button></div></div>
     <div className="ai-identity"><div className="nova-portrait"><img src="/nova-ai-command-intelligence-v17.webp" alt="NOVA AI command model"/><i/><i/></div><div><b>NOVA</b><small>SpaceNovaX Proprietary AI · Web3 · Mining · GameFi{aiStatus.model ? ` · ${aiStatus.model}` : ''}</small></div></div>
-    {!aiStatus.configured && <div className="ai-setup-notice"><Icon name="shield"/><div><b>Live intelligence is not connected</b><p>Restart START_PREVIEW.bat and enter a valid server-side NOVA AI key. The key is never stored in the browser.</p></div></div>}
+    {!aiStatus.configured && <div className="ai-setup-notice"><Icon name="shield"/><div><b>Live intelligence is not connected</b><p>Restart the SpaceNovaX launcher and enter a valid server-side NOVA AI key when prompted. The key is never stored in the browser.</p></div></div>}
     <div className="ai-messages">{messages.map((m) => <article className={m.role} key={m.id}>
       <div className={`message-avatar ${m.role === 'nova' ? 'nova-message-avatar' : ''}`}>{m.role === 'nova' ? <img src="/nova-ai-command-intelligence-v17.webp" alt=""/> : (user.firstName || 'C').slice(0,1).toUpperCase()}</div>
       <div className="message-body"><small>{m.role === 'nova' ? 'NOVA' : t.captain}</small><p>{m.text}</p>
@@ -958,7 +965,7 @@ function PreviewPanel({ open, close, t }) {
 
 function More({ t, setTab, language }) {
   const ko = language === 'ko';
-  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['community', t.community, 'community'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
+  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', 'Orbit Control', 'globe'], ['community', t.community, 'community'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
   return <main className="v15-page"><section className="command-card command-grid command-theme">
     <div className="section-heading"><div><small>NOVA OPERATIONS</small><h2>{t.command}</h2></div></div>
     <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>Open module</small></span><Icon name="arrow" size={18}/></button>)}</div>
@@ -1210,7 +1217,7 @@ function Kyc({ t, language }) {
 }
 
 function Nav({ tab, setTab, t }) {
-  const items = [['home','home',t.home],['ai','ai',t.ai],['community','community',t.community],['missions','mission',t.missions],['game','game','Game'],['more','more',t.more]];
+  const items = [['home','home',t.home],['ai','ai',t.ai],['orbit','globe','Orbit'],['community','community',t.community],['missions','mission',t.missions],['game','game','Game'],['more','more',t.more]];
   return <nav className="v15-nav">{items.map(([id, icon, label]) => <button key={id} data-nav={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon name={icon}/><small>{label}</small></button>)}</nav>;
 }
 
@@ -1273,6 +1280,7 @@ function NovaGuide({ tab, language, setTab }) {
       community: 'Welcome to Captain Community. Your fleet invite code, active members, mining bonus, weekly fleet rank, and personal game rank are displayed at the top. Play the NOVA Fleet Brief for a complete explanation. Everyone can read trusted information, while publishing requires five KYC-approved Security Circle members.',
       missions: 'Complete the official website, Telegram, Discord, X, and YouTube missions. All five unlock a permanent Mission Passport bonus of five percent to base mining speed. NOVA can explain the full policy on this screen.',
       game: 'Launch NOVA Flight Command here. Collect three hundred diamonds for ten SPNX Points up to twice daily, open one supply crate for one to five points, and defeat the first boss for five points. The daily maximum is thirty SPNX Points and resets at six A M Eastern Time.',
+      orbit: 'This is Orbit Control. Rotate Live Earth with a drag, and switch layers for satellites, weather, and Earth Intelligence. Save your Captain Base to see live distance and bearing.',
       fleet: 'This is Fleet Command. Register or share a referral code, contact inactive members, chat with your fleet, and track the weekly game league.',
       whitepaper: 'The whitepaper explains our identity. SpaceNovaX builds NOVA AI and games. SPNX supports product utility and verified participation.',
       more: 'This is Command Center. Open Fleet, Ranking, Wallet, KYC, missions, or the official game.',
@@ -1283,21 +1291,24 @@ function NovaGuide({ tab, language, setTab }) {
       community: '캡틴 커뮤니티입니다. 상단에서 본인의 함대 초대 코드, 활성 함대원, 채굴 보너스, 주간 함대 순위와 개인 게임 순위를 확인할 수 있습니다. NOVA 함대 브리핑을 누르면 전체 이용 방법을 들을 수 있습니다. 모든 회원은 정보를 읽을 수 있고 글과 사진 게시는 KYC 승인 보안 서클 5명이 필요합니다.',
       missions: '공식 웹사이트, 텔레그램, 디스코드, 엑스, 유튜브의 5개 미션을 모두 완료하면 Mission Passport가 발급되고 기본 채굴 속도 5퍼센트가 영구 추가됩니다. 이 화면에서 NOVA의 전체 설명을 들을 수 있습니다.',
       game: '여기서 NOVA 비행 관제를 실행할 수 있습니다. 다이아몬드 300개 보상 10 포인트는 하루 두 번, 보급함 1에서 5 포인트와 보스 최초 처치 5 포인트는 하루 한 번 지급됩니다. 일일 최대 보상은 30 SPNX 포인트이며 미국 동부시간 오전 6시에 초기화됩니다.',
+      orbit: '여기는 Orbit Control입니다. 화면을 드래그해 지구를 회전시키고, 위성·기상·지구 감시 레이어를 전환할 수 있습니다. Captain Base를 저장하면 실시간 거리와 방향을 확인할 수 있습니다.',
       fleet: '함대 관제입니다. 추천코드를 등록하거나 공유하고, 비활성 함대원에게 알림을 보내며, 함대 채팅과 주간 게임 순위를 확인할 수 있습니다.',
       whitepaper: '백서에서는 SpaceNovaX의 정체성을 설명합니다. 우리는 NOVA AI와 게임을 개발하며, SPNX는 제품 사용과 검증된 참여를 지원합니다.',
       more: '통합 관제 센터입니다. 함대, 랭킹, 지갑, KYC, 미션과 공식 게임을 이용할 수 있습니다.',
     },
   };
-  const guide = (guides[language] || guides.en)[tab] || (guides[language] || guides.en).more;
+  const guideSet = guides[language] || guides.en;
+  const guideSpeechLanguage = guides[language] ? language : 'en';
+  const guide = guideSet[tab] || guideSet.more;
   function speak(value = guide) {
-    playGuideVoice(value, language, .95);
+    playGuideVoice(value, guideSpeechLanguage, .95);
   }
   function listen() {
     triggerNovaHaptic('medium');
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return window.alert('Voice control is not supported in this browser.');
     const recognition = new Recognition();
-    recognition.lang = language === 'ko' ? 'ko-KR' : 'en-US';
+    recognition.lang = NOVA_SPEECH_LOCALES[language] || NOVA_SPEECH_LOCALES.en;
     recognition.onstart = () => setListening(true);
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
@@ -1344,7 +1355,20 @@ export default function V15App() {
   const sync = useCallback(async () => {
     try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
   }, []);
+  const resyncMining = useCallback(async () => {
+    try { const data = await api('/api/mining/status', { method: 'GET' }); if (data.mining) setUser((current) => ({ ...current, mining: { ...current.mining, ...data.mining } })); } catch {}
+  }, []);
   useEffect(() => { document.documentElement.lang = language; sync(); const timer = setInterval(sync, 30000); return () => clearInterval(timer); }, [language, sync]);
+  useEffect(() => {
+    // Resync the mining countdown from the server whenever the app returns to the
+    // foreground (app restart, Telegram Mini App reopen, tab switch back) — mobile
+    // browsers throttle client timers in the background, so this keeps the displayed
+    // remaining time accurate to the server without waiting for the 30s poll.
+    const onVisible = () => { if (document.visibilityState === 'visible') resyncMining(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
+  }, [resyncMining]);
   async function miningAction(path) {
     if (PREVIEW_BUILD) {
       setUser((current) => ({ ...current, mining: { ...current.mining, active: true, progress: .42, remainingMs: 50123000, minedSoFar: 12.6 } }));
@@ -1357,6 +1381,7 @@ export default function V15App() {
   }
   let page;
   if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab}/>;
+  else if (tab === 'orbit') page = <OrbitV20 language={language} user={user}/>;
   else if (tab === 'game') page = <Game user={user} t={t} language={language}/>;
   else if (tab === 'ai') page = <NovaAI user={user} t={t} language={language}/>;
   else if (tab === 'community') page = <Community user={user} language={language} setTab={setTab}/>;
@@ -1370,7 +1395,7 @@ export default function V15App() {
   else page = <More t={t} setTab={setTab}/>;
   return <>
     {!launched && <Splash done={() => setLaunched(true)}/>}
-    <div className={`v15-shell ${launched ? 'ready' : ''}`}><Header user={user} language={language} setLanguage={setLanguage} t={t} onPreview={() => setPreviewOpen(true)}/>{page}<Nav tab={tab} setTab={setTab} t={t}/><NovaGuide tab={tab} language={language} setTab={setTab}/></div>
+    <div className={`v15-shell ${launched ? 'ready' : ''}`}><Header user={user} language={language} setLanguage={setLanguage} t={t} onPreview={() => setPreviewOpen(true)}/>{page}<Nav tab={tab} setTab={setTab} t={t}/>{tab !== 'orbit' && <NovaGuide tab={tab} language={language} setTab={setTab}/>}</div>
     <PreviewPanel open={previewOpen && launched} close={() => setPreviewOpen(false)} t={t}/>
   </>;
 }
