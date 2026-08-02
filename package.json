@@ -18,6 +18,7 @@
     "@vitejs/plugin-react": "latest",
     "bs58": "^6.0.0",
     "express": "latest",
+    "pg": "^8.22.0",
     "react": "latest",
     "react-dom": "latest",
     "tweetnacl": "^1.0.3",

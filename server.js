@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import pg from 'pg';
 import bs58 from 'bs58';
 import nacl from 'tweetnacl';
 import {
@@ -20,6 +21,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data.json');
 const COMMUNITY_MEDIA_DIR = process.env.COMMUNITY_MEDIA_DIR || path.join(__dirname, 'community-media');
+const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
+const { Pool } = pg;
+const databasePool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
+let databaseState = null;
+let databaseWriteQueue = Promise.resolve();
+let databaseRevision = 0;
 
 const MINING_DURATION = 24 * 60 * 60 * 1000;
 const BASE_MINING_REWARD = 30;
@@ -112,9 +119,8 @@ async function requestNovaSpeech({ apiBase, apiKey, model, prompt }) {
   };
 }
 
-function readData() {
-  if (!fs.existsSync(DATA_FILE)) {
-    const initial = {
+function createInitialData() {
+  return {
       users: {},
       events: [],
       ledger: [],
@@ -148,11 +154,10 @@ function readData() {
         miningPool: 3500000000
       }
     };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
-    return initial;
-  }
+}
 
-  const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+function normalizeData(data) {
+  data ||= createInitialData();
   data.users ||= {};
   data.events ||= [];
   data.ledger ||= [];
@@ -212,10 +217,86 @@ function readData() {
   return data;
 }
 
+function readFileData() {
+  if (!fs.existsSync(DATA_FILE)) {
+    const initial = normalizeData(createInitialData());
+    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
+    return initial;
+  }
+  return normalizeData(JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')));
+}
+
+function readData() {
+  if (databasePool) {
+    if (!databaseState) throw new Error('PostgreSQL state is not initialized.');
+    return structuredClone(databaseState);
+  }
+  return readFileData();
+}
+
 function writeData(data) {
+  const normalized = normalizeData(structuredClone(data));
+  if (databasePool) {
+    databaseState = normalized;
+    databaseRevision += 1;
+    const revision = databaseRevision;
+    const snapshot = JSON.stringify(normalized);
+    databaseWriteQueue = databaseWriteQueue.catch((error) => {
+      console.error('Recovering PostgreSQL persistence queue after failure', error);
+    }).then(async () => {
+      await databasePool.query(
+        `UPDATE spacenovax_state
+         SET state = $1::jsonb, revision = $2, updated_at = NOW()
+         WHERE id = 1`,
+        [snapshot, revision]
+      );
+    });
+    databaseWriteQueue.catch((error) => {
+      console.error('PostgreSQL state persistence failed', error);
+    });
+    return databaseWriteQueue;
+  }
   const tempFile = `${DATA_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
+  fs.writeFileSync(tempFile, JSON.stringify(normalized, null, 2));
   fs.renameSync(tempFile, DATA_FILE);
+  return Promise.resolve();
+}
+
+async function initializeStateStorage() {
+  if (!databasePool) {
+    readFileData();
+    console.log(`State storage: JSON file (${DATA_FILE})`);
+    return;
+  }
+
+  await databasePool.query(`
+    CREATE TABLE IF NOT EXISTS spacenovax_state (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      state JSONB NOT NULL,
+      revision BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const existing = await databasePool.query(
+    'SELECT state, revision FROM spacenovax_state WHERE id = 1'
+  );
+  if (existing.rowCount) {
+    databaseState = normalizeData(existing.rows[0].state);
+    databaseRevision = Number(existing.rows[0].revision || 0);
+  } else {
+    const seed = readFileData();
+    const inserted = await databasePool.query(
+      `INSERT INTO spacenovax_state (id, state, revision)
+       VALUES (1, $1::jsonb, 1)
+       ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state
+       RETURNING state, revision`,
+      [JSON.stringify(seed)]
+    );
+    databaseState = normalizeData(inserted.rows[0].state);
+    databaseRevision = Number(inserted.rows[0].revision || 1);
+  }
+  console.log(`State storage: PostgreSQL (revision ${databaseRevision})`);
 }
 
 function roundPoints(value) {
@@ -789,6 +870,29 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=()');
   next();
 });
+app.use((req, res, next) => {
+  if (!databasePool) return next();
+  const revisionAtRequestStart = databaseRevision;
+  const originalEnd = res.end.bind(res);
+  let ending = false;
+  res.end = (...args) => {
+    if (ending) return res;
+    ending = true;
+    if (databaseRevision <= revisionAtRequestStart) {
+      originalEnd(...args);
+      return res;
+    }
+    databaseWriteQueue
+      .then(() => originalEnd(...args))
+      .catch((error) => {
+        console.error('Request persistence barrier failed', error);
+        if (!res.headersSent) res.statusCode = 503;
+        originalEnd(...args);
+      });
+    return res;
+  };
+  next();
+});
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
 const ADMIN_ID = process.env.ADMIN_ID || (IS_PRODUCTION ? '' : 'admin');
@@ -834,6 +938,21 @@ function requireAdmin(req, res, next) {
   req.admin = payload;
   next();
 }
+
+app.get('/api/health', async (req, res) => {
+  try {
+    if (databasePool) await databasePool.query('SELECT 1');
+    res.json({
+      ok: true,
+      storage: databasePool ? 'postgresql' : 'json',
+      persistent: Boolean(databasePool),
+      revision: databasePool ? databaseRevision : null,
+    });
+  } catch (error) {
+    console.error('Health check failed', error);
+    res.status(503).json({ ok: false, storage: 'postgresql', persistent: false });
+  }
+});
 
 
 app.post('/api/session', (req, res) => {
@@ -2275,9 +2394,28 @@ app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-app.listen(PORT, () => {
+await initializeStateStorage();
+
+const server = app.listen(PORT, () => {
   console.log(`SpaceNovaX V15 Command Network running on port ${PORT}`);
   const payoutTimer = setInterval(runAutomaticPayoutWorker, 30_000);
   payoutTimer.unref();
   setTimeout(runAutomaticPayoutWorker, 5_000).unref();
 });
+
+async function shutdown(signal) {
+  console.log(`${signal} received; draining persistent state.`);
+  server.close(async () => {
+    try {
+      await databaseWriteQueue;
+      await databasePool?.end();
+      process.exit(0);
+    } catch (error) {
+      console.error('Graceful shutdown failed', error);
+      process.exit(1);
+    }
+  });
+}
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
