@@ -10,7 +10,7 @@
     "build:preview": "vite build --mode preview",
     "start": "node server.js",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs"
+    "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs tests/orbit-integration.mjs"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
@@ -21,6 +21,8 @@
     "pg": "^8.22.0",
     "react": "latest",
     "react-dom": "latest",
+    "satellite.js": "^5.0.0",
+    "three": "^0.160.0",
     "tweetnacl": "^1.0.3",
     "vite": "latest"
   },

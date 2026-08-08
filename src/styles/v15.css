@@ -27,6 +27,10 @@
   .hero-command{height:600px}
   .hero-command .hero-ship{width:82%;height:72%;left:auto;right:-3%;bottom:55px;object-fit:contain;object-position:center bottom}
 }
+
+/* Community-node guide and readable six-item navigation */
+.node-guide-link{font-family:inherit;cursor:pointer}.node-back{padding:9px 12px;border:1px solid rgba(83,231,255,.26);border-radius:12px;background:rgba(6,24,42,.65);color:#a9eaff;font-size:10px;font-weight:900;display:flex;gap:7px;align-items:center}.node-install-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin:18px 0}.node-install-grid article{min-height:260px;padding:18px;border:1px solid rgba(83,231,255,.16);border-radius:18px;background:linear-gradient(145deg,rgba(7,29,48,.89),rgba(12,10,38,.85));display:flex;flex-direction:column}.node-install-grid b{color:#51e9ff;font-size:17px}.node-install-grid h3{margin:11px 0 7px;font-size:14px}.node-install-grid p{margin:0;color:#9bb1c4;font-size:10px;line-height:1.65}.node-install-grid code{margin-top:auto;padding:11px;border:1px solid rgba(83,231,255,.13);border-radius:11px;background:#020b16;color:#78eaff;font-size:9px;line-height:1.75;white-space:normal}.node-install-grid .primary-action{min-height:40px;margin-top:auto;font-size:9px}.nav-short{display:none}
+@media(max-width:520px){.v15-nav small.nav-full{display:none}.v15-nav small.nav-short{display:block;font-size:7px;letter-spacing:-.03em}.node-module{padding:16px}.node-hero{min-height:0;padding:18px}.node-hero strong{font-size:30px}.node-hero>.v15-icon{display:none}.node-actions,.node-install-grid{grid-template-columns:1fr}.node-install-grid article{min-height:0}.node-back{font-size:8px;padding:8px}.node-security{padding:14px}}
 .header-website{flex:0 0 auto}
 @media(max-width:520px){.header-website{width:36px;min-width:36px;padding:0}.header-website span{display:none}}
 @media(prefers-reduced-motion:reduce){.hero-station,.hero-live-light,.distant-meteor-cloud,.orbital-satellite,.cosmic-dust i,.contact-orbit i,.nova-guide-avatar img,.nova-guide-avatar:before,.nova-holo-scan,.nova-eye-light,.nova-core-node,.nova-voice-control{animation:none!important}.nova-guide-avatar,.header-website,.nova-voice-control{transition:none!important}}
@@ -122,6 +126,7 @@
 .v15-nav button:before{content:"";position:absolute;inset:auto 16% 0;height:3px;border-radius:4px;background:var(--nav-color,var(--cyan));opacity:.22;box-shadow:0 0 13px var(--nav-color,var(--cyan))}
 .v15-nav button[data-nav="home"]{--nav-color:#40e6ff;color:#70aec4}
 .v15-nav button[data-nav="ai"]{--nav-color:#a779ff;color:#9789c5}
+.v15-nav button[data-nav="orbit"]{--nav-color:#3abaff;color:#70aec4}
 .v15-nav button[data-nav="community"]{--nav-color:#ff8a4b;color:#b98b72}
 .v15-nav button[data-nav="missions"]{--nav-color:#ffd057;color:#b4a06b}
 .v15-nav button[data-nav="game"]{--nav-color:#ff4e9d;color:#b77b9a}
@@ -130,6 +135,10 @@
 .v15-nav button.active:before{opacity:1}
 .v15-nav button.active .v15-icon{filter:drop-shadow(0 0 7px var(--nav-color))}
 .v15-nav button:active{transform:scale(.95)}
+
+/* Community Node V1: intentionally read-only.  These panels describe the
+   install path without granting access to mining, balances, wallets or KYC. */
+.node-module{padding:24px}.node-hero{margin-top:22px;min-height:190px;padding:25px;border:1px solid rgba(83,231,255,.2);border-radius:22px;background:radial-gradient(circle at 85% 25%,rgba(33,108,255,.17),transparent 30%),linear-gradient(135deg,rgba(7,33,48,.92),rgba(10,13,36,.96));display:flex;align-items:center;justify-content:space-between;gap:22px;overflow:hidden}.node-hero small{display:block;color:#66eaff;font-size:9px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}.node-hero strong{display:block;margin:6px 0;color:#4be8ff;font-size:44px;letter-spacing:.06em}.node-hero p{max-width:510px;margin:0;color:#9ab2c4;font-size:12px;line-height:1.65}.node-hero>.v15-icon{flex:none;color:#46dfff;filter:drop-shadow(0 0 14px rgba(72,224,255,.55))}.node-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}.node-actions .primary-action{margin:0;text-decoration:none}.node-guide-link,.node-apply{min-height:56px;padding:0 16px;border:1px solid rgba(168,121,255,.38);border-radius:16px;background:linear-gradient(115deg,rgba(94,74,255,.19),rgba(18,30,60,.8));display:flex;align-items:center;justify-content:center;gap:9px;color:#dbe9ff;text-decoration:none;font-size:11px;font-weight:900;letter-spacing:.03em}.node-guide-link .v15-icon:last-child,.node-apply .v15-icon:last-child{margin-left:auto}.node-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}.node-steps article{padding:15px;border:1px solid rgba(83,231,255,.14);border-radius:16px;background:rgba(2,12,25,.74);display:flex;gap:11px}.node-steps b{color:#44e6ff;font-size:18px}.node-steps span{display:grid;gap:4px}.node-steps strong{font-size:12px}.node-steps small{font-size:9px;color:#8098ac;line-height:1.4}.node-security{padding:17px;border:1px solid rgba(232,189,115,.34);border-radius:17px;background:linear-gradient(115deg,rgba(125,72,18,.16),rgba(64,33,115,.18));display:flex;gap:13px;color:#dbe9ff}.node-security>.v15-icon{flex:none;color:#f6c968}.node-security b{font-size:12px}.node-security p{margin:5px 0 0;color:#9eb2c5;font-size:10px;line-height:1.55}.node-apply{margin-top:16px;border-color:rgba(82,247,167,.35);background:linear-gradient(110deg,rgba(10,120,92,.28),rgba(31,56,118,.66));justify-content:flex-start}
 
 .nova-guide{position:fixed;z-index:95;right:max(18px,calc((100vw - 740px)/2));bottom:104px;display:flex;align-items:flex-end;gap:10px;pointer-events:none;transform:translate(var(--nova-x,0),var(--nova-y,0));will-change:transform}
 .nova-guide>*{pointer-events:auto}
