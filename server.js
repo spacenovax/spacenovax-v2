@@ -463,15 +463,31 @@ function getActiveFleetCount(data, userId) {
   return Object.values(data.users).filter((u) => u.referredBy === userId && (u.lastMiningAt || 0) >= cutoff).length;
 }
 
+const HALVING_CAPTAINS_PER_STEP = 10_000;
+const HALVING_REDUCTION_PER_STEP = 0.10;
+
 function miningPhase(data) {
+  // Mining reductions are based on all registered Captain accounts, not KYC approvals.
+  const totalCaptains = Object.keys(data.users || {}).length;
+  const reductionSteps = Math.floor(totalCaptains / HALVING_CAPTAINS_PER_STEP);
+  const multiplier = Number(Math.pow(1 - HALVING_REDUCTION_PER_STEP, reductionSteps).toFixed(12));
+  const reward = Number((BASE_MINING_REWARD * multiplier).toFixed(8));
   const used = getMiningPoolUsed(data);
-  const pool = data.settings?.miningPool || 3500000000;
+  const pool = Number(data.settings?.miningPool || 3500000000);
   const ratio = pool > 0 ? used / pool : 0;
-  if (ratio >= 0.9) return { phase: 5, reward: 4.8, used, pool, ratio, multiplier: 0.2 };
-  if (ratio >= 0.75) return { phase: 4, reward: 9.6, used, pool, ratio, multiplier: 0.4 };
-  if (ratio >= 0.5) return { phase: 3, reward: 14.4, used, pool, ratio, multiplier: 0.6 };
-  if (ratio >= 0.25) return { phase: 2, reward: 19.2, used, pool, ratio, multiplier: 0.8 };
-  return { phase: 1, reward: BASE_MINING_REWARD, used, pool, ratio, multiplier: 1 };
+
+  return {
+    phase: reductionSteps + 1,
+    reward,
+    used,
+    pool,
+    ratio,
+    multiplier,
+    totalCaptains,
+    reductionSteps,
+    captainsPerStep: HALVING_CAPTAINS_PER_STEP,
+    reductionPerStepPercent: HALVING_REDUCTION_PER_STEP * 100,
+  };
 }
 
 function ensureUser(data, telegramUser, referralCode = '') {
