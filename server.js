@@ -2227,6 +2227,9 @@ app.post('/api/nova/chat', async (req, res) => {
     'Never request passwords, seed phrases, wallet private keys, or Telegram login codes.',
     'Do not claim that SPNX Points are guaranteed money or promise investment returns.',
     `Captain context: level=${Number(sessionUser.level || captain.level || 1)}, balance=${Number(sessionUser.balance || 0)}, miningActive=${Boolean(sessionUser.mining?.active)}, gameRewardToday=${Number(sessionUser.gameReward?.earnedToday || 0)}.`,
+    ...(String(req.body?.orbitContext || '').trim()
+      ? [`Orbit Earth Navigation live context: ${String(req.body.orbitContext).trim().slice(0, 500)}`]
+      : []),
   ].join('\n');
 
   const contents = [
@@ -2387,6 +2390,103 @@ app.get('/api/nova/status', (req, res) => {
     model: NOVA_PUBLIC_MODEL_NAME,
     dailyLimit: NOVA_DAILY_LIMIT,
   });
+});
+
+// Public orbital data proxy. This keeps third-party CORS and rate-limit details
+// out of the client while exposing only public station TLE data.
+const ORBIT_TLE_CACHE_MS = 6 * 60 * 60 * 1000;
+const orbitTleCache = { at: 0, satellites: [] };
+app.get('/api/orbit/satellites', async (req, res) => {
+  try {
+    if (orbitTleCache.satellites.length && now() - orbitTleCache.at < ORBIT_TLE_CACHE_MS) {
+      return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: true });
+    }
+    const response = await fetch('https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle', {
+      headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public TLE relay)' },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) throw new Error(`Celestrak responded ${response.status}`);
+    const lines = (await response.text()).split('\n').map((line) => line.trimEnd()).filter(Boolean);
+    const satellites = [];
+    for (let index = 0; index + 2 < lines.length; index += 3) {
+      const name = lines[index]?.trim();
+      const line1 = lines[index + 1];
+      const line2 = lines[index + 2];
+      if (name && line1?.startsWith('1 ') && line2?.startsWith('2 ')) satellites.push({ name, line1, line2 });
+    }
+    orbitTleCache.satellites = satellites.slice(0, 60);
+    orbitTleCache.at = now();
+    return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: false });
+  } catch (error) {
+    console.error('Orbit TLE fetch failed', error.message);
+    if (orbitTleCache.satellites.length) {
+      return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: true, stale: true });
+    }
+    return res.status(502).json({ ok: false, message: 'Satellite network temporarily unavailable.', satellites: [] });
+  }
+});
+
+// Destination and reverse-geocoding proxy for Earth Navigation.
+const geocodeCache = new Map();
+const GEOCODE_CACHE_MS = 30 * 60 * 1000;
+app.get('/api/orbit/geocode', async (req, res) => {
+  const query = String(req.query.q || '').trim().slice(0, 160);
+  const latitude = req.query.lat !== undefined ? Number(req.query.lat) : null;
+  const longitude = req.query.lon !== undefined ? Number(req.query.lon) : null;
+  const language = String(req.query.lang || 'en').toLowerCase().replace(/[^a-z-]/g, '').slice(0, 5) || 'en';
+
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      return res.status(400).json({ ok: false, message: 'Invalid coordinates.' });
+    }
+    const key = `reverse:${latitude.toFixed(2)},${longitude.toFixed(2)}:${language}`;
+    const cached = geocodeCache.get(key);
+    if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, place: cached.value, cached: true });
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&accept-language=${encodeURIComponent(language)}`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
+      const item = await response.json();
+      const place = {
+        country: item.address?.country || '',
+        city: item.address?.city || item.address?.town || item.address?.state || item.address?.village || '',
+      };
+      geocodeCache.set(key, { at: now(), value: place });
+      return res.json({ ok: true, place, cached: false });
+    } catch (error) {
+      console.error('Orbit reverse geocode failed', error.message);
+      return res.status(502).json({ ok: false, message: 'Reverse geocode temporarily unavailable.' });
+    }
+  }
+
+  if (query.length < 2) return res.json({ ok: true, results: [] });
+  const key = `search:${query.toLowerCase()}:${language}`;
+  const cached = geocodeCache.get(key);
+  if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, results: cached.value, cached: true });
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
+    const items = await response.json();
+    const results = (items || []).map((item) => ({
+      id: String(item.place_id),
+      label: item.display_name,
+      lat: Number(item.lat),
+      lon: Number(item.lon),
+      country: item.address?.country || '',
+    }));
+    geocodeCache.set(key, { at: now(), value: results });
+    return res.json({ ok: true, results, cached: false });
+  } catch (error) {
+    console.error('Orbit geocode failed', error.message);
+    return res.status(502).json({ ok: false, message: 'Destination search temporarily unavailable.', results: [] });
+  }
 });
 
 async function runAutomaticPayoutWorker() {
