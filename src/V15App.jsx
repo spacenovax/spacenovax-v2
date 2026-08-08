@@ -639,7 +639,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="hero-space"/>
       <div className="hero-copy">
         <span className="eyebrow"><i />{t.verified}</span>
-        <small>{t.balance}</small><strong>{format(user.balance)}</strong><h1>SPNX POINTS</h1>
+        <small>{t.balance}</small><strong>{format(user.balance, 5)}</strong><h1>SPNX POINTS</h1>
         <p>NOVA-X1 / AI CONTROLLED GENESIS FLAGSHIP</p>
       </div>
       <img className="hero-station" src="/spacenovax-orbital-hq-live-v16.webp" alt="SpaceNovaX Orbital Headquarters above Earth" />
@@ -966,7 +966,7 @@ function More({ t, setTab, language }) {
     <section className="collaboration-contact">
       <div className="contact-orbit"><i/><span>SPNX</span></div>
       <div><small>PARTNERSHIP · MEDIA · TECHNOLOGY</small><h3>{ko ? 'SpaceNovaX와 미래를 함께 만드세요.' : 'Build the future with SpaceNovaX.'}</h3><p>{ko ? 'AI, GameFi, 콘텐츠, 기술 협업 및 공식 사업 문의 전용 창구입니다.' : 'Official contact for AI, GameFi, content, technology collaboration, and business inquiries.'}</p></div>
-      <div className="contact-actions"><a href="mailto:spacenovax@hotmail.com?subject=SpaceNovaX%20Collaboration%20Inquiry"><Icon name="external" size={16}/>spacenovax@hotmail.com</a><a href="https://spacenovax.com" target="_blank" rel="noreferrer"><Icon name="globe" size={16}/>spacenovax.com</a></div>
+      <div className="contact-actions"><a href="mailto:business@spacenovax.com?subject=SpaceNovaX%20Collaboration%20Inquiry"><Icon name="external" size={16}/>business@spacenovax.com</a><a href="https://spacenovax.com" target="_blank" rel="noreferrer"><Icon name="globe" size={16}/>spacenovax.com</a></div>
     </section>
   </section></main>;
 }
@@ -1209,8 +1209,16 @@ function Kyc({ t, language }) {
   </section></main>;
 }
 
+function Nodes({ language }) {
+  const ko = language === 'ko';
+  return <main className="v15-page"><section className="command-card ops-module">
+    <div className="section-heading"><div><small>GENESIS COMMUNITY NODE</small><h2>{ko ? '커뮤니티 노드' : 'Community Nodes'}</h2></div><span className="secure-label">FOUNDING COHORT</span></div>
+    <div className="vault-balance"><small>{ko ? '승인 노드 현황' : 'APPROVED NODE STATUS'}</small><strong>0 / 1,000</strong><span>{ko ? '최초 1,000개의 승인 노드로 한정됩니다. 노드는 캐시·모니터링·하트비트를 지원하며 채굴, 보상, 지갑, KYC에는 접근하지 않습니다.' : 'Limited to the first 1,000 approved nodes. Nodes support cache, monitoring and heartbeat only; they cannot access mining, rewards, wallets or KYC.'}</span></div>
+  </section></main>;
+}
+
 function Nav({ tab, setTab, t }) {
-  const items = [['home','home',t.home],['ai','ai',t.ai],['community','community',t.community],['missions','mission',t.missions],['game','game','Game'],['more','more',t.more]];
+  const items = [['home','home',t.home],['ai','ai',t.ai],['community','community',t.community],['missions','mission',t.missions],['game','game','Game'],['nodes','community', 'Nodes'],['more','more',t.more]];
   return <nav className="v15-nav">{items.map(([id, icon, label]) => <button key={id} data-nav={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon name={icon}/><small>{label}</small></button>)}</nav>;
 }
 
@@ -1362,6 +1370,7 @@ export default function V15App() {
   else if (tab === 'community') page = <Community user={user} language={language} setTab={setTab}/>;
   else if (tab === 'missions') page = <Missions user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'more') page = <More t={t} setTab={setTab} language={language}/>;
+  else if (tab === 'nodes') page = <Nodes language={language}/>;
   else if (tab === 'fleet') page = <Fleet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'whitepaper') page = <Whitepaper language={language}/>;
   else if (tab === 'rank') page = <Ranking user={user} t={t}/>;
