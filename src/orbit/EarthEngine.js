@@ -703,7 +703,6 @@ export default class EarthEngine {
     this._stepRouteMarker(time);
     this._stepTyphoonSwirls(time);
     this.earthMaterial.uniforms.sunDirection.value.copy(this.sunDirection);
-    this.atmosphereMaterial.uniforms.sunDirection.value.copy(this.sunDirection);
     this.renderer.render(this.scene, this.camera);
     this._projectLabels();
   }
