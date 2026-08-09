@@ -251,9 +251,9 @@ export default class EarthEngine {
 
     this.sunDirection = new THREE.Vector3(1, 0.3, 0.4).normalize();
 
-    // All globe assets are self-hosted under /public/orbit. Use the validated JPEG
-    // basemaps: the earlier high-resolution day/cloud WebP files can be truncated in
-    // a deployment, which leaves Telegram showing only a flat blue fallback sphere.
+    // All globe assets are self-hosted under /public/orbit. The illustrated day map
+    // is kept as a fallback asset only; the verified high-detail night satellite map
+    // gives the compact navigation globe clear coastlines and city detail.
     const placeholder = (hex) => {
       const c = document.createElement('canvas'); c.width = 2; c.height = 1;
       const ctx = c.getContext('2d'); ctx.fillStyle = hex; ctx.fillRect(0, 0, 2, 1);
@@ -277,9 +277,9 @@ export default class EarthEngine {
       tex.needsUpdate = true;
       return tex;
     };
-    loader.load('/orbit/earth-day.jpg', (tex) => {
+    loader.load('/orbit/earth-night-real.webp', (tex) => {
       this.earthMaterial.uniforms.dayMap.value = prepareTexture(tex, { srgb: true });
-    }, undefined, (err) => console.error('Orbit: validated day texture failed.', err));
+    }, undefined, (err) => console.error('Orbit: high-detail Earth texture failed.', err));
     loader.load('/orbit/earth-night.jpg', (tex) => {
       this.earthMaterial.uniforms.nightMap.value = prepareTexture(tex, { srgb: true });
     }, undefined, (err) => console.error('Orbit: validated night texture failed.', err));
