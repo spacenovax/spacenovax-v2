@@ -1,0 +1,221 @@
+/* Orbit V21 FINAL — independent module. Always-on 3-column HUD (left/center/right),
+   no hide/show sheet. Mobile Device Frame (390-430px) at every screen size — PC centers
+   the same frame, never a full-width dashboard. Floating NOVA AI is the only NOVA AI
+   instance anywhere on this screen. Engine files (EarthEngine/SatelliteEngine/
+   MasterRenderLoop/PerformanceManager) and all data logic are untouched — this file and
+   OrbitV20.jsx's composition are presentation only. Colors/typography follow the
+   approved Final Design Specification color + type guide. */
+
+:root{
+  --ov20-bg:#0b0f1a;
+  --ov20-line:#1f2937;
+  --ov20-line-strong:#2b3648;
+  --ov20-glass:rgba(17,24,39,.42);
+  --ov20-glass-strong:rgba(17,24,39,.68);
+  --ov20-cyan:#00e5ff;
+  --ov20-ink:#ffffff;
+  --ov20-dim:#a0aec0;
+  --ov20-dim2:#7c8aa0;
+  --ov20-green:#00ffa3;
+  --ov20-red:#ff6b6b;
+  --ov20-amber:#ffb020;
+}
+
+.ov20-root{margin:-18px -18px 0;background:var(--ov20-bg);position:relative;height:calc(100vh - 90px);min-height:560px;overflow:hidden;font-family:'Pretendard','Inter',-apple-system,sans-serif}
+@media(max-width:520px){.ov20-root{margin:-10px -10px 0;height:calc(100vh - 78px)}}
+/* Mobile Device Frame: above phone width, center a fixed 430px column instead of ever
+   stretching full window width — this is a Telegram Mini App, not a PC dashboard, at any
+   screen size. PC is a Preview of the same mobile screen, never its own layout. */
+@media(min-width:480px){
+  .ov20-root{max-width:680px;margin-left:auto;margin-right:auto;border-left:1px solid var(--ov20-line-strong);border-right:1px solid var(--ov20-line-strong);box-shadow:0 30px 90px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.4)}
+}
+
+/* Top HUD: LIVE status badge + thin underline tabs, never button-styled */
+.ov20-topbar{position:absolute;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:linear-gradient(180deg,rgba(11,15,26,.9),rgba(11,15,26,.5) 70%,transparent)}
+.ov20-live-badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ov20-green)}
+.ov20-live-badge i{width:6px;height:6px;border-radius:50%;background:var(--ov20-green);box-shadow:0 0 6px var(--ov20-green)}
+.ov20-top-search{height:30px;min-width:112px;padding:0 12px;border:1px solid rgba(0,229,255,.42);border-radius:999px;background:linear-gradient(120deg,rgba(0,229,255,.18),rgba(82,70,255,.16));color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.ov20-top-search:first-letter{color:var(--ov20-cyan)}
+.ov20-tabs{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none}
+.ov20-tabs::-webkit-scrollbar{display:none}
+.ov20-tab{background:none;border:none;color:var(--ov20-dim2);font-size:9px;font-weight:700;letter-spacing:.08em;padding:4px 1px;white-space:nowrap;position:relative}
+.ov20-tab.active{color:var(--ov20-ink)}
+.ov20-tab.active::after{content:'';position:absolute;left:0;right:0;bottom:-5px;height:2px;border-radius:2px;background:var(--ov20-cyan);box-shadow:0 0 6px var(--ov20-cyan)}
+.ov20-clock{font-size:7px;color:var(--ov20-dim2);text-align:right;line-height:1.3}
+
+/* Earth fills the ENTIRE screen (top to the bottom nav line, edge to edge). Left/Right
+   HUD panels float ON TOP of it as transparent overlays — they no longer occupy their
+   own grid columns that shrink the globe. */
+.ov20-layout{position:absolute;inset:0}
+.ov20-col{position:absolute;top:34px;bottom:6px;width:96px;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:5px;z-index:5}
+.ov20-col::-webkit-scrollbar{display:none}
+.ov20-col.left{left:6px}
+.ov20-col.right{right:6px}
+
+/* Center: Earth. Full-bleed — the visual anchor, fills the whole screen. */
+.ov20-globe-col{position:absolute;inset:0;border-radius:0;overflow:hidden;background:#000}
+.ov20-globe-wrap{position:absolute;inset:0;background:#000}
+.ov20-globe-canvas{position:absolute;inset:0}
+.ov20-globe-canvas canvas{display:block;touch-action:none}
+.ov20-coord-pill{position:absolute;top:38px;left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--ov20-line-strong);border-radius:999px;background:var(--ov20-glass-strong);font-size:7px;color:var(--ov20-ink);white-space:nowrap}
+.ov20-coord-pill span{color:var(--ov20-dim2);font-size:6px;margin-right:2px}
+.ov20-crosshair{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:3;width:11px;height:11px;border:1px solid rgba(0,229,255,.5);border-radius:50%}
+.ov20-crosshair::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--ov20-cyan);box-shadow:0 0 5px var(--ov20-cyan)}
+
+.ov20-marker{--marker-color:var(--ov20-cyan);position:absolute;z-index:4;transform:translate(-50%,-100%) scale(var(--marker-scale,1));transform-origin:50% 100%;pointer-events:none;display:flex;flex-direction:column;align-items:center;min-width:30px;filter:drop-shadow(0 0 9px var(--marker-color))}
+.ov20-marker-current{--marker-color:#29d9ff}.ov20-marker-destination{--marker-color:#a86aff}.ov20-marker-base{--marker-color:#2bc7ff}.ov20-marker-typhoon{--marker-color:#ff9870}.ov20-marker-satellite{--marker-color:#dff8ff}
+.ov20-marker-pulse{position:absolute;bottom:-1px;width:26px;height:11px;border:1px solid var(--marker-color);border-radius:50%;opacity:.78;animation:ov20-marker-pulse 1.8s ease-out infinite;box-shadow:0 0 12px var(--marker-color)}
+.ov20-marker-pin{position:relative;z-index:2;width:19px;height:19px;display:grid;place-items:center;border:1px solid var(--marker-color);border-radius:7px 7px 9px 9px;background:radial-gradient(circle at 35% 28%,rgba(255,255,255,.55),transparent 28%),linear-gradient(145deg,rgba(30,70,110,.92),rgba(7,15,30,.96));box-shadow:0 0 0 2px rgba(0,0,0,.27),0 0 16px var(--marker-color),inset 0 0 9px rgba(255,255,255,.14);animation:ov20-marker-hover 2.4s ease-in-out infinite}
+.ov20-marker-symbol{color:#fff;font-size:12px;line-height:1;text-shadow:0 0 8px var(--marker-color)}
+.ov20-marker-current .ov20-marker-pin{border-radius:50% 50% 50% 4px;transform:rotate(-45deg)}.ov20-marker-current .ov20-marker-symbol{font-size:0}.ov20-marker-current .ov20-marker-symbol::after{content:'';display:block;width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 8px #fff}.ov20-marker-current .ov20-marker-symbol{transform:rotate(45deg)}
+.ov20-marker-base .ov20-marker-pin{border-radius:7px;background:linear-gradient(145deg,#174e83,#071a35)}
+.ov20-typhoon-symbol{display:grid;place-items:center;width:12px;height:12px;border:2px solid var(--marker-color);border-radius:50%;font-size:0;box-shadow:inset 0 0 7px var(--marker-color);animation:ov20-typhoon-spin 1.4s linear infinite}.ov20-typhoon-symbol::after{content:'';width:3px;height:3px;border-radius:50%;background:#0c1424;border:1px solid #fff}
+.ov20-satellite-symbol{position:relative;width:16px;height:11px;display:block}.ov20-satellite-symbol b{position:absolute;left:5px;top:2px;width:6px;height:7px;border:1px solid #fff;border-radius:1px;background:#8698a7}.ov20-satellite-symbol i{position:absolute;top:3px;width:5px;height:4px;border:1px solid var(--marker-color);background:rgba(79,218,255,.35)}.ov20-satellite-symbol i:first-child{left:0}.ov20-satellite-symbol i:nth-child(2){right:0}
+.ov20-marker-label{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:3px;padding:2px 4px;border:1px solid var(--marker-color);border-radius:5px;background:rgba(5,13,27,.86);box-shadow:0 4px 14px rgba(0,0,0,.36);white-space:nowrap;text-align:center}.ov20-marker-label b{color:#eefaff;font-size:5.8px;letter-spacing:.06em}.ov20-marker-label small{color:var(--marker-color);font-size:5px;letter-spacing:.04em}.ov20-marker.compact .ov20-marker-label small{display:none}.ov20-marker-satellite .ov20-marker-label b{font-size:5px}.ov20-marker-satellite .ov20-marker-pin{width:16px;height:16px;border-radius:5px}
+@keyframes ov20-marker-pulse{0%{transform:scale(.62);opacity:.92}100%{transform:scale(1.9);opacity:0}}@keyframes ov20-marker-hover{0%,100%{translate:0 0}50%{translate:0 -3px}}@keyframes ov20-typhoon-spin{to{transform:rotate(360deg)}}
+
+.ov20-globe-controls{position:absolute;left:50%;transform:translateX(-50%);bottom:6px;z-index:4;display:flex;align-items:center;gap:8px}
+.ov20-zoom-btn{width:22px;height:22px;border-radius:7px;border:1px solid var(--ov20-line);background:var(--ov20-glass-strong);color:var(--ov20-dim);font-size:11px;display:flex;align-items:center;justify-content:center}
+.ov20-recenter-btn{width:24px;height:24px;border-radius:50%;border:1px solid var(--ov20-line-strong);background:var(--ov20-glass-strong);color:var(--ov20-cyan);font-size:11px;display:flex;align-items:center;justify-content:center}
+
+/* Left / Right HUD cards — compact, always visible, no card chrome heavier than a hairline
+   border + translucent fill (per design guide: Card Background #111827CC, Border #1F2937). */
+.ov20-card{border:1px solid var(--ov20-line);border-radius:10px;background:var(--ov20-glass);backdrop-filter:blur(10px);padding:7px 8px}
+.ov20-card-label{font-size:7px;font-weight:800;letter-spacing:.08em;color:var(--ov20-dim2);margin-bottom:5px}
+.ov20-card h4{margin:0 0 2px;font-size:11px;font-weight:600;color:var(--ov20-ink);line-height:1.25}
+
+.ov20-row{display:flex;flex-direction:column;padding:3px 0;border-top:1px solid rgba(31,41,55,.6)}
+.ov20-row:first-of-type{border-top:none}
+.ov20-row span{font-size:6.5px;letter-spacing:.05em;color:var(--ov20-dim2)}
+.ov20-row b{font-size:9px;font-weight:700;color:var(--ov20-ink);margin-top:1px}
+
+.ov20-btn{width:100%;height:22px;margin-top:6px;border-radius:7px;border:1px solid var(--ov20-line-strong);background:rgba(255,255,255,.03);color:var(--ov20-dim);font-size:6.5px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;gap:3px}
+.ov20-btn.primary{background:linear-gradient(120deg,rgba(0,229,255,.18),rgba(0,255,163,.1));border-color:rgba(0,229,255,.4);color:var(--ov20-ink)}
+
+.ov20-sat-row{display:flex;align-items:center;gap:5px;padding:3px 0}
+.ov20-sat-row .name{flex:1;font-size:7px;color:var(--ov20-dim)}
+.ov20-sat-row .count{font-size:9px;font-weight:700;color:var(--ov20-ink)}
+.ov20-signal{display:flex;gap:1.5px;margin-top:4px}
+.ov20-signal i{width:2px;flex:1;border-radius:1px;background:var(--ov20-cyan);opacity:.85}
+
+.ov20-ev-row{display:flex;align-items:flex-start;gap:5px;padding:3px 0;font-size:7px}
+.ov20-ev-row .dot{width:5px;height:5px;border-radius:50%;flex:0 0 auto;margin-top:2px}
+.ov20-ev-row .name{flex:1;color:var(--ov20-ink);font-weight:600}
+.ov20-ev-row small{display:block;color:var(--ov20-dim2);font-size:6px}
+
+.ov20-search-field{display:flex;align-items:center;gap:4px;border:1px solid var(--ov20-line);border-radius:7px;background:rgba(255,255,255,.03);padding:5px 6px;margin-bottom:5px}
+.ov20-search-field input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--ov20-ink);font-size:8px}
+.ov20-search-field input::placeholder{color:var(--ov20-dim2)}
+.ov20-search-results{display:flex;flex-direction:column;gap:1px;margin-bottom:4px}
+.ov20-search-results button{text-align:left;background:none;border:none;border-top:1px solid rgba(31,41,55,.6);color:var(--ov20-dim);font-size:6.5px;padding:4px 1px}
+.ov20-search-launch{width:100%;min-height:38px;border:1px solid rgba(0,229,255,.42);border-radius:9px;background:linear-gradient(120deg,rgba(0,229,255,.18),rgba(77,84,255,.17));color:#fff;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 4px;box-shadow:inset 0 0 18px rgba(0,229,255,.05)}
+.ov20-search-launch span{font-size:15px;color:var(--ov20-cyan)}
+.ov20-search-launch b{font-size:8px;line-height:1.2}
+.ov20-dest-selected{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.ov20-dest-selected b{font-size:9px;color:var(--ov20-ink);display:block}
+.ov20-dest-selected small{color:var(--ov20-dim2);font-size:6.5px}
+.ov20-fav-star{background:none;border:none;color:var(--ov20-amber);font-size:11px}
+
+.ov20-weather-main{display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.ov20-weather-main .temp{font-size:16px;font-weight:300;color:var(--ov20-ink)}
+.ov20-weather-icon{font-size:14px}
+.ov20-empty{color:var(--ov20-dim2);font-size:7px;text-align:center;padding:8px 0}
+
+.ov20-status-grid{margin-top:6px;padding-top:6px;border-top:1px solid var(--ov20-line);display:flex;flex-direction:column;gap:3px}
+.ov20-status-grid div{display:flex;justify-content:space-between}
+.ov20-status-grid small{font-size:6px;letter-spacing:.05em;color:var(--ov20-dim2)}
+.ov20-status-grid b{font-size:7px;color:var(--ov20-ink)}
+.ov20-status-grid b.ok{color:var(--ov20-green)}
+
+/* Floating NOVA AI — the ONE and ONLY instance, draggable, always on top */
+.ov20-nova-float{position:absolute;z-index:60;right:12px;bottom:72px;width:66px;min-height:66px;border:1px solid rgba(0,229,255,.55);border-radius:19px;background:linear-gradient(145deg,rgba(12,31,51,.9),rgba(25,22,55,.88));backdrop-filter:blur(16px);padding:8px;display:flex;flex-direction:column;align-items:center;text-align:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;will-change:transform;transform-style:preserve-3d;box-shadow:0 12px 30px rgba(0,0,0,.58),0 0 22px rgba(0,229,255,.16),inset 0 0 16px rgba(0,229,255,.06)}
+.ov20-nova-float:active{cursor:grabbing}
+.ov20-nova-float::after{content:'';position:absolute;inset:-4px;border:1px solid rgba(0,229,255,.14);border-radius:23px;pointer-events:none}
+.ov20-nova-float.open{width:220px;min-height:0;padding:12px;right:10px}
+.ov20-nova-grip{position:absolute;top:5px;right:6px;display:grid;grid-template-columns:repeat(2,3px);gap:2px}
+.ov20-nova-grip i{width:3px;height:3px;border-radius:50%;background:var(--ov20-dim2)}
+.ov20-nova-avatar{width:48px;height:48px;border-radius:15px;border:1px solid rgba(0,229,255,.65);overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:2px;box-shadow:0 0 16px rgba(0,229,255,.2)}
+.ov20-nova-float.open .ov20-nova-avatar{width:62px;height:62px;border-radius:18px;margin-bottom:7px}
+.ov20-nova-avatar img{width:100%;height:100%;object-fit:cover}
+.ov20-nova-float b{font-size:9px;color:var(--ov20-ink);letter-spacing:.06em}
+.ov20-nova-status{display:none}
+.ov20-nova-float.open .ov20-nova-status{display:flex;flex-direction:column;gap:2px;margin-top:5px;align-items:flex-start;width:100%;padding-left:4px}
+.ov20-nova-status span{font-size:6.5px;letter-spacing:.05em;color:var(--ov20-dim);display:flex;align-items:center;gap:4px}
+.ov20-nova-status i{width:4px;height:4px;border-radius:50%;background:var(--ov20-green);box-shadow:0 0 4px var(--ov20-green)}
+.ov20-nova-panel{margin-top:7px;width:100%;text-align:left;border-top:1px solid var(--ov20-line);padding-top:6px}
+.ov20-nova-guide{width:100%;min-height:28px;margin-bottom:6px;border:1px solid rgba(0,229,255,.35);border-radius:7px;background:linear-gradient(120deg,rgba(0,229,255,.15),rgba(92,67,255,.15));color:#fff;font-size:7px;font-weight:800;letter-spacing:.04em}
+.ov20-nova-msgs{max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:5px}
+.ov20-nova-msg{font-size:7.5px;line-height:1.4;color:var(--ov20-dim)}
+.ov20-nova-msg.me{color:var(--ov20-cyan);text-align:right}
+.ov20-nova-speak{display:block;margin-top:2px;background:none;border:none;color:var(--ov20-cyan);font-size:6px;letter-spacing:.04em;padding:0}
+.ov20-nova-panel input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--ov20-line);border-radius:6px;color:var(--ov20-ink);font-size:8px;padding:5px 6px;outline:none}
+
+/* Full-screen destination search: a comfortable, keyboard-safe mobile surface. */
+.ov20-search-overlay{position:absolute;inset:0;z-index:120;background:linear-gradient(180deg,#081527 0%,#070b16 100%);color:#fff;display:flex;flex-direction:column;padding:max(16px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));animation:ov20-search-in .22s ease-out}
+@keyframes ov20-search-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.ov20-search-overlay header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.ov20-search-overlay header>div{display:flex;flex-direction:column;gap:4px}
+.ov20-search-overlay header b{font-size:20px;line-height:1.15}
+.ov20-search-overlay header small{font-size:12px;color:var(--ov20-dim)}
+.ov20-search-back{width:44px;height:44px;flex:0 0 44px;border:1px solid var(--ov20-line-strong);border-radius:14px;background:rgba(255,255,255,.04);color:#fff;font-size:30px;line-height:1}
+.ov20-search-box{display:flex;align-items:center;gap:10px;min-height:54px;padding:0 14px;border:1px solid rgba(0,229,255,.48);border-radius:16px;background:rgba(12,28,48,.92);box-shadow:0 12px 38px rgba(0,0,0,.35),0 0 22px rgba(0,229,255,.08)}
+.ov20-search-box>span{font-size:24px;color:var(--ov20-cyan)}
+.ov20-search-box input{flex:1;min-width:0;border:0;outline:0;background:none;color:#fff;font-size:16px;line-height:1.3}
+.ov20-search-box input::placeholder{color:#6f8299}
+.ov20-search-box button{width:34px;height:34px;border:0;border-radius:50%;background:rgba(255,255,255,.08);color:#fff;font-size:20px}
+.ov20-search-content{flex:1;min-height:0;overflow-y:auto;padding:18px 0 110px;overscroll-behavior:contain}
+.ov20-search-section-title{padding:0 4px 10px;color:#85a1ba;font-size:11px;font-weight:800;letter-spacing:.08em}
+.ov20-place-result{width:100%;min-height:68px;display:flex;align-items:center;gap:12px;text-align:left;padding:10px 12px;border:0;border-bottom:1px solid rgba(124,160,190,.16);background:transparent;color:#fff}
+.ov20-place-result:active{background:rgba(0,229,255,.08)}
+.ov20-place-result .pin{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border:1px solid rgba(0,229,255,.28);border-radius:12px;background:rgba(0,229,255,.08);color:var(--ov20-cyan);font-size:18px}
+.ov20-place-result>span:nth-child(2){min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
+.ov20-place-result b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ov20-place-result small{font-size:11px;color:#8294a9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ov20-place-result>i{font-style:normal;color:#66819b;font-size:24px}
+.ov20-search-state,.ov20-search-empty{min-height:150px;display:flex;align-items:center;justify-content:center;gap:10px;color:#8fa2b8;font-size:13px;text-align:center}
+.ov20-search-state i{width:16px;height:16px;border:2px solid rgba(0,229,255,.22);border-top-color:var(--ov20-cyan);border-radius:50%;animation:ov20-spin .7s linear infinite}
+@keyframes ov20-spin{to{transform:rotate(360deg)}}
+.ov20-search-empty{flex-direction:column;font-size:30px}
+.ov20-search-empty b{font-size:14px;color:#d7e1ec}.ov20-search-empty small{font-size:11px}
+.ov20-search-nova{position:absolute;left:16px;right:16px;bottom:max(18px,env(safe-area-inset-bottom));border:1px solid rgba(149,93,255,.34);border-radius:14px;background:linear-gradient(120deg,rgba(19,38,61,.96),rgba(44,25,79,.96));box-shadow:0 14px 30px rgba(0,0,0,.38);padding:12px 14px;color:#c7d3e1;font-size:11px;line-height:1.45}
+.ov20-search-nova span{display:block;margin-bottom:3px;color:#ffb258;font-size:9px;font-weight:900;letter-spacing:.12em}
+
+@media(max-width:430px){
+  .ov20-topbar{gap:5px;padding-left:7px;padding-right:7px}
+  .ov20-live-badge{font-size:8px}
+  .ov20-top-search{min-width:98px;padding:0 8px;font-size:9px}
+  .ov20-tabs{gap:7px}.ov20-tab{font-size:7px}
+}
+
+/* V21.8 Orbit Control refresh -------------------------------------------------
+   The Earth renderer remains the same lightweight Three.js instance. These rules turn
+   the former phone-only framing into a real operations console on wide screens while
+   retaining the compact, touch-first telemetry layout on a Mini App. */
+.ov20-route-telemetry{position:absolute;z-index:7;left:112px;right:112px;bottom:13px;max-width:470px;margin:auto;border:1px solid rgba(0,229,255,.35);border-radius:13px;background:linear-gradient(120deg,rgba(5,20,36,.9),rgba(17,21,54,.88));backdrop-filter:blur(15px);box-shadow:0 16px 42px rgba(0,0,0,.35),inset 0 1px rgba(255,255,255,.04);overflow:hidden}
+.ov20-route-head{display:flex;align-items:center;gap:7px;padding:8px 9px 6px;border-bottom:1px solid rgba(49,73,99,.55)}
+.ov20-route-icon{width:20px;height:20px;display:grid;place-items:center;border:1px solid rgba(0,229,255,.45);border-radius:7px;color:var(--ov20-cyan);font-size:16px}
+.ov20-route-head>div{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}.ov20-route-head small{color:var(--ov20-cyan);font-size:6px;font-weight:800;letter-spacing:.09em}.ov20-route-head b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:8px}.ov20-route-head em{color:var(--ov20-cyan);font-style:normal;padding:0 2px}
+.ov20-route-head button{flex:0 0 auto;border:1px solid rgba(0,229,255,.35);border-radius:7px;padding:5px 6px;background:rgba(0,229,255,.09);color:#fff;font-size:6px;font-weight:800}
+.ov20-route-metrics{display:grid;grid-template-columns:repeat(3,1fr)}.ov20-route-metrics>div{padding:6px 8px;border-right:1px solid rgba(49,73,99,.45);min-width:0}.ov20-route-metrics>div:last-child{border:0}.ov20-route-metrics small{display:block;color:var(--ov20-dim2);font-size:6px;letter-spacing:.08em}.ov20-route-metrics b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;color:#fff;font-size:9px}.ov20-route-course b{color:var(--ov20-cyan)}
+.ov20-satellite-card,.ov20-events-card,.ov20-weather-card,.ov20-current-card{box-shadow:inset 0 1px rgba(255,255,255,.04),0 8px 30px rgba(0,0,0,.16)}
+.ov20-iss-row .name{color:var(--ov20-cyan)!important;font-weight:800}.ov20-sat-meta{margin:-1px 0 3px;color:var(--ov20-dim2);font-size:6px;text-align:right}.ov20-event-counts{display:flex;gap:7px;margin-top:4px;padding-top:4px;border-top:1px solid rgba(49,73,99,.45);color:var(--ov20-dim2);font-size:6px}
+
+@media(min-width:900px){
+  .ov20-root{max-width:1480px;height:min(880px,calc(100vh - 72px));min-height:730px;margin:0 auto;border:1px solid rgba(36,94,129,.56);border-radius:22px;box-shadow:0 32px 100px rgba(0,0,0,.6),inset 0 1px rgba(255,255,255,.05);background:radial-gradient(circle at 50% 42%,#132d47 0%,#080e1d 53%,#050912 100%)}
+  .ov20-topbar{height:58px;padding:11px 20px;border-bottom:1px solid rgba(37,77,106,.44);background:linear-gradient(90deg,rgba(4,13,25,.96),rgba(11,30,49,.82),rgba(7,12,28,.93))}
+  .ov20-live-badge{font-size:11px}.ov20-live-badge i{width:8px;height:8px}.ov20-top-search{order:2;min-width:168px;height:36px;font-size:12px}.ov20-tabs{order:3;gap:21px}.ov20-tab{font-size:10px;padding:10px 2px}.ov20-tab.active::after{bottom:-11px;height:3px}
+  .ov20-layout{inset:59px 0 0}.ov20-globe-col{inset:16px 286px 22px 286px;border:1px solid rgba(45,117,155,.5);border-radius:20px;box-shadow:inset 0 0 70px rgba(0,167,255,.06),0 18px 50px rgba(0,0,0,.28)}
+  .ov20-globe-col::before{content:'';pointer-events:none;position:absolute;z-index:2;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(8,14,28,.15),transparent 18%,transparent 75%,rgba(6,12,26,.46))}.ov20-globe-canvas{border-radius:inherit;overflow:hidden}.ov20-coord-pill{top:14px;font-size:9px;padding:5px 11px}.ov20-coord-pill span{font-size:7px}.ov20-crosshair{top:50%;width:18px;height:18px}.ov20-crosshair::after{inset:5px}
+  .ov20-col{top:16px;bottom:22px;width:258px;gap:10px;z-index:6}.ov20-col.left{left:18px}.ov20-col.right{right:18px}.ov20-card{padding:13px 14px;border-radius:14px;background:linear-gradient(145deg,rgba(10,27,45,.86),rgba(13,15,40,.75));border-color:rgba(42,111,148,.55)}.ov20-card-label{font-size:9px;margin-bottom:9px}.ov20-card h4{font-size:15px;margin-bottom:5px}.ov20-row{flex-direction:row;justify-content:space-between;align-items:center;padding:6px 0}.ov20-row span{font-size:8px}.ov20-row b{font-size:11px;margin:0}.ov20-btn{height:30px;font-size:8px;margin-top:8px}.ov20-sat-row{padding:5px 0}.ov20-sat-row .name{font-size:9px}.ov20-sat-row .count{font-size:11px}.ov20-sat-meta{font-size:8px}.ov20-signal{margin-top:8px}.ov20-ev-row{padding:5px 0;font-size:9px}.ov20-ev-row small{font-size:7px}.ov20-event-counts{font-size:8px}.ov20-weather-main .temp{font-size:28px}.ov20-weather-icon{font-size:22px}
+  .ov20-route-telemetry{left:315px;right:315px;bottom:38px;max-width:690px;border-radius:15px}.ov20-route-head{padding:10px 12px 8px}.ov20-route-icon{width:27px;height:27px;font-size:20px}.ov20-route-head small{font-size:8px}.ov20-route-head b{font-size:11px}.ov20-route-head button{font-size:8px;padding:7px 10px}.ov20-route-metrics>div{padding:9px 12px}.ov20-route-metrics small{font-size:7px}.ov20-route-metrics b{font-size:13px}
+  .ov20-globe-controls{bottom:14px;gap:10px}.ov20-zoom-btn{width:32px;height:32px;font-size:17px}.ov20-recenter-btn{width:38px;height:38px;font-size:17px}.ov20-marker .dot{width:10px;height:10px}.ov20-marker .tag{font-size:7px;padding:2px 6px}
+  .ov20-nova-float{right:26px;bottom:32px;width:76px;min-height:76px}.ov20-nova-avatar{width:56px;height:56px}.ov20-nova-float b{font-size:10px}.ov20-nova-float.open{width:280px;right:22px}.ov20-nova-float.open .ov20-nova-avatar{width:72px;height:72px}
+}
+
+@media(max-width:899px){
+  .ov20-route-telemetry{bottom:39px;left:108px;right:108px}.ov20-route-head b{font-size:7px}.ov20-route-head button{font-size:5.5px}.ov20-route-metrics b{font-size:8px}
+}
+
+@media(max-width:430px){
+  .ov20-route-telemetry{left:104px;right:104px;bottom:38px}.ov20-route-head{padding:6px}.ov20-route-icon{display:none}.ov20-route-head small{font-size:5px}.ov20-route-head button{padding:4px}.ov20-route-metrics>div{padding:5px}.ov20-route-metrics small{font-size:5px}.ov20-route-metrics b{font-size:7px}
+}

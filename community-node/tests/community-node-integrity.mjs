@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { createCommunityNodeGateway, sha256, TOKEN_TTL_MS } = require('../communityNode.js');
+
+const gateway = createCommunityNodeGateway({ signingKey: 'test-signing-key', adminKey: 'test-admin-key' });
+const created = gateway.registerNode('Integrity node');
+assert.match(created.nodeId, /^gcn_/);
+assert.ok(created.nodeSecret.length > 20);
+assert.equal(JSON.stringify(gateway.listNodes()).includes(created.nodeSecret), false, 'raw node secret must never be listed');
+const token = gateway.issueToken(created.nodeId, created.nodeSecret);
+assert.ok(token);
+const session = gateway.authenticate(token);
+assert.equal(session.node.nodeId, created.nodeId);
+assert.equal(TOKEN_TTL_MS, 900000);
+assert.equal(gateway.recordHeartbeat(created.nodeId, { cpuPercent: 12, memoryPercent: 40, diskPercent: 50, uptimeSeconds: 99, apiLatencyMs: 20, serviceStatus: 'online' }), true);
+const task = gateway.selectWork(created.nodeId);
+assert.ok(task.resource.startsWith('/public/'), 'work must use only internal public resource paths');
+assert.equal(gateway.submitResult(created.nodeId, { taskId: task.id, type: task.type, sha256: sha256(task.body) }).ok, true);
+assert.equal(gateway.submitResult(created.nodeId, { taskId: task.id, type: 'wallet-payout', sha256: sha256(task.body) }).ok, false, 'forbidden work type must be rejected');
+assert.equal(gateway.revokeNode(created.nodeId), true);
+assert.equal(gateway.issueToken(created.nodeId, created.nodeSecret), null, 'revoked node must not receive a token');
+console.log('PASS: community node performs read/cache/monitor work only; no financial or identity mutation surface exists.');

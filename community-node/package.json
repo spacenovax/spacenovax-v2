@@ -1,0 +1,11 @@
+{
+  "name": "spacenovax-genesis-community-node-v1",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node communityNode.js",
+    "test": "node tests/community-node-integrity.mjs"
+  },
+  "engines": { "node": ">=18" }
+}

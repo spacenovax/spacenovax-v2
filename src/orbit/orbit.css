@@ -1,0 +1,135 @@
+/* Orbit Module — V18 Mobile-First Earth Command Center.
+   Default state: ONLY Live Earth + thin top HUD tabs + floating NOVA AI + bottom nav.
+   Side info (Current Position / Satellites / Weather / Earth Events / Destination) lives
+   in a Bottom Sheet that slides up only when a top tab is tapped. Mobile (390-430px) is
+   the base design; wider screens just widen the same sheet, never a permanent side panel. */
+
+:root{
+  --orbit-bg:#050c16;
+  --orbit-line:rgba(160,195,220,.14);
+  --orbit-line-strong:rgba(160,195,220,.24);
+  --orbit-glass:rgba(6,14,24,.58);
+  --orbit-glass-strong:rgba(8,16,28,.86);
+  --orbit-cyan:#53e7ff;
+  --orbit-ink:#eaf6ff;
+  --orbit-dim:rgba(200,220,235,.55);
+  --orbit-dim2:rgba(180,205,225,.4);
+  --orbit-green:#4be07e;
+  --orbit-red:#ff6b6b;
+  --orbit-amber:#ffc15e;
+}
+
+.orbit-root{margin:-18px -18px 0;background:var(--orbit-bg);position:relative;height:calc(100vh - 90px);min-height:560px;overflow:hidden}
+@media(max-width:520px){.orbit-root{margin:-10px -10px 0;height:calc(100vh - 78px)}}
+/* Mobile Device Frame: above phone width, center a fixed 430px column instead of ever
+   stretching full window width — this is a Telegram Mini App, not a PC dashboard, at any
+   screen size. */
+@media(min-width:480px){
+  .orbit-root{max-width:430px;margin-left:auto;margin-right:auto;border-left:1px solid var(--orbit-line-strong);border-right:1px solid var(--orbit-line-strong);box-shadow:0 30px 90px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.4)}
+}
+
+/* Top HUD strip: thin underline tabs, never look like buttons */
+.orbit-topbar{position:absolute;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:linear-gradient(180deg,rgba(3,8,15,.65),transparent)}
+.orbit-tabs{display:flex;gap:18px;overflow-x:auto;scrollbar-width:none}
+.orbit-tabs::-webkit-scrollbar{display:none}
+.orbit-tab{background:none;border:none;color:var(--orbit-dim2);font-size:9.5px;font-weight:700;letter-spacing:.12em;padding:5px 1px;white-space:nowrap;position:relative}
+.orbit-tab.active{color:var(--orbit-ink)}
+.orbit-tab.active::after{content:'';position:absolute;left:0;right:0;bottom:-7px;height:2px;border-radius:2px;background:var(--orbit-cyan);box-shadow:0 0 8px var(--orbit-cyan)}
+.orbit-top-right{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.orbit-clock{font-size:8px;color:var(--orbit-dim2);text-align:right;line-height:1.4}
+
+/* Center: Earth fills essentially the whole screen — the only permanent element */
+.orbit-globe-wrap{position:absolute;inset:0;background:#000}
+.orbit-globe-canvas{position:absolute;inset:0}
+.orbit-globe-canvas canvas{display:block;touch-action:none}
+.orbit-coord-pill{position:absolute;top:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:8px;padding:6px 14px;border:1px solid var(--orbit-line-strong);border-radius:999px;background:var(--orbit-glass-strong);backdrop-filter:blur(12px);font-size:9px;color:var(--orbit-ink);white-space:nowrap}
+.orbit-coord-pill span{color:var(--orbit-dim2);font-size:7.5px;margin-right:3px}
+.orbit-crosshair{position:absolute;top:120px;left:50%;transform:translateX(-50%);z-index:3;width:13px;height:13px;border:1px solid rgba(83,231,255,.5);border-radius:50%}
+.orbit-crosshair::after{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--orbit-cyan);box-shadow:0 0 6px var(--orbit-cyan)}
+
+.orbit-marker{position:absolute;z-index:3;transform:translate(-50%,-100%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px}
+.orbit-marker .dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 3px rgba(83,231,255,.18)}
+.orbit-marker.current .dot{background:var(--orbit-cyan)}
+.orbit-marker.dest .dot{background:var(--orbit-green)}
+.orbit-marker .tag{font-size:6.5px;letter-spacing:.08em;padding:2px 6px;border-radius:5px;background:rgba(4,10,18,.75);border:1px solid var(--orbit-line);color:var(--orbit-dim);white-space:nowrap;margin-top:2px}
+
+.orbit-globe-controls{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:4;display:flex;align-items:center;gap:12px}
+.orbit-zoom-btn{width:28px;height:28px;border-radius:9px;border:1px solid var(--orbit-line);background:var(--orbit-glass-strong);color:var(--orbit-dim);font-size:13px;display:flex;align-items:center;justify-content:center}
+.orbit-recenter-btn{width:30px;height:30px;border-radius:50%;border:1px solid var(--orbit-line-strong);background:var(--orbit-glass-strong);color:var(--orbit-cyan);font-size:13px;display:flex;align-items:center;justify-content:center}
+
+/* Slim HUD — always-visible collapsed summary row (Position/Weather/Satellite/Destination).
+   Sits just below the top tab bar; each chip expands its full detail as a Bottom Sheet. */
+.orbit-slim-hud{position:absolute;top:44px;left:0;right:0;z-index:5;display:flex;gap:8px;padding:0 14px;overflow-x:auto;scrollbar-width:none}
+.orbit-slim-hud::-webkit-scrollbar{display:none}
+.orbit-slim-chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--orbit-line);border-radius:999px;background:var(--orbit-glass-strong);backdrop-filter:blur(12px);color:var(--orbit-ink)}
+.orbit-slim-chip .ico{font-size:12px}
+.orbit-slim-chip .val{font-size:9.5px;font-weight:600;white-space:nowrap}
+
+/* Coord pill / crosshair sit below the Slim HUD row (see positions set above). */
+
+/* --- Bottom Sheet: the ONLY place info panels live. Slides up from the bottom nav. --- */
+.orbit-sheet-scrim{position:absolute;inset:0;z-index:7;background:rgba(2,6,12,.45);backdrop-filter:blur(2px)}
+.orbit-sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;max-height:62%;overflow-y:auto;border-top-left-radius:22px;border-top-right-radius:22px;border:1px solid var(--orbit-line-strong);border-bottom:none;background:var(--orbit-glass-strong);backdrop-filter:blur(20px);padding:10px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -20px 50px rgba(0,0,0,.5)}
+.orbit-sheet-handle{width:36px;height:4px;border-radius:3px;background:var(--orbit-line-strong);margin:2px auto 12px}
+.orbit-sheet h4{margin:0 0 3px;font-size:15px;font-weight:600;color:var(--orbit-ink)}
+.orbit-sheet-label{font-size:8.5px;font-weight:800;letter-spacing:.12em;color:var(--orbit-dim2);margin-bottom:9px}
+
+.orbit-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-top:1px solid rgba(160,195,220,.08)}
+.orbit-row:first-of-type{border-top:none}
+.orbit-row span{font-size:8.5px;letter-spacing:.08em;color:var(--orbit-dim2)}
+.orbit-row b{font-size:11px;font-weight:600;color:var(--orbit-ink)}
+
+.orbit-btn{width:100%;height:34px;margin-top:10px;border-radius:9px;border:1px solid var(--orbit-line-strong);background:rgba(255,255,255,.03);color:var(--orbit-dim);font-size:8.5px;font-weight:700;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;gap:6px}
+.orbit-btn.primary{background:linear-gradient(120deg,rgba(83,231,255,.16),rgba(45,120,255,.14));border-color:rgba(83,231,255,.4);color:var(--orbit-ink)}
+.orbit-link{width:100%;margin-top:6px;background:none;border:none;color:var(--orbit-dim2);font-size:8px;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;gap:4px}
+
+.orbit-sat-row{display:flex;align-items:center;gap:8px;padding:6px 0}
+.orbit-sat-row .name{flex:1;font-size:9.5px;color:var(--orbit-dim)}
+.orbit-sat-row .count{font-size:11px;font-weight:700;color:var(--orbit-ink)}
+
+.orbit-ev-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:9.5px}
+.orbit-ev-row .dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.orbit-ev-row .name{flex:1;color:var(--orbit-dim)}
+.orbit-ev-row b{color:var(--orbit-ink);font-size:10.5px}
+
+.orbit-search-field{display:flex;align-items:center;gap:6px;border:1px solid var(--orbit-line);border-radius:9px;background:rgba(255,255,255,.03);padding:8px 10px;margin-bottom:9px}
+.orbit-search-field input{flex:1;background:none;border:none;outline:none;color:var(--orbit-ink);font-size:11px}
+.orbit-search-field input::placeholder{color:var(--orbit-dim2)}
+.orbit-search-results{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+.orbit-search-results button{text-align:left;background:none;border:none;border-top:1px solid rgba(160,195,220,.08);color:var(--orbit-dim);font-size:9.5px;padding:8px 2px}
+.orbit-dest-selected{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.orbit-dest-selected b{font-size:13px;color:var(--orbit-ink);display:block}
+.orbit-dest-selected small{color:var(--orbit-dim2);font-size:9px}
+.orbit-fav-star{background:none;border:none;color:var(--orbit-amber);font-size:15px}
+
+.orbit-weather-main{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.orbit-weather-main .temp{font-size:28px;font-weight:300;color:var(--orbit-ink)}
+.orbit-weather-icon{font-size:22px}
+
+/* Floating NOVA AI — the ONE and ONLY instance, draggable, always on top */
+.orbit-nova-float{position:absolute;z-index:60;right:14px;bottom:calc(78px + env(safe-area-inset-bottom));width:56px;border:1px solid rgba(83,231,255,.32);border-radius:16px;background:var(--orbit-glass-strong);backdrop-filter:blur(16px);padding:8px;display:flex;flex-direction:column;align-items:center;text-align:center;cursor:grab;touch-action:none;box-shadow:0 8px 26px rgba(0,0,0,.45)}
+.orbit-nova-float.open{width:220px;padding:12px}
+.orbit-nova-grip{position:absolute;top:6px;right:7px;display:grid;grid-template-columns:repeat(2,3px);gap:2px}
+.orbit-nova-grip i{width:3px;height:3px;border-radius:50%;background:var(--orbit-dim2)}
+.orbit-nova-avatar{width:34px;height:34px;border-radius:50%;border:1px solid rgba(83,231,255,.4);overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:4px;box-shadow:0 0 14px rgba(83,231,255,.2)}
+.orbit-nova-float.open .orbit-nova-avatar{width:48px;height:48px;margin-bottom:7px}
+.orbit-nova-avatar img{width:100%;height:100%;object-fit:cover}
+.orbit-nova-float b{font-size:8.5px;color:var(--orbit-ink);letter-spacing:.03em}
+.orbit-nova-status{display:none}
+.orbit-nova-float.open .orbit-nova-status{display:flex;flex-direction:column;gap:3px;margin-top:6px;align-items:flex-start;width:100%;padding-left:6px}
+.orbit-nova-status span{font-size:7.5px;letter-spacing:.08em;color:var(--orbit-dim);display:flex;align-items:center;gap:5px}
+.orbit-nova-status i{width:5px;height:5px;border-radius:50%;background:var(--orbit-green);box-shadow:0 0 5px var(--orbit-green)}
+.orbit-nova-panel{margin-top:9px;width:100%;text-align:left;border-top:1px solid var(--orbit-line);padding-top:8px}
+.orbit-nova-msgs{max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:7px}
+.orbit-nova-msg{font-size:9px;line-height:1.5;color:var(--orbit-dim)}
+.orbit-nova-msg.me{color:var(--orbit-cyan);text-align:right}
+.orbit-nova-speak{display:block;margin-top:3px;background:none;border:none;color:var(--orbit-cyan);font-size:7.5px;letter-spacing:.06em;padding:0}
+.orbit-nova-panel input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--orbit-line);border-radius:7px;color:var(--orbit-ink);font-size:10px;padding:7px 8px;outline:none}
+
+/* System status — folded into the BASE sheet rather than a permanent bottom bar,
+   so the default view stays Earth-only. */
+.orbit-status-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--orbit-line)}
+.orbit-status-grid div{text-align:left}
+.orbit-status-grid small{display:block;font-size:7px;letter-spacing:.1em;color:var(--orbit-dim2)}
+.orbit-status-grid b{display:block;margin-top:3px;font-size:9.5px;color:var(--orbit-ink)}
+.orbit-status-grid b.ok{color:var(--orbit-green)}
