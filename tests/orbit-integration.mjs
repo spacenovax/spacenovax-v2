@@ -52,6 +52,7 @@ const earthViewSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitEart
 const earthEngineSource = fs.readFileSync(new URL('../src/orbit/EarthEngine.js', import.meta.url), 'utf8');
 const routeSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitRouteTelemetry.jsx', import.meta.url), 'utf8');
 const drivingViewSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitDrivingView.jsx', import.meta.url), 'utf8');
+const searchOverlaySource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitSearchOverlay.jsx', import.meta.url), 'utf8');
 const satelliteSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitSatellite.jsx', import.meta.url), 'utf8');
 const eventSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitEvents.jsx', import.meta.url), 'utf8');
 
@@ -64,9 +65,25 @@ if (!orbitSource.includes('setIssPosition')
   throw new Error('Orbit live satellite and route telemetry UI integration is missing.');
 }
 
-if (!orbitSource.includes('fetchDrivingRoute') || !earthEngineSource.includes('setRoadRoute') || !routeSource.includes('DRIVING ROUTE')) throw new Error('Orbit driving navigation integration is missing.');
+if (!orbitSource.includes('fetchDrivingRoute')
+  || !earthEngineSource.includes('setRoadRoute')
+  || !routeSource.includes('DRIVING ROUTE')) {
+  throw new Error('Orbit driving navigation integration is missing.');
+}
 
-if (!orbitSource.includes('<OrbitDrivingView') || !drivingViewSource.includes('MapContainer') || !drivingViewSource.includes('GPS LIVE GUIDANCE')) throw new Error('Orbit 2D driving guidance view is missing.');
+if (!orbitSource.includes('<OrbitDrivingView')
+  || !drivingViewSource.includes('MapContainer')
+  || !drivingViewSource.includes('GPS LIVE GUIDANCE')
+  || !drivingViewSource.includes('MapControls')
+  || !drivingViewSource.includes('routeArrow')) {
+  throw new Error('Orbit 2D driving guidance view is missing.');
+}
+
+if (!searchOverlaySource.includes('BrowserSpeechProvider')
+  || !searchOverlaySource.includes('toggleVoiceSearch')
+  || !searchOverlaySource.includes('ov20-search-mic')) {
+  throw new Error('Orbit voice destination search is missing.');
+}
 
 if (!earthViewSource.includes('ov20-marker-pin')
   || !earthViewSource.includes("type === 'base'")
