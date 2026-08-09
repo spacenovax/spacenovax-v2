@@ -215,10 +215,10 @@ export default function OrbitV20({ language, user }) {
       if (engineRef.current) {
         const markers = merged.filter((m) => Number.isFinite(m.lat)).map((m) => ({ id: m.id, lat: m.lat, lon: m.lon, color: m.kind === 'quake' ? 0xff6f6f : 0xffc15e }));
         engineRef.current.setMarkerLayer('events', markers, { size: 0.04 });
-        const typhoonTracks = merged
-          .filter((m) => m.kind === 'typhoon' && Array.isArray(m.track) && m.track.length > 1)
-          .map((m) => ({ id: m.id, color: 0xff8a5c, points: m.track }));
-        engineRef.current.setEventTracks(typhoonTracks);
+        // A historical storm path looks like a broken orange "tail" over the globe on
+        // a compact phone display. Keep the live storm eye only; it is clearer and
+        // closer to an operations display than a long, ambiguous route line.
+        engineRef.current.clearEventTracks();
         const typhoonPoints = merged.filter((m) => m.kind === 'typhoon' && Number.isFinite(m.lat)).map((m) => ({ id: m.id, lat: m.lat, lon: m.lon }));
         engineRef.current.setTyphoonSwirls(typhoonPoints);
       }
