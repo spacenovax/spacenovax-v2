@@ -16,7 +16,7 @@ const LANGUAGES = [
 
 const COPY = {
   en: {
-    tagline: 'Explore. Mine. Evolve.', rank: 'Rookie', balance: 'Total balance',
+    tagline: 'Explore. Mine. Evolve.', rank: 'Rookie', balance: 'Total balance', ready: 'READY',
     verified: 'SYSTEM ONLINE', mining: 'Mining Command', reward: 'Cycle reward',
     rate: 'Effective rate', remaining: 'Remaining', progress: 'Cycle progress',
     fleet: 'Fleet bonus', start: 'Start mining', active: 'Mining active',
@@ -38,7 +38,7 @@ const COPY = {
     missionProgress: 'Mission progress', completed: 'Completed', rewardAvailable: 'Rewards available',
   },
   ko: {
-    tagline: '탐험하고, 채굴하고, 진화하세요.', rank: '루키', balance: '총 보유 포인트',
+    tagline: '탐험하고, 채굴하고, 진화하세요.', rank: '루키', balance: '총 보유 포인트', ready: '준비 완료',
     verified: '시스템 정상', mining: '채굴 관제 센터', reward: '주기 보상',
     rate: '실시간 채굴 속도', remaining: '남은 시간', progress: '채굴 진행률',
     fleet: '함대 보너스', start: '채굴 시작', active: '채굴 진행 중',
@@ -584,7 +584,7 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
   return <section className={`command-card mining-core ${detailed ? 'detailed' : ''}`}>
     <div className="section-heading">
       <div><small>SPNX DISTRIBUTION ENGINE</small><h2>{t.mining}</h2></div>
-      <span className={`live-state ${active ? 'pulse' : ''}`}><i />{active ? t.active : 'READY'}</span>
+      <span className={`live-state ${active ? 'pulse' : ''}`}><i /}>{active ? t.active : t.ready}</span>
     </div>
     <MiningReactor
       active={active}
@@ -605,7 +605,7 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
     </div>
     <div className="mining-track"><i style={{ width: `${pct}%` }} /><span className="track-node n1"/><span className="track-node n2"/><span className="track-node n3"/></div>
     <div className="mining-metrics">
-      <span><small>{t.phase}</small><b>PHASE {m.phase || 1}</b></span>
+      <span><small>{t.phase}</small><b>{t.phase} {m.phase || 1}</b></span>
       <span><small>{t.fleet}</small><b>+{Number(m.fleetBonus || user.fleetBonus || 0)}%</b></span>
       <span><small>SECURITY CIRCLE</small><b>{Number(m.securityCircleCount || user.securityCircleCount || 0)}/5 · +{Number(m.securityBonus || user.securityCircleBonus || 0)}%</b></span>
       <span><small>MISSION PASSPORT</small><b>{m.missionPassportComplete || user.missionPassportComplete ? 'VERIFIED · +5%' : 'LOCKED · +0%'}</b></span>
