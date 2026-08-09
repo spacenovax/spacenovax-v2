@@ -7,15 +7,18 @@
    approved Final Design Specification color + type guide. */
 
 :root{
-  --ov20-bg:#0b0f1a;
-  --ov20-line:#1f2937;
-  --ov20-line-strong:#2b3648;
-  --ov20-glass:rgba(17,24,39,.42);
-  --ov20-glass-strong:rgba(17,24,39,.68);
+  --ov20-bg:#071421;
+  /* Outdoor readability: the original 42% panels allowed daylight and the globe
+     behind them to wash out labels on a phone.  These remain navy glass, but form
+     a reliable opaque surface for information. */
+  --ov20-line:#3b5874;
+  --ov20-line-strong:#6784a3;
+  --ov20-glass:rgba(8,22,39,.88);
+  --ov20-glass-strong:rgba(7,20,36,.96);
   --ov20-cyan:#00e5ff;
   --ov20-ink:#ffffff;
-  --ov20-dim:#a0aec0;
-  --ov20-dim2:#7c8aa0;
+  --ov20-dim:#d2dfec;
+  --ov20-dim2:#afc1d5;
   --ov20-green:#00ffa3;
   --ov20-red:#ff6b6b;
   --ov20-amber:#ffb020;
@@ -31,14 +34,14 @@
 }
 
 /* Top HUD: LIVE status badge + thin underline tabs, never button-styled */
-.ov20-topbar{position:absolute;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:linear-gradient(180deg,rgba(11,15,26,.9),rgba(11,15,26,.5) 70%,transparent)}
+.ov20-topbar{position:absolute;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:linear-gradient(180deg,rgba(5,17,31,.98),rgba(5,17,31,.82) 70%,rgba(5,17,31,.35))}
 .ov20-live-badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ov20-green)}
 .ov20-live-badge i{width:6px;height:6px;border-radius:50%;background:var(--ov20-green);box-shadow:0 0 6px var(--ov20-green)}
 .ov20-top-search{height:30px;min-width:112px;padding:0 12px;border:1px solid rgba(0,229,255,.42);border-radius:999px;background:linear-gradient(120deg,rgba(0,229,255,.18),rgba(82,70,255,.16));color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .ov20-top-search:first-letter{color:var(--ov20-cyan)}
 .ov20-tabs{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none}
 .ov20-tabs::-webkit-scrollbar{display:none}
-.ov20-tab{background:none;border:none;color:var(--ov20-dim2);font-size:9px;font-weight:700;letter-spacing:.08em;padding:4px 1px;white-space:nowrap;position:relative}
+.ov20-tab{background:none;border:none;color:#c6d6e8;font-size:9px;font-weight:800;letter-spacing:.08em;padding:4px 1px;white-space:nowrap;position:relative;text-shadow:0 1px 2px #000}
 .ov20-tab.active{color:var(--ov20-ink)}
 .ov20-tab.active::after{content:'';position:absolute;left:0;right:0;bottom:-5px;height:2px;border-radius:2px;background:var(--ov20-cyan);box-shadow:0 0 6px var(--ov20-cyan)}
 .ov20-clock{font-size:7px;color:var(--ov20-dim2);text-align:right;line-height:1.3}
@@ -80,7 +83,7 @@
 
 /* Left / Right HUD cards — compact, always visible, no card chrome heavier than a hairline
    border + translucent fill (per design guide: Card Background #111827CC, Border #1F2937). */
-.ov20-card{border:1px solid var(--ov20-line);border-radius:10px;background:var(--ov20-glass);backdrop-filter:blur(10px);padding:7px 8px}
+.ov20-card{border:1px solid var(--ov20-line-strong);border-radius:10px;background:linear-gradient(145deg,rgba(9,25,44,.94),rgba(7,16,31,.90));backdrop-filter:blur(14px);padding:7px 8px;box-shadow:0 8px 24px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.06)}
 .ov20-card-label{font-size:7px;font-weight:800;letter-spacing:.08em;color:var(--ov20-dim2);margin-bottom:5px}
 .ov20-card h4{margin:0 0 2px;font-size:11px;font-weight:600;color:var(--ov20-ink);line-height:1.25}
 
@@ -89,7 +92,7 @@
 .ov20-row span{font-size:6.5px;letter-spacing:.05em;color:var(--ov20-dim2)}
 .ov20-row b{font-size:9px;font-weight:700;color:var(--ov20-ink);margin-top:1px}
 
-.ov20-btn{width:100%;height:22px;margin-top:6px;border-radius:7px;border:1px solid var(--ov20-line-strong);background:rgba(255,255,255,.03);color:var(--ov20-dim);font-size:6.5px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;gap:3px}
+.ov20-btn{width:100%;height:22px;margin-top:6px;border-radius:7px;border:1px solid var(--ov20-line-strong);background:rgba(255,255,255,.09);color:#edf6ff;font-size:6.5px;font-weight:800;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;gap:3px}
 .ov20-btn.primary{background:linear-gradient(120deg,rgba(0,229,255,.18),rgba(0,255,163,.1));border-color:rgba(0,229,255,.4);color:var(--ov20-ink)}
 
 .ov20-sat-row{display:flex;align-items:center;gap:5px;padding:3px 0}
