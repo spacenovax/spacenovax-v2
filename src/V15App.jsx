@@ -898,9 +898,18 @@ function Game({ user, t, language }) {
     try {
       const launch = await api('/api/game/launch', { method: 'POST', body: {} });
       const params = new URLSearchParams({ source: 'mining-app', mode: 'fullscreen', session: launch.session, api: window.location.origin, parentOrigin: window.location.origin, lang: language });
+      const directGameUrl = `${GAME_URL}/?${params.toString()}`;
+      // Telegram Android can block a cross-origin iframe even when the game URL
+      // itself is healthy. Open the verified game directly there; desktop keeps
+      // the in-app frame and the same secure launch session.
+      if (window.Telegram?.WebApp?.openLink) {
+        window.Telegram.WebApp.openLink(directGameUrl, { try_instant_view: false });
+        setGameSyncStatus(language === 'ko' ? '게임을 전체 화면으로 실행합니다.' : 'Opening the game in full screen.');
+        return;
+      }
       setGameSession(launch.session);
       setGameSyncStatus('');
-      setGameUrl(`${GAME_URL}/?${params.toString()}`);
+      setGameUrl(directGameUrl);
       setLoaded(false);
       setGameOpen(true);
     } catch (error) {
