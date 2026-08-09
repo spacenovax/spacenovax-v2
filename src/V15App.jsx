@@ -799,6 +799,9 @@ function Game({ user, t, language }) {
   const [gameOpen, setGameOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [gameUrl, setGameUrl] = useState('');
+  const [gameSession, setGameSession] = useState('');
+  const [gameSyncStatus, setGameSyncStatus] = useState('');
+  const gameFrameRef = useRef(null);
   const { voiceState, play: playGameVoice } = useNovaVoiceFeedback('game-reward-briefing');
   const launchBriefings = {
     en: 'Captain, NOVA-X launch sequence is ready. Beginning the Genesis Gate defense operation.',
@@ -841,6 +844,49 @@ function Game({ user, t, language }) {
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [gameOpen]);
+  useEffect(() => {
+    if (!gameOpen || !gameSession) return undefined;
+    const gameOrigin = new URL(GAME_URL).origin;
+    const onGameMessage = async (event) => {
+      if (event.origin !== gameOrigin || event.source !== gameFrameRef.current?.contentWindow) return;
+      const message = event.data && typeof event.data === 'object' ? event.data : {};
+      if (message.type === 'SPACENOVAX_GAME_BRIDGE_READY' || message.type === 'SPACENOVAX_GAME_READY') {
+        event.source?.postMessage({
+          type: 'SPACENOVAX_APP_CONTEXT',
+          session: gameSession,
+          language,
+          rewards: { enabled: false, reason: 'server-signature-required' },
+        }, gameOrigin);
+        setGameSyncStatus(language === 'ko' ? '게임 보안 연결 완료' : 'Secure game link active');
+        return;
+      }
+      if (message.type !== 'SPACENOVAX_GAME_RESULT') return;
+      const result = message.result && typeof message.result === 'object' ? message.result : message;
+      try {
+        setGameSyncStatus(language === 'ko' ? '점수 저장 중…' : 'Saving score…');
+        const saved = await api('/api/game/result', {
+          method: 'POST',
+          body: {
+            session: gameSession,
+            runId: result.runId,
+            score: result.score,
+            kills: result.kills,
+            rescued: result.rescued,
+            missionCleared: result.missionCleared,
+            bossDefeated: result.bossDefeated,
+          },
+        });
+        setGameSyncStatus(language === 'ko'
+          ? `점수 저장 완료 · 최고 ${Number(saved.bestScore || 0).toLocaleString()}`
+          : `Score saved · best ${Number(saved.bestScore || 0).toLocaleString()}`);
+      } catch (error) {
+        setGameSyncStatus(error.message || (language === 'ko' ? '점수를 저장하지 못했습니다.' : 'Unable to save score.'));
+      }
+    };
+    window.addEventListener('message', onGameMessage);
+    return () => window.removeEventListener('message', onGameMessage);
+  }, [gameOpen, gameSession, language]);
+
   async function launchGame() {
     // Keep this inside the user's tap handler so mobile and Telegram WebViews
     // grant audio playback permission before the cross-origin game is mounted.
@@ -849,6 +895,8 @@ function Game({ user, t, language }) {
     try {
       const launch = await api('/api/game/launch', { method: 'POST', body: {} });
       const params = new URLSearchParams({ source: 'mining-app', mode: 'fullscreen', session: launch.session, api: window.location.origin, lang: language });
+      setGameSession(launch.session);
+      setGameSyncStatus('');
       setGameUrl(`${GAME_URL}/?${params.toString()}`);
       setLoaded(false);
       setGameOpen(true);
@@ -860,6 +908,8 @@ function Game({ user, t, language }) {
     setGameOpen(false);
     setLoaded(false);
     setGameUrl('');
+    setGameSession('');
+    setGameSyncStatus('');
   }
   function playRewardBriefing() {
     playGameVoice(rewardBriefing, language, .94);
@@ -892,7 +942,8 @@ function Game({ user, t, language }) {
         <button onClick={closeGame} aria-label={language === 'ko' ? '게임 닫기' : 'Close game'}>×</button>
       </div>
       {!loaded && <div className="game-loading game-fullscreen-loading"><img src="/spacenovax-symbol.jpg" alt=""/><b>CONNECTING TO FLIGHT SERVER</b><span><i/></span></div>}
-      <iframe title="SpaceNovaX official game" src={gameUrl} onLoad={() => setLoaded(true)} allow="autoplay; fullscreen; gamepad" />
+      {gameSyncStatus && <div className="game-sync-status" role="status">{gameSyncStatus}</div>}
+      <iframe ref={gameFrameRef} title="SpaceNovaX official game" src={gameUrl} onLoad={() => setLoaded(true)} allow="autoplay; fullscreen; gamepad" />
     </div>}
   </main>;
 }
