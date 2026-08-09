@@ -1,13 +1,25 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { BrowserSpeechProvider } from '../../nova/voice/BrowserSpeechProvider.js';
 
-export default function OrbitSearchOverlay({ open, t, query, results, busy, recent, onChange, onPick, onClose }) {
+export default function OrbitSearchOverlay({ open, t, language, query, results, busy, recent, onChange, onPick, onClose }) {
   const inputRef = useRef(null);
+  const speechRef = useRef(null);
+  const heardRef = useRef('');
+  const [voiceState, setVoiceState] = useState('idle');
+  if (!speechRef.current) speechRef.current = new BrowserSpeechProvider();
 
   useEffect(() => {
     if (!open) return undefined;
     const timer = setTimeout(() => inputRef.current?.focus(), 80);
     return () => clearTimeout(timer);
   }, [open]);
+  useEffect(() => () => speechRef.current?.stop(), []);
+  function toggleVoiceSearch() {
+    if (voiceState === 'listening') { speechRef.current.stop(); setVoiceState('idle'); return; }
+    heardRef.current = '';
+    const started = speechRef.current.listen({ language, onStart: () => setVoiceState('listening'), onResult: (text) => { heardRef.current = text; }, onEnd: () => { if (heardRef.current.trim()) onChange(heardRef.current.trim()); setVoiceState('idle'); }, onError: () => setVoiceState('unsupported') });
+    if (!started) setVoiceState('unsupported');
+  }
 
   if (!open) return null;
   const showRecent = query.trim().length < 2 && recent.length > 0;
@@ -31,7 +43,10 @@ export default function OrbitSearchOverlay({ open, t, query, results, busy, rece
           spellCheck="false"
         />
         {query && <button onClick={() => onChange('')} aria-label={t.close}>×</button>}
+        <button className={`ov20-search-mic ${voiceState}`} onClick={toggleVoiceSearch} aria-label={t.voiceSearch}>⌁</button>
       </div>
+      {voiceState === 'listening' && <div className="ov20-search-voice-state"><i /> {t.voiceListening}</div>}
+      {voiceState === 'unsupported' && <div className="ov20-search-voice-state error">{t.voiceUnavailable}</div>}
       <div className="ov20-search-content">
         {busy && <div className="ov20-search-state"><i />{t.searching}</div>}
         {showRecent && <div className="ov20-search-section-title">◷ {t.recent}</div>}

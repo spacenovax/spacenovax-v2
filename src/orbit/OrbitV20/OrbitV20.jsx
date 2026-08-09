@@ -62,6 +62,7 @@ function useCopy(language) {
     findDestination: ko ? '목적지 찾기' : 'Find destination',
     searchTitle: ko ? '어디로 가시겠습니까?' : 'Where would you like to go?',
     searchHint: ko ? '도시, 주소 또는 장소를 입력하세요.' : 'Enter a city, address, or place.',
+    voiceSearch: ko ? '음성으로 목적지 말하기' : 'Speak destination', voiceListening: ko ? '듣는 중입니다. 목적지를 말씀해 주세요.' : 'Listening. Say your destination.', voiceUnavailable: ko ? '이 기기 또는 텔레그램에서는 음성 인식을 사용할 수 없습니다.' : 'Voice recognition is unavailable in this browser.',
     recent: ko ? '최근 목적지' : 'RECENT DESTINATIONS',
     noResults: ko ? '검색 결과가 없습니다.' : 'No destinations found.',
     searching: ko ? '전 세계 목적지를 검색하고 있습니다…' : 'Searching destinations worldwide…',
@@ -542,7 +543,7 @@ export default function OrbitV20({ language, user }) {
         onInputChange={setNovaInput} onSend={sendNova} onGuide={startOrbitGuide} onSpeak={(text) => speakOrbit(text, language, setVoiceState)}
       />
       <OrbitSearchOverlay
-        open={searchOpen} t={t} query={searchQuery} results={searchResults} busy={searchBusy}
+        open={searchOpen} t={t} language={language} query={searchQuery} results={searchResults} busy={searchBusy}
         recent={recentDestinations} onChange={runSearch} onPick={pickDestination}
         onClose={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); }}
       />
