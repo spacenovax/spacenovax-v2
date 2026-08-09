@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 
 const FALLBACK_MISSIONS = [
   { id: 'website', icon: '🌐', title: 'Visit SpaceNovaX Website', type: 'one_time', reward: 100, url: 'https://spacenovax.com', action: 'OPEN' },
-  { id: 'telegram', icon: '📢', title: 'Join Telegram', type: 'one_time', reward: 300, url: 'https://t.me/spacesnovax', action: 'JOIN' },
+  { id: 'telegram', icon: '📢', title: 'Join SpaceNovaX Telegram Channel', type: 'one_time', reward: 300, url: 'https://t.me/spacenovaxteam', action: 'JOIN CHANNEL' },
   { id: 'discord', icon: '💬', title: 'Join Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN' },
   { id: 'x', icon: '𝕏', title: 'Follow X', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW' },
   { id: 'youtube_subscribe', icon: '▶️', title: 'Subscribe YouTube', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE' },
-  { id: 'youtube_like', icon: '👍', title: 'YouTube Like', type: 'one_time', reward: 100, url: 'https://youtube.com/@spacenovaxteam', action: 'LIKE' },
   { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', type: 'daily', reward: 20, url: '', action: 'CHECK-IN' },
 ];
 

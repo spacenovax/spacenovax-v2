@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/v15.css';
+import { NovaAIRouter } from './nova/index.js';
+
+const OrbitV20 = lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'));
 
 const GAME_URL = 'https://game.spacenovax.com';
 const PREVIEW_BUILD = import.meta.env.VITE_PREVIEW_BUILD === 'true' || new URLSearchParams(window.location.search).get('preview') === '1';
@@ -85,6 +88,11 @@ async function api(path, options = {}) {
   return data;
 }
 
+// Voice and conversational routing are deliberately isolated from the app
+// modules.  The router resolves browser speech, local audio, FAQ and rules
+// before the final text-only provider is even considered.
+const novaVoiceRouter = new NovaAIRouter({ request: api, clientKey: getClientId() });
+
 const fallbackUser = {
   id: 'guest', firstName: 'Space Explorer', level: 1, balance: 0, activeFleet: 0,
   fleetBonus: 0, securityCircle: [], securityCircleCount: 0, securityCircleBonus: 0, missionBonus: 0, missionPassportComplete: false,
@@ -100,6 +108,40 @@ function clock(ms) {
   const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
   return [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60]
     .map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+// The ledger remains server-authoritative.  This hook only advances the
+// server-calculated in-progress portion between session refreshes, so a
+// Captain sees a smooth 0.5s live counter without creating a client-side
+// reward or changing the settled balance.
+function useLiveMiningView(user) {
+  const [tick, setTick] = useState(() => Date.now());
+  const mining = user.mining || fallbackUser.mining;
+  const active = Boolean(mining.active) && !Boolean(mining.claimable);
+
+  useEffect(() => {
+    setTick(Date.now());
+    if (!active) return undefined;
+    const timer = window.setInterval(() => setTick(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [active, mining.startedAt, mining.calculatedAt, mining.endsAt, mining.speedPerHour]);
+
+  const calculatedAt = Number(mining.calculatedAt || tick);
+  const durationMs = Number(mining.durationMs || 86400000);
+  const elapsedSinceServer = active ? Math.max(0, Math.min(tick - calculatedAt, Number(mining.remainingMs || durationMs))) : 0;
+  const liveMined = Math.min(
+    Number(mining.claimableReward || mining.reward || 0),
+    Number(mining.minedSoFar || 0) + (Number(mining.speedPerHour || 0) * elapsedSinceServer / 3600000),
+  );
+  const remainingMs = active ? Math.max(0, Number(mining.remainingMs || 0) - elapsedSinceServer) : Number(mining.remainingMs || 0);
+  const progress = active
+    ? Math.min(1, Math.max(0, 1 - (remainingMs / durationMs)))
+    : Number(mining.progress || 0);
+
+  return {
+    mining: { ...mining, minedSoFar: liveMined, remainingMs, progress, active: active && remainingMs > 0 },
+    displayBalance: Number(user.balance || 0) + liveMined,
+  };
 }
 
 const NOVA_SPEECH_LOCALES = {
@@ -312,11 +354,23 @@ function playNovaDeviceVoice(text, language, rate = .95, onFailure, lifecycle = 
 }
 
 async function playNovaServerVoice(text, language, requestId, audioContextPromise, rate = .95, statusSource = 'nova-global') {
+  // Remote audio generation is intentionally disabled.  This legacy helper is
+  // retained only so older UI callers do not break while all playback is moved
+  // to the free local/browser provider.
+  return novaVoiceRouter.speak({
+    text,
+    language,
+    rate,
+    onStart: () => emitNovaVoiceStatus(statusSource, 'playing', requestId),
+    onEnd: () => emitNovaVoiceStatus(statusSource, 'complete', requestId),
+    onError: () => emitNovaVoiceStatus(statusSource, 'error', requestId),
+  });
+  /*
   let audioUrl;
   try {
     novaAudioSource?.stop();
     novaAudioSource = undefined;
-    const response = await fetch('/api/nova/speech', {
+    const response = await fetch('/api/nova-disabled-voice', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -397,42 +451,26 @@ async function playNovaServerVoice(text, language, requestId, audioContextPromis
     if (!usedDeviceVoice) emitNovaVoiceStatus(statusSource, 'error', requestId);
     return usedDeviceVoice;
   }
+  */
 }
 
 function speakNova(value, language = 'en', rate = .95, source = 'nova-global') {
   const text = String(value || '').trim();
   if (!text) return false;
 
-  const normalizedLanguage = String(language || 'en').toLowerCase();
   const requestId = ++novaSpeechRequest;
   beginNovaVoice(source, requestId);
-  const audioContextPromise = unlockNovaAudio();
-  const synthesis = window.speechSynthesis;
-  const Utterance = window.SpeechSynthesisUtterance;
-  const mobileOrTelegram = Boolean(window.Telegram?.WebApp)
-    || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  if (mobileOrTelegram || !synthesis || !Utterance) {
-    if (synthesis && Utterance && ['en', 'ko'].includes(normalizedLanguage)) {
-      let fallbackStarted = false;
-      const startServerFallback = () => {
-        if (fallbackStarted || requestId !== novaSpeechRequest) return;
-        fallbackStarted = true;
-        playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source);
-      };
-      if (playNovaDeviceVoice(text, normalizedLanguage, rate, startServerFallback, {
-        onStart: () => emitNovaVoiceStatus(source, 'playing', requestId),
-        onEnd: () => emitNovaVoiceStatus(source, 'complete', requestId),
-      })) return true;
-      if (fallbackStarted) return true;
-    }
-    playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source);
-    return true;
+  if (document.hidden) {
+    emitNovaVoiceStatus(source, 'stopped', requestId);
+    return false;
   }
-
-  const startServerFallback = () => playNovaServerVoice(text, normalizedLanguage, requestId, audioContextPromise, rate, source);
-  return playNovaDeviceVoice(text, normalizedLanguage, rate, startServerFallback, {
+  return novaVoiceRouter.speak({
+    text,
+    language,
+    rate,
     onStart: () => emitNovaVoiceStatus(source, 'playing', requestId),
     onEnd: () => emitNovaVoiceStatus(source, 'complete', requestId),
+    onError: () => emitNovaVoiceStatus(source, 'error', requestId),
   });
 }
 
@@ -634,12 +672,14 @@ function ActivityLedger({ balance, t }) {
 }
 
 function Home({ user, t, onStart, onClaim, busy, setTab }) {
+  const live = useLiveMiningView(user);
+  const liveUser = { ...user, mining: live.mining };
   return <main className="v15-page">
     <section className="hero-command">
       <div className="hero-space"/>
       <div className="hero-copy">
         <span className="eyebrow"><i />{t.verified}</span>
-        <small>{t.balance}</small><strong>{format(user.balance, 5)}</strong><h1>SPNX POINTS</h1>
+        <small>{t.balance} · {live.mining.active ? 'LIVE SESSION' : 'SETTLED LEDGER'}</small><strong>{format(live.displayBalance, 5)}</strong><h1>SPNX POINTS</h1>
         <p>NOVA-X1 / AI CONTROLLED GENESIS FLAGSHIP</p>
       </div>
       <img className="hero-station" src="/spacenovax-orbital-hq-live-v16.webp" alt="SpaceNovaX Orbital Headquarters above Earth" />
@@ -650,7 +690,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="station-brand"><span>ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
-    <MiningCore user={user} t={t} onStart={onStart} onClaim={onClaim} busy={busy}/>
+    <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} busy={busy}/>
     <section className="command-card home-mission-banner" onClick={() => setTab('missions')}>
       <div className="mission-emblem"><Icon name="mission" size={26}/></div>
       <div><small>MISSION PASSPORT · PERMANENT BONUS</small><h3>{t.missions}</h3><p>Complete all 5 missions · Unlock +5% mining speed</p></div>
@@ -863,10 +903,10 @@ function NovaAI({ user, t, language }) {
   const abortRef = useRef(null);
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(messages.slice(-50))); endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, storageKey]);
   useEffect(() => { api('/api/nova/status').then(setAiStatus).catch(() => setAiStatus({ configured: false, enabled: false, model: '' })); }, []);
-  useEffect(() => () => { abortRef.current?.abort(); window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => () => { abortRef.current?.abort(); novaVoiceRouter.stopVoice(); }, []);
   function newChat() {
     abortRef.current?.abort();
-    window.speechSynthesis?.cancel();
+    novaVoiceRouter.stopVoice();
     setBusy(false); setText(''); setMessages([initialMessage()]);
   }
   function speak(value, messageId) {
@@ -875,16 +915,15 @@ function NovaAI({ user, t, language }) {
   }
   function voiceInput() {
     triggerNovaHaptic('medium');
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) return window.alert('Voice input is not supported in this browser.');
-    const recognition = new Recognition();
-    recognition.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-    recognition.interimResults = true;
-    recognition.onstart = () => setListening(true);
-    recognition.onresult = (event) => setText(Array.from(event.results).map((r) => r[0].transcript).join(''));
-    recognition.onerror = () => setListening(false);
-    recognition.onend = () => setListening(false);
-    recognition.start();
+    const started = novaVoiceRouter.listen({
+      language,
+      interimResults: true,
+      onStart: () => setListening(true),
+      onResult: (spoken) => setText(spoken),
+      onError: () => setListening(false),
+      onEnd: () => setListening(false),
+    });
+    if (!started) window.alert('Voice input is not supported in this browser.');
   }
   async function send() {
     const clean = text.trim(); if (!clean || busy) return;
@@ -893,25 +932,14 @@ function NovaAI({ user, t, language }) {
     setMessages((m) => [...m, userMessage]); setText(''); setBusy(true);
     abortRef.current = new AbortController();
     try {
-      if (PREVIEW_BUILD && !import.meta.env.VITE_PREVIEW_LIVE_AI) {
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        const previewReply = language === 'ko'
-          ? `프리뷰 응답입니다. "${clean}" 질문을 확인했습니다. 실제 배포에서는 NOVA 서버가 이전 대화 내용과 캡틴의 채굴·게임 상태를 함께 분석해 답변합니다.`
-          : `Preview response: I received “${clean}”. In production, NOVA will answer using the conversation history and your verified mining and game status.`;
-        setMessages((m) => [...m, { id: crypto.randomUUID?.() || String(Date.now()), role: 'nova', text: previewReply }]);
-      } else {
-        const data = await api('/api/nova/chat', {
-          method: 'POST',
-          signal: abortRef.current.signal,
-          body: {
-            message: clean,
-            language,
-            history: prior.map((item) => ({ role: item.role === 'nova' ? 'assistant' : 'user', text: item.text })),
-            captainContext: { id: user.id, level: user.level, balance: user.balance, mining: user.mining, gameReward: user.gameReward },
-          },
-        });
-        setMessages((m) => [...m, { id: crypto.randomUUID?.() || String(Date.now()), role: 'nova', text: data.reply || data.message || 'NOVA response received.' }]);
-      }
+      const data = await novaVoiceRouter.ask({
+        question: clean,
+        language,
+        history: prior.map((item) => ({ role: item.role === 'nova' ? 'assistant' : 'user', text: item.text })),
+        captainContext: { id: user.id, level: user.level, balance: user.balance, mining: user.mining, gameReward: user.gameReward },
+        clientKey: getClientId(),
+      });
+      setMessages((m) => [...m, { id: crypto.randomUUID?.() || String(Date.now()), role: 'nova', text: data.reply || data.message || 'NOVA response received.' }]);
     } catch (error) {
       if (error.name !== 'AbortError') setMessages((m) => [...m, { id: String(Date.now()), role: 'nova', text: error.message }]);
     }
@@ -958,7 +986,7 @@ function PreviewPanel({ open, close, t }) {
 
 function More({ t, setTab, language }) {
   const ko = language === 'ko';
-  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['community', t.community, 'community'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
+  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', ko ? '국제 네비게이션' : 'Global Navigation', 'globe'], ['community', t.community, 'community'], ['nodes', ko ? '커뮤니티 노드' : 'Community Node', 'bolt'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
   return <main className="v15-page"><section className="command-card command-grid command-theme">
     <div className="section-heading"><div><small>NOVA OPERATIONS</small><h2>{t.command}</h2></div></div>
     <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>Open module</small></span><Icon name="arrow" size={18}/></button>)}</div>
@@ -1209,17 +1237,57 @@ function Kyc({ t, language }) {
   </section></main>;
 }
 
-function Nodes({ language }) {
+function NodeSetup({ language, setTab }) {
   const ko = language === 'ko';
-  return <main className="v15-page"><section className="command-card ops-module">
-    <div className="section-heading"><div><small>GENESIS COMMUNITY NODE</small><h2>{ko ? '커뮤니티 노드' : 'Community Nodes'}</h2></div><span className="secure-label">FOUNDING COHORT</span></div>
-    <div className="vault-balance"><small>{ko ? '승인 노드 현황' : 'APPROVED NODE STATUS'}</small><strong>0 / 1,000</strong><span>{ko ? '최초 1,000개의 승인 노드로 한정됩니다. 노드는 캐시·모니터링·하트비트를 지원하며 채굴, 보상, 지갑, KYC에는 접근하지 않습니다.' : 'Limited to the first 1,000 approved nodes. Nodes support cache, monitoring and heartbeat only; they cannot access mining, rewards, wallets or KYC.'}</span></div>
+  const download = '/downloads/Genesis_Community_Node_V1_Standalone_2026-08-08.zip';
+  return <main className="v15-page"><section className="command-card ops-module node-module node-setup-module">
+    <div className="section-heading"><div><small>GENESIS COMMUNITY NODE · V1</small><h2>{ko ? '노드 설치 및 보안 가이드' : 'Node Installation & Security Guide'}</h2></div><button className="node-back" onClick={() => setTab('nodes')}><Icon name="arrow" size={16}/>{ko ? '노드 허브' : 'NODE HUB'}</button></div>
+    <section className="node-hero"><div><small>{ko ? '15분 읽기 전용 세션' : '15-MINUTE READ-ONLY SESSION'}</small><strong>SAFE BY DESIGN</strong><p>{ko ? 'Community Node V1은 공개 정보 캐시와 상태 모니터링만 보조합니다. SpaceNovaX 앱의 채굴·보상·잔액·지갑·KYC·관리자 기능에는 접근하지 않습니다.' : 'Community Node V1 assists only with public-information cache and status monitoring. It cannot access SpaceNovaX mining, rewards, balances, wallets, KYC, or administration.'}</p></div><Icon name="shield" size={58}/></section>
+    <section className="node-install-grid">
+      <article><b>01</b><h3>{ko ? '패키지 다운로드' : 'Download the package'}</h3><p>{ko ? 'Node.js 18 이상이 설치된 PC에서 Node V1 ZIP 파일을 내려받아 압축을 풉니다.' : 'On a computer with Node.js 18+, download and unzip the Node V1 package.'}</p><a className="primary-action" href={download} download><Icon name="external"/>{ko ? 'NODE V1 다운로드' : 'DOWNLOAD NODE V1'}</a></article>
+      <article><b>02</b><h3>{ko ? '로컬 환경 설정' : 'Configure locally'}</h3><p>{ko ? '패키지 안의 .env.example을 참고해 별도 노드 키를 로컬에만 설정합니다. 앱의 JWT, 지갑, DB 비밀번호는 절대 사용하지 않습니다.' : 'Use .env.example to configure separate node keys locally. Never use the app JWT, wallet, or database credentials.'}</p><code>cp .env.example .env<br/>npm test<br/>npm start</code></article>
+      <article><b>03</b><h3>{ko ? '자동 연결 및 검증' : 'Pair and verify automatically'}</h3><p>{ko ? '앱에서 발급한 1회용 페어링 코드를 입력하면 관리자의 승인 없이 자동 등록됩니다. 첫 Heartbeat 이후 상태 검증이 시작됩니다.' : 'Enter the one-time pairing code issued by the app to register automatically, with no manual approval. Verification begins after the first heartbeat.'}</p><code>COMMUNITY_NODE_PAIRING_CODE=...<br/>node agent.mjs</code></article>
+    </section>
+    <section className="node-security"><Icon name="shield"/><div><b>{ko ? '운영자와 노드 운영자의 보안 역할은 분리됩니다.' : 'Operator and node-owner security roles stay separated.'}</b><p>{ko ? '노드 비밀키는 게이트웨이에 scrypt 해시로만 보관되고, 발급 토큰은 15분 후 만료됩니다. 임의 외부 URL 접근과 모든 금융·신원 변경 경로는 차단됩니다.' : 'Node secrets are stored by the gateway only as scrypt hashes and issued tokens expire in 15 minutes. Arbitrary external URLs and all financial or identity mutation paths are blocked.'}</p></div></section>
+    <button className="node-apply" onClick={() => setTab('nodes')}><Icon name="community"/>{ko ? '앱에서 페어링 코드 발급' : 'ISSUE PAIRING CODE IN APP'}<Icon name="arrow"/></button>
+  </section></main>;
+}
+
+function Nodes({ language, setTab, user, setUser }) {
+  const ko = language === 'ko';
+  const download = '/downloads/Genesis_Community_Node_V1_Standalone_2026-08-08.zip';
+  const [pairing, setPairing] = useState(null);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const node = user.communityNode || {};
+  const program = user.communityNodeProgram || { registered: 0, online: 0, limit: 1000 };
+  const issuePairing = async () => {
+    setBusy(true); setNotice('');
+    try {
+      const data = await api('/api/nodes/pairing', { method: 'POST', body: {} });
+      setPairing(data); setNotice(ko ? '10분 동안 유효한 1회용 코드가 발급되었습니다.' : 'A one-time code valid for 10 minutes was issued.');
+    } catch (error) { setNotice(error.message); }
+    setBusy(false);
+  };
+  const copy = async (value) => { try { await navigator.clipboard.writeText(value); setNotice(ko ? '복사했습니다.' : 'Copied.'); } catch { setNotice(value); } };
+  return <main className="v15-page"><section className="command-card ops-module node-module">
+    <div className="section-heading"><div><small>GENESIS COMMUNITY NODE</small><h2>{ko ? '커뮤니티 노드' : 'Community Node'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>{ko ? '최대 1,000대' : 'FIRST 1,000 NODES'}</span></div>
+    <section className="node-hero"><div><small>{ko ? '창립 노드 프로그램' : 'FOUNDING NODE PROGRAM'}</small><strong>{program.registered} / {program.limit}</strong><p>{ko ? '노드는 승인 대기 없이 자동 연결되지만, 24시간 기여·Heartbeat·검증 작업을 통과해야 +25%가 활성화됩니다. 노드는 채굴, 보상, 잔액, 지갑, KYC, 관리자 데이터에는 접근할 수 없습니다.' : 'Nodes pair automatically without approval, but +25% starts only after 24-hour contribution, heartbeat, and verification checks. Nodes cannot access mining, rewards, balances, wallets, KYC, or administration data.'}</p></div><Icon name="globe" size={58}/></section>
+    <div className="node-actions"><a className="primary-action" href={download} download><Icon name="external"/>{ko ? 'Node V1 다운로드' : 'DOWNLOAD NODE V1'}<Icon name="arrow"/></a><button className="node-guide-link" onClick={() => setTab('node-setup')}><Icon name="mission"/>{ko ? '설치·보안 안내 보기' : 'INSTALLATION & SECURITY GUIDE'}<Icon name="arrow" size={16}/></button></div>
+    <div className="node-steps"><article><b>01</b><span><strong>{ko ? '다운로드' : 'Download'}</strong><small>{ko ? 'Node V1 패키지를 내려받습니다.' : 'Download the Node V1 package.'}</small></span></article><article><b>02</b><span><strong>{ko ? '페어링 코드' : 'Pairing code'}</strong><small>{ko ? 'Captain ID에서 1회용 코드를 발급합니다.' : 'Issue a one-time code from your Captain ID.'}</small></span></article><article><b>03</b><span><strong>{ko ? '자동 검증' : 'Automatic verification'}</strong><small>{ko ? '기여 조건 충족 시 +25%가 자동 활성화됩니다.' : '+25% activates automatically after contribution checks.'}</small></span></article></div>
+    <section className="node-security"><Icon name="shield"/><div><b>{node.registered ? (node.status === 'qualified' ? (ko ? '노드 보너스가 활성화되었습니다.' : 'Node bonus is active.') : (ko ? '노드 검증이 진행 중입니다.' : 'Node verification is in progress.')) : (ko ? 'Captain ID당 노드는 1대만 등록할 수 있습니다.' : 'One node can be registered per Captain ID.')}</b><p>{node.registered ? `${node.label || node.nodeId} · ${node.status} · ${node.bonusPercent || 0}%` : (ko ? '관리자의 수동 승인은 필요하지 않습니다. 설치 후 첫 Heartbeat부터 중앙 서버가 상태를 검증합니다.' : 'No manual administrator approval is required. The central server starts verification from the first heartbeat.')}</p></div></section>
+    {!node.registered && <button className="node-apply" disabled={busy} onClick={issuePairing}><Icon name="community"/>{busy ? (ko ? '코드 발급 중…' : 'ISSUING…') : (ko ? '1회용 페어링 코드 발급' : 'ISSUE ONE-TIME PAIRING CODE')}<Icon name="arrow"/></button>}
+    {pairing && <section className="node-security"><Icon name="copy"/><div><b>{ko ? '이 코드는 한 번만 표시됩니다.' : 'This code is shown once.'}</b><p><code>{pairing.pairingCode}</code></p><button className="node-guide-link" onClick={() => copy(pairing.pairingCode)}>{ko ? '코드 복사' : 'COPY CODE'}</button></div></section>}
+    {notice && <p className="module-notice">{notice}</p>}
+    <section className="node-security"><Icon name="shield"/><div><b>{ko ? '권한 경계가 고정된 노드입니다.' : 'A node with fixed permission boundaries.'}</b><p>{ko ? 'Node V1은 공개 캐시, 번역 정적 리소스, Orbit 상태, API 응답시간과 서비스 상태만 처리합니다. 보상 지급과 사용자 원장은 서버에서만 처리됩니다.' : 'Node V1 handles only public cache, translation static assets, Orbit status, API latency, and service heartbeat. Reward issuance and user ledgers remain server-only.'}</p></div></section>
   </section></main>;
 }
 
 function Nav({ tab, setTab, t }) {
-  const items = [['home','home',t.home],['ai','ai',t.ai],['community','community',t.community],['missions','mission',t.missions],['game','game','Game'],['nodes','community', 'Nodes'],['more','more',t.more]];
-  return <nav className="v15-nav">{items.map(([id, icon, label]) => <button key={id} data-nav={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon name={icon}/><small>{label}</small></button>)}</nav>;
+  const orbitLabel = t.home === '홈' ? '국제 네비게이션' : 'Global Navigation';
+  const isKorean = t.home === '홈';
+  const items = [['home','home',t.home,t.home],['ai','ai',t.ai,t.ai],['orbit','globe',orbitLabel,isKorean ? '네비' : 'Orbit'],['community','community',t.community,isKorean ? '커뮤니티' : 'Community'],['game','game','Game','Game'],['more','more',t.more,t.more]];
+  return <nav className="v15-nav">{items.map(([id, icon, label, shortLabel]) => <button key={id} data-nav={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon name={icon}/><small className="nav-full">{label}</small><small className="nav-short">{shortLabel}</small></button>)}</nav>;
 }
 
 function NovaGuide({ tab, language, setTab }) {
@@ -1281,8 +1349,11 @@ function NovaGuide({ tab, language, setTab }) {
       community: 'Welcome to Captain Community. Your fleet invite code, active members, mining bonus, weekly fleet rank, and personal game rank are displayed at the top. Play the NOVA Fleet Brief for a complete explanation. Everyone can read trusted information, while publishing requires five KYC-approved Security Circle members.',
       missions: 'Complete the official website, Telegram, Discord, X, and YouTube missions. All five unlock a permanent Mission Passport bonus of five percent to base mining speed. NOVA can explain the full policy on this screen.',
       game: 'Launch NOVA Flight Command here. Collect three hundred diamonds for ten SPNX Points up to twice daily, open one supply crate for one to five points, and defeat the first boss for five points. The daily maximum is thirty SPNX Points and resets at six A M Eastern Time.',
+      orbit: 'This is Orbit Control. Rotate Live Earth with a drag, and switch layers for satellites, weather, and Earth Intelligence. Save your Captain Base to see live distance and bearing.',
       fleet: 'This is Fleet Command. Register or share a referral code, contact inactive members, chat with your fleet, and track the weekly game league.',
       whitepaper: 'The whitepaper explains our identity. SpaceNovaX builds NOVA AI and games. SPNX supports product utility and verified participation.',
+      nodes: 'This is the Community Node Hub. Download Node V1, review the installation and security guide, and submit a founding-node application. Nodes are strictly read-only and cannot access rewards or user funds.',
+      'node-setup': 'This installation guide explains the Node V1 download, local environment configuration, and secure registration flow. Never use an app wallet key, database password, or administrator secret in a community node.',
       more: 'This is Command Center. Open Fleet, Ranking, Wallet, KYC, missions, or the official game.',
     },
     ko: {
@@ -1291,8 +1362,11 @@ function NovaGuide({ tab, language, setTab }) {
       community: '캡틴 커뮤니티입니다. 상단에서 본인의 함대 초대 코드, 활성 함대원, 채굴 보너스, 주간 함대 순위와 개인 게임 순위를 확인할 수 있습니다. NOVA 함대 브리핑을 누르면 전체 이용 방법을 들을 수 있습니다. 모든 회원은 정보를 읽을 수 있고 글과 사진 게시는 KYC 승인 보안 서클 5명이 필요합니다.',
       missions: '공식 웹사이트, 텔레그램, 디스코드, 엑스, 유튜브의 5개 미션을 모두 완료하면 Mission Passport가 발급되고 기본 채굴 속도 5퍼센트가 영구 추가됩니다. 이 화면에서 NOVA의 전체 설명을 들을 수 있습니다.',
       game: '여기서 NOVA 비행 관제를 실행할 수 있습니다. 다이아몬드 300개 보상 10 포인트는 하루 두 번, 보급함 1에서 5 포인트와 보스 최초 처치 5 포인트는 하루 한 번 지급됩니다. 일일 최대 보상은 30 SPNX 포인트이며 미국 동부시간 오전 6시에 초기화됩니다.',
+      orbit: '여기는 Orbit Control입니다. 화면을 드래그해 지구를 회전시키고, 위성·기상·지구 감시 레이어를 전환할 수 있습니다. Captain Base를 저장하면 실시간 거리와 방향을 확인할 수 있습니다.',
       fleet: '함대 관제입니다. 추천코드를 등록하거나 공유하고, 비활성 함대원에게 알림을 보내며, 함대 채팅과 주간 게임 순위를 확인할 수 있습니다.',
       whitepaper: '백서에서는 SpaceNovaX의 정체성을 설명합니다. 우리는 NOVA AI와 게임을 개발하며, SPNX는 제품 사용과 검증된 참여를 지원합니다.',
+      nodes: '커뮤니티 노드 허브입니다. Node V1을 내려받고 설치·보안 안내를 확인한 뒤 창립 노드 신청을 할 수 있습니다. 노드는 읽기 전용이며 보상이나 사용자 자금에 접근할 수 없습니다.',
+      'node-setup': '이 설치 안내에서는 Node V1 다운로드, 로컬 환경 설정, 안전한 등록 과정을 설명합니다. 커뮤니티 노드에 앱 지갑 키, 데이터베이스 비밀번호, 관리자 비밀키를 절대 넣지 마세요.',
       more: '통합 관제 센터입니다. 함대, 랭킹, 지갑, KYC, 미션과 공식 게임을 이용할 수 있습니다.',
     },
   };
@@ -1302,27 +1376,26 @@ function NovaGuide({ tab, language, setTab }) {
   }
   function listen() {
     triggerNovaHaptic('medium');
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) return window.alert('Voice control is not supported in this browser.');
-    const recognition = new Recognition();
-    recognition.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
-    recognition.onresult = (event) => {
-      const command = event.results[0][0].transcript.toLowerCase();
+    const started = novaVoiceRouter.listen({
+      language,
+      onStart: () => setListening(true),
+      onEnd: () => setListening(false),
+      onError: () => setListening(false),
+      onResult: (spoken) => {
+      const command = spoken.toLowerCase();
       const routes = [
         [['nova', 'ai', '노바'], 'ai'], [['community', '커뮤니티', '게시판'], 'community'], [['mission', '미션'], 'missions'],
         [['game', '게임'], 'game'], [['home', '홈'], 'home'], [['fleet', '함대'], 'fleet'],
         [['wallet', '지갑'], 'wallet'], [['rank', '랭킹', '순위'], 'rank'], [['kyc'], 'kyc'],
-        [['whitepaper', '백서', 'vision', '비전'], 'whitepaper'],
+        [['whitepaper', '백서', 'vision', '비전'], 'whitepaper'], [['node', '노드'], 'nodes'],
         [['more', 'command', '더보기', '관제'], 'more'],
       ];
       const route = routes.find(([keywords]) => keywords.some((keyword) => command.includes(keyword)));
       if (route) { setTab(route[1]); speak(language === 'ko' ? '요청한 화면으로 이동합니다.' : 'Opening the requested module.'); }
       else speak(language === 'ko' ? '명령을 확인하지 못했습니다. 홈, 노바, 미션, 게임 또는 더보기라고 말해 주세요.' : 'Command not recognized. Say Home, NOVA, Missions, Game, or More.');
-    };
-    recognition.start();
+      },
+    });
+    if (!started) window.alert('Voice control is not supported in this browser.');
   }
   return <aside className={`nova-guide tab-${tab} ${open ? 'open' : ''}`} style={{ '--nova-x': `${position.x}px`, '--nova-y': `${position.y}px` }}>
     {open && <div className="nova-guide-panel">
@@ -1352,7 +1425,14 @@ export default function V15App() {
   const sync = useCallback(async () => {
     try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
   }, []);
-  useEffect(() => { document.documentElement.lang = language; sync(); const timer = setInterval(sync, 30000); return () => clearInterval(timer); }, [language, sync]);
+  useEffect(() => {
+    document.documentElement.lang = language;
+    sync();
+    // A lightweight server re-sync corrects the smooth 0.5s display counter
+    // while mining is running; the server remains the only reward authority.
+    const timer = setInterval(sync, user.mining?.active ? 15000 : 30000);
+    return () => clearInterval(timer);
+  }, [language, sync, user.mining?.active]);
   async function miningAction(path) {
     if (PREVIEW_BUILD) {
       setUser((current) => ({ ...current, mining: { ...current.mining, active: true, progress: .42, remainingMs: 50123000, minedSoFar: 12.6 } }));
@@ -1365,12 +1445,14 @@ export default function V15App() {
   }
   let page;
   if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab}/>;
+  else if (tab === 'orbit') page = <Suspense fallback={<main className="v15-page"><section className="command-card ops-module"><div className="section-heading"><div><small>EARTH NAVIGATION NETWORK</small><h2>Orbit Control</h2></div><span className="live-state"><i/>CONNECTING</span></div></section></main>}><OrbitV20 language={language} user={user}/></Suspense>;
   else if (tab === 'game') page = <Game user={user} t={t} language={language}/>;
   else if (tab === 'ai') page = <NovaAI user={user} t={t} language={language}/>;
   else if (tab === 'community') page = <Community user={user} language={language} setTab={setTab}/>;
   else if (tab === 'missions') page = <Missions user={user} setUser={setUser} t={t} language={language}/>;
+  else if (tab === 'nodes') page = <Nodes language={language} setTab={setTab} user={user} setUser={setUser}/>;
+  else if (tab === 'node-setup') page = <NodeSetup language={language} setTab={setTab}/>;
   else if (tab === 'more') page = <More t={t} setTab={setTab} language={language}/>;
-  else if (tab === 'nodes') page = <Nodes language={language}/>;
   else if (tab === 'fleet') page = <Fleet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'whitepaper') page = <Whitepaper language={language}/>;
   else if (tab === 'rank') page = <Ranking user={user} t={t}/>;
@@ -1379,7 +1461,7 @@ export default function V15App() {
   else page = <More t={t} setTab={setTab}/>;
   return <>
     {!launched && <Splash done={() => setLaunched(true)}/>}
-    <div className={`v15-shell ${launched ? 'ready' : ''}`}><Header user={user} language={language} setLanguage={setLanguage} t={t} onPreview={() => setPreviewOpen(true)}/>{page}<Nav tab={tab} setTab={setTab} t={t}/><NovaGuide tab={tab} language={language} setTab={setTab}/></div>
+    <div className={`v15-shell ${launched ? 'ready' : ''}`}><Header user={user} language={language} setLanguage={setLanguage} t={t} onPreview={() => setPreviewOpen(true)}/>{page}<Nav tab={tab} setTab={setTab} t={t}/>{tab !== 'orbit' && <NovaGuide tab={tab} language={language} setTab={setTab}/>}</div>
     <PreviewPanel open={previewOpen && launched} close={() => setPreviewOpen(false)} t={t}/>
   </>;
 }
