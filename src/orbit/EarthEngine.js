@@ -288,17 +288,8 @@ export default class EarthEngine {
     this.navigationGrid = buildGrid();
     this.earth.add(this.navigationGrid);
 
-    const atmosphereGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.035, 48, 48);
-    this.atmosphereMaterial = new THREE.ShaderMaterial({
-      uniforms: { sunDirection: { value: this.sunDirection } },
-      vertexShader: ATMOSPHERE_VERTEX,
-      fragmentShader: ATMOSPHERE_FRAGMENT,
-      blending: THREE.AdditiveBlending,
-      side: THREE.BackSide,
-      transparent: true,
-    });
-    const atmosphere = new THREE.Mesh(atmosphereGeo, this.atmosphereMaterial);
-    this.scene.add(atmosphere);
+    // Orbit is a navigation map, not a cinematic space scene. Do not add an
+    // atmosphere shell: it can blue-wash coastlines and city lights on mobile OLEDs.
 
     // Cloud layer — a slightly larger sphere with a translucent cloud texture, rotating
     // independently and a bit faster than the surface (real clouds drift relative to
