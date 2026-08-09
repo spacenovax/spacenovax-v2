@@ -696,9 +696,46 @@ function publicUser(data, user) {
   };
 }
 
+function recoverGuestCaptain(data, telegramUser, clientId) {
+  // A Captain can enter the Mini App before Telegram initData is available.
+  // If the next verified request has the same local client ID, preserve that
+  // one pre-verification profile instead of silently starting again at zero.
+  if (!telegramUser?.id || !clientId) return null;
+  const guestId = makeGuestUser(clientId).id;
+  const guest = data.users?.[guestId];
+  const captainId = `tg-${telegramUser.id}`;
+  const existingCaptain = data.users?.[captainId];
+  if (!guest || guestId === captainId) return null;
+  if (Number(guest.balance || 0) <= 0 && !guest.mining?.active) return null;
+  // Never combine two established financial profiles automatically.
+  if (existingCaptain && Number(existingCaptain.balance || 0) > 0) return null;
+
+  const verifiedIdentity = normalizeTelegramUser(telegramUser);
+  const activeMining = existingCaptain?.mining?.active ? existingCaptain.mining : guest.mining;
+  data.users[captainId] = {
+    ...guest,
+    ...existingCaptain,
+    ...verifiedIdentity,
+    balance: Math.max(Number(guest.balance || 0), Number(existingCaptain?.balance || 0)),
+    totalMined: Math.max(Number(guest.totalMined || 0), Number(existingCaptain?.totalMined || 0)),
+    mining: activeMining,
+    migratedGuestId: guestId,
+    updatedAt: now(),
+  };
+  delete data.users[guestId];
+  for (const user of Object.values(data.users || {})) {
+    if (user.referredBy === guestId) user.referredBy = captainId;
+    if (Array.isArray(user.referrals)) user.referrals = user.referrals.map((id) => id === guestId ? captainId : id);
+  }
+  data.events.push({ type: 'captain_identity_recovered', userId: captainId, sourceUserId: guestId, at: now() });
+  return data.users[captainId];
+}
+
 function getSessionUser(req, data) {
   const telegramUser = verifiedTelegramUser(req);
   const clientId = String(req.headers['x-spnx-client-id'] || req.body?.clientId || '');
+  const recoveredUser = recoverGuestCaptain(data, telegramUser, clientId);
+  if (recoveredUser) return recoveredUser;
   const fallbackUser = IS_PRODUCTION ? { clientId } : (req.body?.telegramUser || { clientId });
   const user = ensureUser(data, telegramUser || fallbackUser, req.body?.ref || req.query?.ref || '');
   return user;
