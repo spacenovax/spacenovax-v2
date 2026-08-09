@@ -18,6 +18,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// The official NOVA-X game is hosted separately. Only its verified origin may
+// send a signed short-lived game session back to this API for reward settlement.
+const GAME_ALLOWED_ORIGINS = new Set([
+  'https://nova-x1-genesis-defense.kit372002.chatgpt.site',
+  'https://game.spacenovax.com',
+]);
+app.use((req, res, next) => {
+  const origin = String(req.headers.origin || '');
+  if (GAME_ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data.json');
 const COMMUNITY_MEDIA_DIR = process.env.COMMUNITY_MEDIA_DIR || path.join(__dirname, 'community-media');
