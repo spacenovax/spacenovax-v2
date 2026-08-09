@@ -1512,7 +1512,18 @@ export default function V15App() {
     // A lightweight server re-sync corrects the smooth 0.5s display counter
     // while mining is running; the server remains the only reward authority.
     const timer = setInterval(sync, user.mining?.active ? 15000 : 30000);
-    return () => clearInterval(timer);
+    // Returning from the full-screen NOVA-X game must refresh the authoritative
+    // server balance immediately rather than waiting for the next interval.
+    const refreshOnReturn = () => {
+      if (document.visibilityState === 'visible') sync();
+    };
+    window.addEventListener('focus', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refreshOnReturn);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
+    };
   }, [language, sync, user.mining?.active]);
   async function miningAction(path) {
     if (PREVIEW_BUILD) {
