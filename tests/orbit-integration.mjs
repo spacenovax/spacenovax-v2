@@ -10,6 +10,7 @@ const requiredFiles = [
   'src/orbit/SatelliteEngine.js',
   'src/orbit/OrbitV20/OrbitV20.jsx',
   'src/orbit/OrbitV20/OrbitRouteTelemetry.jsx',
+  'src/orbit/OrbitV20/OrbitDrivingView.jsx',
   'src/orbit/OrbitV20/OrbitSatellite.jsx',
   'src/orbit/OrbitV20/OrbitEvents.jsx',
   'src/orbit/OrbitV20/orbit-v20.css',
@@ -44,6 +45,7 @@ const orbitSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitV20.jsx'
 const earthViewSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitEarthView.jsx', import.meta.url), 'utf8');
 const earthEngineSource = fs.readFileSync(new URL('../src/orbit/EarthEngine.js', import.meta.url), 'utf8');
 const routeSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitRouteTelemetry.jsx', import.meta.url), 'utf8');
+const drivingViewSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitDrivingView.jsx', import.meta.url), 'utf8');
 const satelliteSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitSatellite.jsx', import.meta.url), 'utf8');
 const eventSource = fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitEvents.jsx', import.meta.url), 'utf8');
 
@@ -57,6 +59,8 @@ if (!orbitSource.includes('setIssPosition')
 }
 
 if (!orbitSource.includes('fetchDrivingRoute') || !earthEngineSource.includes('setRoadRoute') || !routeSource.includes('DRIVING ROUTE')) throw new Error('Orbit driving navigation integration is missing.');
+
+if (!orbitSource.includes('<OrbitDrivingView') || !drivingViewSource.includes('MapContainer') || !drivingViewSource.includes('GPS LIVE GUIDANCE')) throw new Error('Orbit 2D driving guidance view is missing.');
 
 if (!earthViewSource.includes('ov20-marker-pin')
   || !earthViewSource.includes("type === 'base'")

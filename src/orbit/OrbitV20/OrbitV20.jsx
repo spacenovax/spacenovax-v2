@@ -18,6 +18,7 @@ import OrbitEarthView from './OrbitEarthView.jsx';
 import OrbitLeftPanel from './OrbitLeftPanel.jsx';
 import OrbitRightPanel from './OrbitRightPanel.jsx';
 import OrbitRouteTelemetry from './OrbitRouteTelemetry.jsx';
+import OrbitDrivingView from './OrbitDrivingView.jsx';
 import OrbitFloatingNova from './OrbitFloatingNova.jsx';
 import OrbitBottomBar from './OrbitBottomBar.jsx';
 import OrbitSearchOverlay from './OrbitSearchOverlay.jsx';
@@ -126,6 +127,7 @@ export default function OrbitV20({ language, user }) {
   const [drivingRoute, setDrivingRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
   const [navigationActive, setNavigationActive] = useState(false);
+  const [drivingViewOpen, setDrivingViewOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -309,7 +311,7 @@ export default function OrbitV20({ language, user }) {
 
   useEffect(() => {
     let active = true;
-    if (!current || !destination) { setDrivingRoute(null); setRouteStatus('idle'); engineRef.current?.clearRoute(); return undefined; }
+    if (!current || !destination) { setDrivingRoute(null); setRouteStatus('idle'); setDrivingViewOpen(false); engineRef.current?.clearRoute(); return undefined; }
     setRouteStatus('loading'); engineRef.current?.setRoute(current, destination);
     fetchDrivingRoute(current, destination).then((route) => { if (!active) return; setDrivingRoute(route); setRouteStatus('ready'); engineRef.current?.setRoadRoute(route?.points); }).catch(() => { if (!active) return; setDrivingRoute(null); setRouteStatus('unavailable'); });
     return () => { active = false; };
@@ -375,7 +377,9 @@ export default function OrbitV20({ language, user }) {
 
   function startNavigation() {
     if (!current || !destination) return;
+    if (!drivingRoute) { speakOrbit(t.ko ? 'Captain, 자동차 도로 경로를 계산 중입니다. 잠시 후 다시 시작해 주세요.' : 'Captain, the driving route is still calculating. Please start again in a moment.', language, setVoiceState); return; }
     setNavigationActive(true);
+    setDrivingViewOpen(true);
     engineRef.current?.focusRoute(current, destination, { duration: 850 });
     const km = Math.round((drivingRoute?.distanceM || haversineKm(current, destination) * 1000) / 1000);
     const firstStep = drivingRoute?.steps?.[0];
@@ -388,6 +392,7 @@ export default function OrbitV20({ language, user }) {
 
   function stopNavigation() {
     setNavigationActive(false);
+    setDrivingViewOpen(false);
     speakOrbit(t.ko ? 'Captain, 경로 안내를 종료했습니다.' : 'Captain, navigation guidance has ended.', language, setVoiceState);
   }
 
@@ -494,6 +499,7 @@ export default function OrbitV20({ language, user }) {
 
   return (
     <div className="ov20-root">
+      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={drivingRoute?.steps?.[0]} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
       <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} />
       <div className="ov20-layout">
         <OrbitEarthView
