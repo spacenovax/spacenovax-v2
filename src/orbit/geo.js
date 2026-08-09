@@ -30,13 +30,28 @@ export function compassLabel(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
+function positionFromCoordinates(coords) {
+  const finite = (value) => (Number.isFinite(value) ? value : null);
+  const heading = finite(coords.heading);
+  return { lat: coords.latitude, lon: coords.longitude, accuracy: finite(coords.accuracy), altitude: finite(coords.altitude), heading: heading == null ? null : (heading + 360) % 360, speedMps: finite(coords.speed), capturedAt: Date.now() };
+}
+
+const GPS_OPTIONS = { enableHighAccuracy: true, timeout: 12_000, maximumAge: 12_000 };
+
 export function getCurrentPosition(options = {}) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('geolocation_unsupported'));
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      (pos) => resolve(positionFromCoordinates(pos.coords)),
       (err) => reject(err),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000, ...options }
+      { ...GPS_OPTIONS, ...options }
     );
   });
+}
+
+// Keep the navigation route tied to the user's actual position after the first fix.
+export function watchCurrentPosition(onPosition, onError = () => {}, options = {}) {
+  if (!navigator.geolocation) { onError(new Error('geolocation_unsupported')); return () => {}; }
+  const watchId = navigator.geolocation.watchPosition((pos) => onPosition(positionFromCoordinates(pos.coords)), onError, { ...GPS_OPTIONS, ...options });
+  return () => navigator.geolocation.clearWatch(watchId);
 }

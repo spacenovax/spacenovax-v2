@@ -2654,6 +2654,34 @@ app.get('/api/orbit/geocode', async (req, res) => {
   }
 });
 
+// Driving route proxy for Earth Navigation. The browser never calls a routing host
+// directly: requests are validated, cached, and reduced to the route data the UI uses.
+const ORBIT_ROUTE_CACHE_MS = 45 * 1000;
+const orbitRouteCache = new Map();
+app.get('/api/orbit/route', async (req, res) => {
+  const fromLat = Number(req.query.fromLat); const fromLon = Number(req.query.fromLon);
+  const toLat = Number(req.query.toLat); const toLon = Number(req.query.toLon);
+  const coordinates = [fromLat, fromLon, toLat, toLon];
+  if (!coordinates.every(Number.isFinite) || Math.abs(fromLat) > 90 || Math.abs(toLat) > 90 || Math.abs(fromLon) > 180 || Math.abs(toLon) > 180) return res.status(400).json({ ok: false, message: 'Invalid route coordinates.' });
+  const key = `${fromLat.toFixed(3)},${fromLon.toFixed(3)}:${toLat.toFixed(3)},${toLon.toFixed(3)}`;
+  const cached = orbitRouteCache.get(key);
+  if (cached && now() - cached.at < ORBIT_ROUTE_CACHE_MS) return res.json({ ok: true, route: cached.value, cached: true });
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson&steps=true&alternatives=false`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public driving route relay)' }, signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) throw new Error(`OSRM responded ${response.status}`);
+    const source = (await response.json()).routes?.[0];
+    if (!source || !Number.isFinite(source.distance) || !Number.isFinite(source.duration)) throw new Error('No drivable route found');
+    const rawPoints = source.geometry?.coordinates || []; const stride = Math.max(1, Math.ceil(rawPoints.length / 220));
+    const points = rawPoints.filter((_, index) => index % stride === 0 || index === rawPoints.length - 1).map(([lon, lat]) => ({ lat: Number(lat), lon: Number(lon) })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+    if (points.length < 2) throw new Error('Route geometry unavailable');
+    const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step) => ({ name: String(step.name || '').slice(0, 100), distanceM: Math.round(Number(step.distance) || 0), durationSec: Math.round(Number(step.duration) || 0), maneuver: { type: String(step.maneuver?.type || 'continue').slice(0, 32), modifier: String(step.maneuver?.modifier || '').slice(0, 32) } }));
+    const route = { distanceM: Math.round(source.distance), durationSec: Math.round(source.duration), points, steps };
+    orbitRouteCache.set(key, { at: now(), value: route }); if (orbitRouteCache.size > 160) orbitRouteCache.delete(orbitRouteCache.keys().next().value);
+    return res.json({ ok: true, route, cached: false });
+  } catch (error) { console.error('Orbit driving route failed', error.message); return res.status(502).json({ ok: false, message: 'Driving route temporarily unavailable.' }); }
+});
+
 async function runAutomaticPayoutWorker() {
   const data = readData();
   if (!conversionRuntimeStatus(data).ready) return;

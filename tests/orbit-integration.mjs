@@ -31,6 +31,7 @@ if (!appSource.includes("lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'))")
 
 if (!serverSource.includes("app.get('/api/orbit/satellites'")
   || !serverSource.includes("app.get('/api/orbit/geocode'")
+  || !serverSource.includes("app.get('/api/orbit/route'")
   || !serverSource.includes('Orbit Earth Navigation live context')) {
   throw new Error('Orbit server proxy or NOVA context integration is missing.');
 }
@@ -54,6 +55,8 @@ if (!orbitSource.includes('setIssPosition')
   || !orbitSource.includes('<OrbitRouteTelemetry')) {
   throw new Error('Orbit live satellite and route telemetry UI integration is missing.');
 }
+
+if (!orbitSource.includes('fetchDrivingRoute') || !earthEngineSource.includes('setRoadRoute') || !routeSource.includes('DRIVING ROUTE')) throw new Error('Orbit driving navigation integration is missing.');
 
 if (!earthViewSource.includes('ov20-marker-pin')
   || !earthViewSource.includes("type === 'base'")

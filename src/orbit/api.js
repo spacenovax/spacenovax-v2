@@ -138,6 +138,17 @@ export function searchDestination(query) {
   });
 }
 
+export function fetchDrivingRoute(from, to) {
+  if (!from || !to) return Promise.resolve(null);
+  const key = `drive:${from.lat.toFixed(3)},${from.lon.toFixed(3)}:${to.lat.toFixed(3)},${to.lon.toFixed(3)}`;
+  return cachedFetch(key, 45_000, async () => {
+    const params = new URLSearchParams({ fromLat: from.lat, fromLon: from.lon, toLat: to.lat, toLon: to.lon });
+    const res = await fetch(`/api/orbit/route?${params}`); const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.message || 'Driving route unavailable');
+    return data.route || null;
+  });
+}
+
 export function fetchSpaceWeather() {
   return cachedFetch('swpc', 10 * 60_000, async () => {
     const res = await fetch('https://services.swpc.noaa.gov/products/alerts.json');

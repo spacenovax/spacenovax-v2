@@ -475,6 +475,18 @@ export default class EarthEngine {
     this.earth.add(this._routeGroup);
   }
 
+  setRoadRoute(routePoints) {
+    this.clearRoute();
+    if (!Array.isArray(routePoints) || routePoints.length < 2) return;
+    const stride = Math.max(1, Math.ceil(routePoints.length / 220));
+    const points = routePoints.filter((_, index) => index % stride === 0 || index === routePoints.length - 1).map((point) => lonLatToVector3(point.lon, point.lat, EARTH_RADIUS * 1.008));
+    if (points.length < 2) return;
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x5cecff, transparent: true, opacity: 0.94 }));
+    this._routeGroup = new THREE.Group(); this._routeGroup.add(line);
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    this._routeGroup.add(marker); this._routePoints = points; this._routeMarker = marker; this.earth.add(this._routeGroup);
+  }
+
   clearRoute() {
     if (this._routeGroup) { this.earth.remove(this._routeGroup); this._routeGroup = null; this._routePoints = null; this._routeMarker = null; }
   }

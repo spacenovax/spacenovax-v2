@@ -4,7 +4,7 @@ import React from 'react';
 
 export default function OrbitDestination({
   t, current, destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg,
-  compassLabel, base, onOpenSearch, onPick, onAddFavorite, onClearRoute, onSaveHome, onSaveWork,
+  compassLabel, base, routeStatus, onOpenSearch, onPick, onAddFavorite, onClearRoute, onSaveHome, onSaveWork,
 }) {
   return (
     <div className="ov20-card">
@@ -18,7 +18,7 @@ export default function OrbitDestination({
             <button className="ov20-fav-star" onClick={onAddFavorite}>★</button>
           </div>
           <div className="ov20-row"><span>{t.distance}</span><b>{Math.round(distanceKm).toLocaleString()}km</b></div>
-          <div className="ov20-row"><span>ETA</span><b>{etaHours < 1 ? `${Math.round(etaHours * 60)}m` : `${Math.floor(etaHours)}h${Math.round((etaHours % 1) * 60)}m`}</b></div>
+          <div className="ov20-row"><span>ETA</span><b>{etaHours == null ? (routeStatus === 'loading' ? '…' : '—') : etaHours < 1 ? `${Math.max(1, Math.round(etaHours * 60))}m` : `${Math.floor(etaHours)}h${Math.round((etaHours % 1) * 60)}m`}</b></div>
           <div className="ov20-row"><span>{t.course}</span><b>{courseDeg.toFixed(0)}° {compassLabel(courseDeg)}</b></div>
           <button className="ov20-btn primary" onClick={onClearRoute}>✕ {t.ko ? '취소' : 'Clear'}</button>
           <button className="ov20-btn" onClick={onOpenSearch}>⌕ {t.changeDestination}</button>

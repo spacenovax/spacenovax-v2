@@ -9,7 +9,7 @@ import EarthEngine from '../EarthEngine.js';
 import MasterRenderLoop from '../MasterRenderLoop.js';
 import SatelliteEngine from '../SatelliteEngine.js';
 import PerformanceManager from '../PerformanceManager.js';
-import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination } from '../api.js';
+import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination, fetchDrivingRoute } from '../api.js';
 import { getCurrentPosition, watchCurrentPosition, haversineKm, bearingDeg, compassLabel } from '../geo.js';
 import { getCaptainBase, setBasePoint, addFavorite } from '../captainBase.js';
 import OrbitTopBar from './OrbitTopBar.jsx';
@@ -133,6 +133,8 @@ export default function OrbitV20({ language, user }) {
   const [aqi, setAqi] = useState(null);
   const [events, setEvents] = useState([]);
   const [destination, setDestination] = useState(null);
+  const [drivingRoute, setDrivingRoute] = useState(null);
+  const [routeStatus, setRouteStatus] = useState('idle');
   const [navigationActive, setNavigationActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -316,9 +318,12 @@ export default function OrbitV20({ language, user }) {
   }, [markerTargets]);
 
   useEffect(() => {
-    if (current && destination) engineRef.current?.setRoute(current, destination);
-    else engineRef.current?.clearRoute();
-  }, [current, destination]);
+    let active = true;
+    if (!current || !destination) { setDrivingRoute(null); setRouteStatus('idle'); engineRef.current?.clearRoute(); return undefined; }
+    setRouteStatus('loading'); engineRef.current?.setRoute(current, destination);
+    fetchDrivingRoute(current, destination).then((route) => { if (!active) return; setDrivingRoute(route); setRouteStatus('ready'); engineRef.current?.setRoadRoute(route?.points); }).catch(() => { if (!active) return; setDrivingRoute(null); setRouteStatus('unavailable'); });
+    return () => { active = false; };
+  }, [current?.lat, current?.lon, destination?.lat, destination?.lon]);
 
   function runSearch(q) {
     setSearchQuery(q);
@@ -366,17 +371,14 @@ export default function OrbitV20({ language, user }) {
     if (current) engineRef.current?.focusRoute(current, place, { duration: 1200 });
     setTab('live');
     if (current) {
-      const km = haversineKm(current, place);
-      const etaH = km / 850;
       let destWeatherLine = '';
       try {
         const w = await fetchWeather(place.lat, place.lon);
         if (w) destWeatherLine = t.ko ? ` 목적지 날씨는 ${Math.round(w.temperature_2m)}도입니다.` : ` Destination weather is ${Math.round(w.temperature_2m)} degrees.`;
       } catch { /* narration continues without destination weather if unavailable */ }
-      const etaText = etaH < 1 ? `${Math.round(etaH * 60)}${t.ko ? '분' : ' minutes'}` : `${Math.floor(etaH)}${t.ko ? '시간' : 'h'} ${Math.round((etaH % 1) * 60)}${t.ko ? '분' : 'm'}`;
       const line = t.ko
-        ? `Captain, 경로를 표시합니다. ${place.label.split(',')[0]}까지 ${Math.round(km).toLocaleString()}km, 예상 소요시간 ${etaText}입니다.${destWeatherLine}`
-        : `Captain, route displayed. ${Math.round(km).toLocaleString()}km to ${place.label.split(',')[0]}, ETA ${etaText}.${destWeatherLine}`;
+        ? `Captain, ${place.label.split(',')[0]} 목적지를 설정했습니다. 자동차 도로 경로를 계산 중입니다.${destWeatherLine}`
+        : `Captain, destination set to ${place.label.split(',')[0]}. Calculating the driving route.${destWeatherLine}`;
       speakOrbit(line, language, setVoiceState);
     }
   }
@@ -385,10 +387,12 @@ export default function OrbitV20({ language, user }) {
     if (!current || !destination) return;
     setNavigationActive(true);
     engineRef.current?.focusRoute(current, destination, { duration: 850 });
-    const km = Math.round(haversineKm(current, destination));
+    const km = Math.round((drivingRoute?.distanceM || haversineKm(current, destination) * 1000) / 1000);
+    const firstStep = drivingRoute?.steps?.[0];
+    const roadName = firstStep?.name ? ` ${t.ko ? '첫 안내 도로는' : 'First road is'} ${firstStep.name}.` : '';
     const line = t.ko
-      ? `Captain, 실시간 경로 안내를 시작합니다. ${destination.label.split(',')[0]}까지 ${km.toLocaleString()}킬로미터입니다. 기기의 위치와 방향이 바뀌면 남은 거리와 방위가 자동으로 갱신됩니다.`
-      : `Captain, live guidance is active. ${destination.label.split(',')[0]} is ${km.toLocaleString()} kilometers away. Remaining distance and course will update as your device position changes.`;
+      ? `Captain, 자동차 경로 안내를 시작합니다. ${destination.label.split(',')[0]}까지 ${km.toLocaleString()}킬로미터입니다.${roadName} 기기의 위치가 바뀌면 경로를 다시 계산합니다.`
+      : `Captain, driving guidance is active. ${destination.label.split(',')[0]} is ${km.toLocaleString()} kilometers away.${roadName} The route will recalculate as your device position changes.`;
     speakOrbit(line, language, setVoiceState);
   }
 
@@ -468,8 +472,9 @@ export default function OrbitV20({ language, user }) {
     setNovaBusy(false);
   }
 
-  const distanceKm = current && destination ? haversineKm(current, destination) : null;
-  const etaHours = distanceKm != null ? distanceKm / 850 : null;
+  const directDistanceKm = current && destination ? haversineKm(current, destination) : null;
+  const distanceKm = drivingRoute ? drivingRoute.distanceM / 1000 : directDistanceKm;
+  const etaHours = drivingRoute ? drivingRoute.durationSec / 3600 : null;
   const courseDeg = current && destination ? bearingDeg(current, destination) : null;
   const arrivalRadiusM = Math.max(80, Math.min((accuracy || 40) * 2, 250));
   const hasArrived = Boolean(navigationActive && distanceKm != null && distanceKm * 1000 <= arrivalRadiusM);
@@ -490,7 +495,7 @@ export default function OrbitV20({ language, user }) {
     issTracked, otherTracked, issPosition, satellites,
     weather, currentCity: currentPlace?.city, airQualityLabel: air, aqi,
     counts: eventCounts, topEvents,
-    destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base, navigationActive, hasArrived, arrivalRadiusM,
+    destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base, navigationActive, hasArrived, arrivalRadiusM, routeStatus,
     onSearchChange: runSearch, onOpenSearch: openDestinationSearch, onPick: pickDestination, onAddFavorite: () => addFavorite(destination), onClearRoute: () => setDestination(null),
     onStartNavigation: startNavigation, onStopNavigation: stopNavigation,
     onSaveHome: () => saveSlot('home'), onSaveWork: () => saveSlot('work'),
@@ -527,6 +532,8 @@ export default function OrbitV20({ language, user }) {
           compassLabel={compassLabel}
           navigationActive={navigationActive}
           hasArrived={hasArrived}
+          routeStatus={routeStatus}
+          nextStep={drivingRoute?.steps?.[0]}
           onSearch={openDestinationSearch}
           onStartNavigation={startNavigation}
           onStopNavigation={stopNavigation}
