@@ -251,9 +251,9 @@ export default class EarthEngine {
 
     this.sunDirection = new THREE.Vector3(1, 0.3, 0.4).normalize();
 
-    // All globe assets are self-hosted under /public/orbit. The illustrated day map
-    // is kept as a fallback asset only; the verified high-detail night satellite map
-    // gives the compact navigation globe clear coastlines and city detail.
+    // All globe assets are self-hosted under /public/orbit. The NASA Blue Marble
+    // surface map is bundled locally so a real, sharp globe is available even inside
+    // Telegram's restricted mobile WebView.
     const placeholder = (hex) => {
       const c = document.createElement('canvas'); c.width = 2; c.height = 1;
       const ctx = c.getContext('2d'); ctx.fillStyle = hex; ctx.fillRect(0, 0, 2, 1);
@@ -263,23 +263,26 @@ export default class EarthEngine {
     // WebViews can render a frame before a large WebP texture is decoded.
     const dayPlaceholder = placeholder('#2e94bd');
     const nightPlaceholder = placeholder('#1c5b92');
+    const blackPlaceholder = placeholder('#000000');
     const earthGeo = new THREE.SphereGeometry(EARTH_RADIUS, this.lowPower ? 48 : 96, this.lowPower ? 32 : 64);
     this.earthMaterial = new THREE.ShaderMaterial({
-      uniforms: { sunDirection: { value: this.sunDirection }, dayMap: { value: dayPlaceholder }, nightMap: { value: nightPlaceholder }, specularMap: { value: nightPlaceholder }, cloudMap: { value: nightPlaceholder }, cloudOffset: { value: 0 }, uTime: { value: 0 } },
+      uniforms: { sunDirection: { value: this.sunDirection }, dayMap: { value: dayPlaceholder }, nightMap: { value: nightPlaceholder }, specularMap: { value: blackPlaceholder }, cloudMap: { value: blackPlaceholder }, cloudOffset: { value: 0 }, uTime: { value: 0 } },
       vertexShader: EARTH_VERTEX,
       fragmentShader: EARTH_FRAGMENT,
     });
     const prepareTexture = (tex, { srgb = false } = {}) => {
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+      tex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
       if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
       tex.needsUpdate = true;
       return tex;
     };
-    loader.load('/orbit/earth-night-real.webp', (tex) => {
+    loader.load('/orbit/earth-day-nasa.jpg', (tex) => {
       this.earthMaterial.uniforms.dayMap.value = prepareTexture(tex, { srgb: true });
-    }, undefined, (err) => console.error('Orbit: high-detail Earth texture failed.', err));
+    }, undefined, (err) => console.error('Orbit: NASA Earth texture failed.', err));
     loader.load('/orbit/earth-night.jpg', (tex) => {
       this.earthMaterial.uniforms.nightMap.value = prepareTexture(tex, { srgb: true });
     }, undefined, (err) => console.error('Orbit: validated night texture failed.', err));
@@ -288,7 +291,7 @@ export default class EarthEngine {
     this.navigationGrid = buildGrid();
     this.earth.add(this.navigationGrid);
 
-    // Orbit is a navigation map, not a cinematic space scene. Do not add an
+    // Orbit is a navigation map, not a cinematic space scene.  Do not add an
     // atmosphere shell: it can blue-wash coastlines and city lights on mobile OLEDs.
 
     // Cloud layer — a slightly larger sphere with a translucent cloud texture, rotating
