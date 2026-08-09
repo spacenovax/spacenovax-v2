@@ -678,12 +678,13 @@ function ActivityLedger({ balance, t }) {
 function Home({ user, t, onStart, onClaim, busy, setTab }) {
   const live = useLiveMiningView(user);
   const liveUser = { ...user, mining: live.mining };
+  const [balanceInteger, balanceFraction = ''] = format(live.displayBalance, 5).split('.');
   return <main className="v15-page">
     <section className="hero-command">
       <div className="hero-space"/>
       <div className="hero-copy">
         <span className="eyebrow"><i />{t.verified}</span>
-        <small>{t.balance} · {live.mining.active ? 'LIVE SESSION' : 'SETTLED LEDGER'}</small><strong>{format(live.displayBalance, 5)}</strong><h1>SPNX POINTS</h1>
+        <small>{t.balance} · {live.mining.active ? 'LIVE SESSION' : 'SETTLED LEDGER'}</small><strong className="hero-balance" aria-label={`${balanceInteger}${balanceFraction ? `.${balanceFraction}` : ''} SPNX POINTS`}><span className="hero-balance-int">{balanceInteger}</span>{balanceFraction && <span className="hero-balance-fraction">.{balanceFraction}</span>}</strong><h1>SPNX POINTS</h1>
         <p>NOVA-X1 / AI CONTROLLED GENESIS FLAGSHIP</p>
       </div>
       <img className="hero-station" src="/spacenovax-orbital-hq-live-v16.webp" alt="SpaceNovaX Orbital Headquarters above Earth" />
