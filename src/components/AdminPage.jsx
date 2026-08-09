@@ -47,6 +47,8 @@ export default function AdminPage() {
   const [missions, setMissions] = useState([]);
   const [miningEngine, setMiningEngine] = useState(null);
   const [operations, setOperations] = useState(null);
+  const [nodeProgram, setNodeProgram] = useState(null);
+  const [nodes, setNodes] = useState([]);
   const [conversionRuntime, setConversionRuntime] = useState(null);
   const [notice, setNotice] = useState('Checking admin session...');
   const [search, setSearch] = useState('');
@@ -65,7 +67,7 @@ export default function AdminPage() {
 
   async function loadAdmin() {
     try {
-      const [a,b,c,d,e,f,g,h,i,j,k,l] = await Promise.all([
+      const [a,b,c,d,e,f,g,h,i,j,k,l,m] = await Promise.all([
         adminFetch('/api/admin/stats'),
         adminFetch('/api/admin/users/search?q=' + encodeURIComponent(search)),
         adminFetch('/api/admin/logs'),
@@ -77,9 +79,10 @@ export default function AdminPage() {
         adminFetch('/api/admin/ranking/full'),
         adminFetch('/api/admin/missions'),
         adminFetch('/api/admin/mining/engine'),
-        adminFetch('/api/admin/operations')
+        adminFetch('/api/admin/operations'),
+        adminFetch('/api/admin/nodes')
       ]);
-      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null);
+      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []);
       setSettingsForm({
         convertEnabled: Boolean(f.settings?.convertEnabled),
         kycEnabled: Boolean(f.settings?.kycEnabled),
@@ -122,14 +125,14 @@ export default function AdminPage() {
 
   if (!admin) return <AdminLogin onLogin={(a)=>{ setAdmin(a); loadAdmin(); }} />;
 
-  const tabs = ['dashboard','nova','game','mining','users','kyc','risk','missions','ranking','convert','settings','logs'];
+  const tabs = ['dashboard','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
 
   return <section className="admin-page glass">
     <div className="admin-head"><div><h2>✦ NOVA Command Admin V16.5</h2><p>{notice}</p><small>Logged in: {admin.id} · {admin.role}</small></div><div className="admin-actions"><button onClick={loadAdmin}>Refresh</button><button onClick={logout}>Logout</button></div></div>
     <div className="admin-tabs">{tabs.map((x)=><button key={x} className={tab===x?'active':''} onClick={()=>setTab(x)}>{x.toUpperCase()}</button>)}</div>
 
     {tab==='dashboard' && <><div className="admin-stats">
-      <div><small>Total Users</small><b>{stats?.totalUsers ?? '-'}</b></div><div><small>Online 10m</small><b>{monitor?.onlineUsers ?? '-'}</b></div><div><small>Active Mining</small><b>{stats?.activeMining ?? '-'}</b></div><div><small>Total Points</small><b>{fmt(stats?.totalBalance)} SPNX</b></div><div><small>New Users 24h</small><b>{monitor?.todayNewUsers ?? '-'}</b></div><div><small>Mission Claims</small><b>{stats?.todayMissions ?? '-'}</b></div><div><small>High Risk</small><b>{monitor?.highRisk ?? '-'}</b></div><div><small>Review</small><b>{monitor?.review ?? '-'}</b></div><div><small>Trusted</small><b>{monitor?.trusted ?? '-'}</b></div><div><small>Mining Phase</small><b>Phase {stats?.phase ?? '-'}</b></div><div><small>Pool Used</small><b>{((stats?.miningPoolRatio || 0)*100).toFixed(4)}%</b></div><div><small>Ledger Chain</small><b>{operations?.system?.ledgerIntegrity?.valid ? `VALID · ${operations.system.ledgerIntegrity.count}` : 'CHECK REQUIRED'}</b></div>
+      <div><small>Total Users</small><b>{stats?.totalUsers ?? '-'}</b></div><div><small>Online 10m</small><b>{monitor?.onlineUsers ?? '-'}</b></div><div><small>Active Mining</small><b>{stats?.activeMining ?? '-'}</b></div><div><small>Total Points</small><b>{fmt(stats?.totalBalance)} SPNX</b></div><div><small>New Users 24h</small><b>{monitor?.todayNewUsers ?? '-'}</b></div><div><small>Mission Claims</small><b>{stats?.todayMissions ?? '-'}</b></div><div><small>High Risk</small><b>{monitor?.highRisk ?? '-'}</b></div><div><small>Review</small><b>{monitor?.review ?? '-'}</b></div><div><small>Trusted</small><b>{monitor?.trusted ?? '-'}</b></div><div><small>Mining Phase</small><b>Phase {stats?.phase ?? '-'}</b></div><div><small>Pool Used</small><b>{((stats?.miningPoolRatio || 0)*100).toFixed(4)}%</b></div><div><small>Ledger Chain</small><b>{operations?.system?.ledgerIntegrity?.valid ? `VALID · ${operations.system.ledgerIntegrity.count}` : 'CHECK REQUIRED'}</b></div><div><small>Community Nodes</small><b>{nodeProgram?.registered ?? 0} / {nodeProgram?.limit ?? '-'}</b></div><div><small>Nodes Online</small><b>{nodeProgram?.online ?? 0}</b></div>
     </div><form className="admin-form" onSubmit={givePoints}><h3>Manual Point Control</h3><input placeholder="User ID" value={pointForm.userId} onChange={(e)=>setPointForm({...pointForm,userId:e.target.value})}/><input placeholder="Amount" type="number" value={pointForm.amount} onChange={(e)=>setPointForm({...pointForm,amount:e.target.value})}/><input placeholder="Reason" value={pointForm.reason} onChange={(e)=>setPointForm({...pointForm,reason:e.target.value})}/><button type="submit">Give Points</button></form></>}
 
     {tab==='nova' && <div className="admin-users">
@@ -189,6 +192,8 @@ export default function AdminPage() {
         <div className="admin-user-side"><strong>{fmt(row.mining.reward)} SPNX</strong><button onClick={()=>resetMiner(row.user.id)}>Reset</button></div>
       </div>)}
     </div>}
+
+    {tab==='nodes' && <div className="admin-users"><h3>Community Node Monitor</h3><p className="admin-empty">노드는 자동 승인 방식입니다. 등록 후 첫 heartbeat가 들어와야 온라인으로 표시되며, 24시간 검증을 통과한 뒤에만 채굴 보너스가 활성화됩니다.</p><div className="admin-stats"><div><small>Registered</small><b>{nodeProgram?.registered ?? 0}</b></div><div><small>Online</small><b>{nodeProgram?.online ?? 0}</b></div><div><small>Program Limit</small><b>{nodeProgram?.limit ?? '-'}</b></div><div><small>Awaiting / Offline</small><b>{nodes.filter((node)=>!node.online && !node.revoked).length}</b></div></div>{nodes.length===0 ? <p className="admin-empty">아직 등록된 Community Node가 없습니다. 앱의 Community Node 메뉴에서 페어링 코드를 만든 뒤, 노드 프로그램을 실행해야 합니다.</p> : <div className="admin-node-list">{nodes.map((node)=><article className="admin-user-row admin-user-rich" key={node.nodeId}><div><b>{node.label || 'Community Node'}</b><small>{node.nodeId}</small><small>Owner: {node.owner?.name || node.ownerId || '—'} · {node.online ? 'ONLINE' : node.revoked ? 'REVOKED' : 'OFFLINE / AWAITING HEARTBEAT'}</small><small>Last heartbeat: {node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).toLocaleString() : 'No heartbeat received'}</small><small>Availability: {Math.round((node.verification?.availability || 0) * 100)}% · Work: {node.completedWork || 0}</small></div><div className="admin-user-side"><strong>{node.verification?.qualified ? 'QUALIFIED +25%' : node.status || 'VERIFYING'}</strong><small>{node.verification?.reason || 'waiting'}</small></div></article>)}</div>}</div>}
 
 
     {tab==='users' && <div className="admin-users"><h3>Users</h3><div className="admin-search"><input placeholder="Search user, telegram, wallet, KYC..." value={search} onChange={(e)=>setSearch(e.target.value)}/><button onClick={loadAdmin}>Search</button></div>{users.map((u,idx)=><div className="admin-user-row admin-user-rich" key={u.id}><div><b>#{idx+1} {u.firstName}</b><small>{u.id}</small><small>Telegram: {u.telegramId || 'Guest'} · @{u.username || '-'}</small><small>Fleet {u.activeFleet} · Bonus +{u.fleetBonus}% · {u.fleetGrade}</small><small>Wallet: {u.solanaWallet || 'Not connected'}</small><small>KYC: {u.kyc?.status || 'not_submitted'} · {u.banned ? 'BANNED' : 'ACTIVE'}</small></div><div className="admin-user-side"><strong>{fmt(u.balance)} SPNX</strong><RiskBadge risk={u.risk}/><button onClick={()=>toggleBan(u)}>{u.banned?'Unban':'Ban'}</button></div></div>)}</div>}
