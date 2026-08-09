@@ -11,10 +11,11 @@ const OFFICIAL_LINKS = {
 
 const MISSIONS = [
   { id: 'website', icon: '🌐', title: 'Website', reward: 100, url: OFFICIAL_LINKS.website, action: 'OPEN', type: 'one_time' },
-  { id: 'telegram', icon: '📢', title: 'Join SpaceNovaX Telegram Channel', reward: 300, url: OFFICIAL_LINKS.telegram, action: 'JOIN CHANNEL', type: 'one_time' },
+  { id: 'telegram', icon: '📢', title: 'Telegram', reward: 300, url: OFFICIAL_LINKS.telegram, action: 'JOIN', type: 'one_time' },
   { id: 'x', icon: '𝕏', title: 'X Twitter', reward: 300, url: OFFICIAL_LINKS.x, action: 'FOLLOW', type: 'one_time' },
   { id: 'discord', icon: '💬', title: 'Discord', reward: 300, url: OFFICIAL_LINKS.discord, action: 'JOIN', type: 'one_time' },
   { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', reward: 300, url: OFFICIAL_LINKS.youtube, action: 'SUBSCRIBE', type: 'one_time' },
+  { id: 'youtube_like', icon: '👍', title: 'YouTube Like', reward: 20, url: OFFICIAL_LINKS.youtube, action: 'LIKE', type: 'one_time' },
   { id: 'daily_checkin', icon: '🎁', title: 'Daily Check-in', reward: 20, url: '', action: 'CHECK-IN', type: 'daily' },
 ];
 
@@ -71,34 +72,8 @@ function openUrl(url) {
   if (tg?.openLink) tg.openLink(url);
   else window.open(url, '_blank', 'noopener,noreferrer');
 }
-function getClientId() {
-  const key = 'spnx_client_id_v1';
-  let value = localStorage.getItem(key);
-  if (!value) {
-    value = globalThis.crypto?.randomUUID?.() || `spnx-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    localStorage.setItem(key, value);
-  }
-  return value;
-}
 async function api(path, options = {}) {
-  const clientId = getClientId();
-  const initData = window.Telegram?.WebApp?.initData || '';
-  let body = options.body;
-  if (body && typeof body === 'string') {
-    try {
-      body = JSON.stringify({ ...JSON.parse(body), clientId });
-    } catch {}
-  }
-  const res = await fetch(path, {
-    ...options,
-    body,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-SPNX-Client-ID': clientId,
-      ...(initData ? { 'X-Telegram-Init-Data': initData } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  const res = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
   const data = await res.json();
   if (!res.ok || !data.ok) throw new Error(data.message || 'API failed');
   return data;
@@ -200,18 +175,14 @@ function HomePage({ user, startMining, claimMining, loading }) {
         <span className="planet planet-one" />
         <span className="planet planet-two" />
         <div className="system-online-chip">🟢 SYSTEM ONLINE</div>
-        <div className="ai-home-bubble">NOVA AI · COMMAND ONLINE</div>
+        <div className="ai-home-bubble">🤖 Every Captain has a story</div>
         <div className="balance-block">
           <small>TOTAL BALANCE</small>
           <strong>{fmt(user.balance)}</strong>
           <h2>SPNX Points</h2>
-          <p>NOVA-X1 · GENESIS INTERCEPTOR</p>
+          <p>Nova-X1 Cinematic Class</p>
         </div>
-        <div className="nova-x1-hero" role="img" aria-label="NOVA-X1 Genesis Interceptor">
-          <img src="/nova-x1-hero-v14.png" alt="NOVA-X1 Genesis Interceptor" />
-          <span className="nova-x1-scan" />
-          <div className="nova-x1-label"><b>NOVA-X1</b><small>AI CONTROLLED FLAGSHIP</small></div>
-        </div>
+        <CinematicShip active={isMining} />
         <div className="mining-glass">
           <div className="mining-main"><span>⛏️</span><div><small>Today's Mining</small><b>+{fmt(m.reward || 24)}</b><em>SPNX</em></div></div>
           <div className="mining-time"><small>{canClaim ? 'Claim Ready' : isMining ? 'Next Claim' : 'Ready'}</small><b>{canClaim ? '00:00:00' : time(m.remainingMs || 86400000)}</b></div>
@@ -220,7 +191,7 @@ function HomePage({ user, startMining, claimMining, loading }) {
         <div className="stat-strip">
           <div><small>Mining Speed</small><b>{fmt(m.speedPerHour || 1, 2)}x</b></div>
           <div><small>Fleet Bonus</small><b>+{m.fleetBonus || 0}%</b></div>
-          <div><small>Game Reward</small><b>30/day</b></div>
+          <div><small>Game Reward</small><b>20/day</b></div>
         </div>
       </div>
     </section>
@@ -251,7 +222,7 @@ function MiningPage({ user, startMining, claimMining, loading }) {
 
 function MissionsPage({ setUser }) {
   const [missions, setMissions] = useState(MISSIONS.map((m) => ({ ...m, status: { completed: false } })));
-  const [notice, setNotice] = useState('Official missions (Website, Telegram, X, Discord, YouTube Subscribe) are rewarded ONLY ONCE per account for lifetime.');
+  const [notice, setNotice] = useState('Official missions (Website, Telegram, X, Discord, YouTube Subscribe, YouTube Like +20) are rewarded ONLY ONCE per account for lifetime.');
   const [busy, setBusy] = useState('');
   const completed = missions.filter((m) => m.status?.completed).length;
   const progress = Math.round((completed / Math.max(1, missions.length)) * 100);
@@ -346,56 +317,82 @@ function WalletPage({ user, setUser }) {
   );
 }
 
-function KycPage() {
+function KycPage({ user, setUser }) {
+  const [form, setForm] = useState({ name: '', country: '', note: '' });
+  const [notice, setNotice] = useState('Token conversion requires KYC/security review.');
+  async function submit() {
+    try { const data = await api('/api/kyc/submit', { method: 'POST', body: JSON.stringify(form) }); if (data.user) setUser(data.user); setNotice('KYC submitted. 관리자 검토 대기 중입니다.'); } catch (e) { setNotice(e.message); }
+  }
   return (
-    <section className="page premium-card content-card"><h2>🛡️ KYC · Coming Soon</h2><p>SpaceNovaX does not currently collect identity information. Professional provider verification will open after community activation.</p><div className="grid"><div><small>Status</small><b>NOT AVAILABLE</b></div><div><small>Data collection</small><b>DISABLED</b></div></div><button className="wide" disabled>Verification not yet available</button></section>
+    <section className="page premium-card content-card"><h2>🛡️ KYC Center</h2><p>{notice}</p><div className="grid"><div><small>Status</small><b>{user.kyc?.status || 'not_submitted'}</b></div><div><small>Purpose</small><b>Conversion</b></div></div><input className="input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="input" placeholder="Country" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} /><input className="input" placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /><button className="wide" onClick={submit}>Submit KYC</button></section>
   );
 }
 
 
 
-
-function createSPNXArcadeSounds() {
-  let ctx = null;
-  const get = () => {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
+function createArcadeSounds() {
+  let audioCtx = null;
+  const getCtx = () => {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
   };
-  const beep = (freq, dur = .1, type = 'sine') => {
+  const tone = (freq = 440, dur = 0.12, type = 'sine', gain = 0.08, slide = 0) => {
     try {
-      const a = get();
-      const o = a.createOscillator();
-      const g = a.createGain();
-      o.type = type;
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(.06, a.currentTime);
-      g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + dur);
-      o.connect(g); g.connect(a.destination);
-      o.start(); o.stop(a.currentTime + dur);
+      const ctx = getCtx();
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), ctx.currentTime + dur);
+      g.gain.setValueAtTime(gain, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
     } catch {}
   };
   return {
-    start: () => { beep(320,.08); setTimeout(()=>beep(720,.1),80); },
-    crystal: () => { beep(900,.06); setTimeout(()=>beep(1300,.08),50); },
-    item: () => beep(650,.12,'triangle'),
-    explosion: () => { beep(95,.22,'sawtooth'); setTimeout(()=>beep(55,.26,'square'),90); },
+    start: () => { tone(220, .10, 'sawtooth', .045, 220); setTimeout(() => tone(660, .12, 'sine', .05, 220), 90); },
+    crystal: () => { tone(860, .08, 'sine', .055, 360); setTimeout(() => tone(1320, .10, 'triangle', .04, 240), 55); },
+    boost: () => { tone(180, .16, 'sawtooth', .055, 520); setTimeout(() => tone(740, .13, 'square', .035, 260), 80); },
+    hit: () => { tone(90, .20, 'sawtooth', .09, -35); setTimeout(() => tone(54, .18, 'square', .055, -14), 70); },
+    high: () => { tone(660, .10, 'sine', .055, 220); setTimeout(() => tone(880, .10, 'sine', .055, 220), 110); setTimeout(() => tone(1320, .16, 'triangle', .055, 0), 220); },
+    muted: false,
   };
 }
 
+
+
 function GalaxyLeaderboard({ currentScore = 0 }) {
   const championScore = 18560;
+  const top = [
+    { rank: 1, name: 'Captain Nova', score: championScore, badge: '👑' },
+    { rank: 2, name: 'Astro Hunter', score: 16240, badge: '🥈' },
+    { rank: 3, name: 'Mars Pilot', score: 14880, badge: '🥉' },
+  ];
+  const myRank = currentScore >= top[0].score ? 1 : currentScore >= top[2].score ? 3 : 128;
   const gap = Math.max(0, championScore - currentScore);
   return (
     <div className="galaxy-leaderboard">
       <div className="champion-banner">
         <span>🌌 Current Galaxy Champion</span>
-        <b>👑 Captain Nova</b>
-        <strong>{championScore.toLocaleString()}</strong>
+        <b>{top[0].badge} {top[0].name}</b>
+        <strong>{top[0].score.toLocaleString()}</strong>
+      </div>
+      <div className="leaderboard-list">
+        {top.map((p) => (
+          <div key={p.rank} className={`leader-row rank-${p.rank}`}>
+            <em>#{p.rank}</em>
+            <span>{p.badge} {p.name}</span>
+            <b>{p.score.toLocaleString()}</b>
+          </div>
+        ))}
       </div>
       <div className="my-rank-card">
         <span>🚀 My Arcade Rank</span>
-        <b>{currentScore >= championScore ? '#1' : '#128'}</b>
+        <b>#{myRank}</b>
         <small>{gap > 0 ? `${gap.toLocaleString()} points to Galaxy Champion` : 'You are today’s Galaxy Champion!'}</small>
       </div>
     </div>
@@ -404,6 +401,8 @@ function GalaxyLeaderboard({ currentScore = 0 }) {
 
 function GameOverOverlay({ result, onPlayAgain }) {
   if (!result?.over) return null;
+  const championScore = 18560;
+  const gap = Math.max(0, championScore - Number(result.score || 0));
   return (
     <div className="gameover-overlay">
       <div className="gameover-card">
@@ -416,39 +415,75 @@ function GameOverOverlay({ result, onPlayAgain }) {
           <div><small>Reward</small><b>+{Number(result.reward || 0)} SPNX</b></div>
           <div><small>Galaxy Rank</small><b>#{result.rank || 128}</b></div>
         </div>
-        <button className="play-again-btn" onClick={onPlayAgain}>🚀 PLAY AGAIN</button>
+        <div className="champion-gap">
+          <span>👑 Today's Champion</span>
+          <b>Captain Nova — {championScore.toLocaleString()}</b>
+          <small>{gap > 0 ? `${gap.toLocaleString()} points behind the Champion` : 'You are today’s Galaxy Champion!'}</small>
+        </div>
+        <div className="gameover-actions">
+          <button onClick={onPlayAgain}>🚀 PLAY AGAIN</button>
+        </div>
       </div>
     </div>
   );
 }
 
-function NovaArcadeCanvas({ soundOn, onScore, onNotice, onGameOver, restartKey }) {
+function NovaArcadeCanvas({ onReward, dailyRemaining, soundOn, onScore, onEvent, onGameOver, restartKey }) {
   const canvasRef = useRef(null);
-  const cbRef = useRef({ onScore, onNotice, onGameOver });
-  const soundRef = useRef(soundOn);
-  const audioRef = useRef(null);
-
-  useEffect(() => {
-    cbRef.current = { onScore, onNotice, onGameOver };
-    soundRef.current = soundOn;
-  }, [onScore, onNotice, onGameOver, soundOn]);
+  const soundsRef = useRef(null);
+  const stopRef = useRef(false);
 
   const play = useCallback((name) => {
-    if (!soundRef.current) return;
-    if (!audioRef.current) audioRef.current = createSPNXArcadeSounds();
-    audioRef.current[name]?.();
-  }, []);
+    if (!soundOn) return;
+    if (!soundsRef.current) soundsRef.current = createArcadeSounds();
+    soundsRef.current[name]?.();
+  }, [soundOn]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let raf = 0;
-    let stopped = false;
+    stopRef.current = false;
 
-    const s = {
-      score: 0, crystals: 0, shipX: .5, targetX: .5, frame: 0,
-      dead: false, shield: false, objects: [], particles: [], stars: [],
-      shake: 0, flash: 0, gameOverSent: false,
+    const state = {
+      score: 0,
+      crystals: 0,
+      shipX: 0.5,
+      targetX: 0.5,
+      lastRewardScore: 0,
+      objects: [],
+      stars: [],
+      particles: [],
+      floaters: [],
+      frame: 0,
+      shake: 0,
+      flash: 0,
+      shield: 0,
+      boost: 0,
+      combo: 0,
+      dead: false,
+      showShip: true,
+      gameOverSent: false,
+    };
+
+    const addFloater = (x, y, text, color = '#34efff') => {
+      state.floaters.push({ x, y, text, color, life: 72, max: 72 });
+    };
+
+    const burst = (x, y, color, count = 18, power = 3) => {
+      for (let i = 0; i < count; i += 1) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 0.8 + Math.random() * power;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 38 + Math.random() * 30,
+          max: 70,
+          r: 1.6 + Math.random() * 5.4,
+          color,
+        });
+      }
     };
 
     const resize = () => {
@@ -457,210 +492,403 @@ function NovaArcadeCanvas({ soundOn, onScore, onNotice, onGameOver, restartKey }
       canvas.width = Math.floor(rect.width * dpr);
       canvas.height = Math.floor(rect.height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      s.stars = Array.from({ length: 180 }, () => ({
-        x: Math.random() * rect.width, y: Math.random() * rect.height,
-        r: .5 + Math.random() * 1.8, v: .25 + Math.random() * .8,
-        a: .25 + Math.random() * .75,
+      state.stars = Array.from({ length: 230 }, () => ({
+        x: Math.random() * rect.width,
+        y: Math.random() * rect.height,
+        s: 0.35 + Math.random() * 2.1,
+        a: 0.18 + Math.random() * 0.82,
+        v: 0.15 + Math.random() * 0.85,
       }));
     };
 
-    const burst = (x, y, color, n = 30) => {
-      for (let i = 0; i < n; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const sp = 1 + Math.random() * 6;
-        s.particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 40 + Math.random()*30, color });
-      }
-    };
-
-    const spawn = (w) => {
-      if (s.dead) return;
-      const r = Math.random();
-      const type = r < .55 ? 'crystal' : r < .82 ? 'asteroid' : r < .91 ? 'shield' : 'boost';
-      s.objects.push({
-        type, x: 30 + Math.random() * (w - 60), y: -40,
-        r: type === 'asteroid' ? 22 + Math.random()*18 : 18,
-        vy: type === 'asteroid' ? 2.0 + Math.random()*2.1 : 1.4 + Math.random()*1.5,
+    const spawn = (w, difficulty) => {
+      if (state.dead) return;
+      const roll = Math.random();
+      const type = roll < 0.55 ? 'crystal' : roll < 0.86 ? 'asteroid' : roll < 0.94 ? 'boost' : 'shield';
+      state.objects.push({
+        type,
+        crystalType: type === 'crystal' ? (Math.random() > .88 ? 'gold' : Math.random() > .70 ? 'purple' : 'blue') : '',
+        x: 32 + Math.random() * (w - 64),
+        y: -44,
+        r: type === 'asteroid' ? 18 + Math.random() * 22 : 16,
+        vy: (type === 'asteroid' ? 1.8 + Math.random() * 1.9 : 1.2 + Math.random() * 1.3) + difficulty,
+        spin: Math.random() * Math.PI,
       });
     };
 
-    const finish = (x, y) => {
-      if (s.gameOverSent) return;
-      s.gameOverSent = true;
-      s.dead = true;
-      s.objects = [];
-      s.shake = 28;
-      s.flash = 34;
-      burst(x, y, '#ff4d6d', 90);
-      burst(x, y, '#ffd66e', 55);
+    const endGame = (shipX, shipY) => {
+      if (state.gameOverSent) return;
+      state.gameOverSent = true;
+      state.dead = true;
+      state.showShip = false;
+      state.objects = [];
+      state.shake = 32;
+      state.flash = 44;
+      state.combo = 0;
+      burst(shipX, shipY, '#ff4d6d', 110, 10);
+      burst(shipX, shipY, '#ffd66e', 70, 8);
+      burst(shipX, shipY, '#34efff', 42, 6);
+      addFloater(shipX, shipY - 50, 'MISSION FAILED', '#ff4d6d');
       play('explosion');
-      if (navigator.vibrate) navigator.vibrate([100,40,150]);
-      cbRef.current.onNotice?.('Mission failed, Captain. Prepare for another launch.');
+      if (navigator.vibrate) navigator.vibrate([100, 50, 160]);
+      onEvent?.('Mission failed, Captain. Prepare for another launch.');
+
       setTimeout(() => {
-        if (stopped) return;
-        cbRef.current.onGameOver?.({
+        if (stopRef.current) return;
+        onGameOver?.({
           over: true,
-          score: s.score,
-          crystals: s.crystals,
-          reward: Math.min(30, Math.floor(s.score/100)*5),
-          rank: s.score >= 18560 ? 1 : 128,
+          score: state.score,
+          crystals: state.crystals,
+          reward: Math.min(20, Math.floor(state.score / 100) * 5),
+          rank: state.score >= 18560 ? 1 : state.score >= 14880 ? 3 : state.score >= 10920 ? 5 : 128,
         });
-      }, 900);
+      }, 1000);
     };
 
-    const drawShip = (x, y) => {
-      if (s.dead) return;
+    const drawShip = (x, y, t) => {
+      if (!state.showShip) return;
       ctx.save();
-      ctx.translate(x, y);
-      ctx.shadowColor = s.shield ? '#76faff' : '#34efff';
-      ctx.shadowBlur = 28;
-      ctx.font = '58px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('🚀', 0, 16);
-      if (s.shield) {
+      ctx.translate(x, y + Math.sin(t / 28) * 4);
+      ctx.scale(0.43, 0.43);
+      ctx.shadowColor = state.boost > 0 ? '#ffd66e' : '#34efff';
+      ctx.shadowBlur = state.boost > 0 ? 52 : 34;
+
+      const flame = (state.boost > 0 ? 110 : 74) + Math.sin(t / 4) * 18;
+      const grad = ctx.createLinearGradient(0, 32, 0, 32 + flame);
+      grad.addColorStop(0, 'rgba(255,255,255,.98)');
+      grad.addColorStop(.22, 'rgba(52,239,255,.90)');
+      grad.addColorStop(.62, state.boost > 0 ? 'rgba(255,214,110,.58)' : 'rgba(91,104,255,.55)');
+      grad.addColorStop(1, 'rgba(255,60,231,0)');
+      ctx.fillStyle = grad;
+      [-28, 0, 28].forEach((dx) => {
+        ctx.beginPath();
+        ctx.moveTo(dx - 9, 28);
+        ctx.lineTo(dx + 9, 28);
+        ctx.lineTo(dx, 32 + flame);
+        ctx.closePath();
+        ctx.fill();
+      });
+
+      const wingGrad = ctx.createLinearGradient(-120, -10, 120, 20);
+      wingGrad.addColorStop(0, '#f8fbff');
+      wingGrad.addColorStop(.45, '#7c8fa8');
+      wingGrad.addColorStop(1, '#f8fbff');
+      ctx.fillStyle = wingGrad;
+      ctx.beginPath(); ctx.moveTo(-18, 6); ctx.lineTo(-128, 52); ctx.lineTo(-82, 0); ctx.lineTo(-22, -18); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(18, 6); ctx.lineTo(128, 52); ctx.lineTo(82, 0); ctx.lineTo(22, -18); ctx.closePath(); ctx.fill();
+
+      const bodyGrad = ctx.createLinearGradient(-30, -80, 36, 64);
+      bodyGrad.addColorStop(0, '#ffffff');
+      bodyGrad.addColorStop(.35, '#cbd8e8');
+      bodyGrad.addColorStop(.6, '#41536b');
+      bodyGrad.addColorStop(1, '#f8fbff');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, -98);
+      ctx.bezierCurveTo(42, -40, 48, 26, 0, 72);
+      ctx.bezierCurveTo(-48, 26, -42, -40, 0, -98);
+      ctx.closePath();
+      ctx.fill();
+
+      const cockGrad = ctx.createRadialGradient(0, -38, 4, 0, -30, 42);
+      cockGrad.addColorStop(0, '#6ffaff');
+      cockGrad.addColorStop(.38, '#12315c');
+      cockGrad.addColorStop(1, '#020617');
+      ctx.fillStyle = cockGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -34, 20, 42, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (state.shield > 0) {
         ctx.strokeStyle = 'rgba(118,250,255,.9)';
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(0, -5, 40, 0, Math.PI*2); ctx.stroke();
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, -10, 148, 0, Math.PI * 2);
+        ctx.stroke();
       }
       ctx.restore();
     };
 
     const loop = () => {
       const rect = canvas.getBoundingClientRect();
-      const w = rect.width, h = rect.height;
-      const t = s.frame++;
-      if (s.shake > 0) s.shake *= .86;
-      if (s.flash > 0) s.flash *= .88;
+      const w = rect.width;
+      const h = rect.height;
+      const t = state.frame;
+      state.frame += 1;
+
+      const difficulty = Math.min(2.7, t / 3400);
+      if (state.shake > 0) state.shake *= .88;
+      if (state.flash > 0) state.flash *= .90;
+      if (state.boost > 0) state.boost -= 1;
+      if (state.shield > 0) state.shield -= .5;
 
       ctx.save();
-      ctx.translate(s.shake > .2 ? (Math.random()-.5)*s.shake : 0, s.shake > .2 ? (Math.random()-.5)*s.shake : 0);
-      ctx.clearRect(-30,-30,w+60,h+60);
+      const shakeX = state.shake > 0.2 ? (Math.random() - .5) * state.shake : 0;
+      const shakeY = state.shake > 0.2 ? (Math.random() - .5) * state.shake : 0;
+      ctx.translate(shakeX, shakeY);
 
-      const bg = ctx.createRadialGradient(w*.5,h*.35,10,w*.5,h*.5,h);
-      bg.addColorStop(0,'#182c78'); bg.addColorStop(.45,'#070b24'); bg.addColorStop(1,'#01030c');
-      ctx.fillStyle = bg; ctx.fillRect(-30,-30,w+60,h+60);
+      ctx.clearRect(-40, -40, w + 80, h + 80);
+      const bg = ctx.createRadialGradient(w * .55, h * .45, 10, w * .5, h * .45, h * .78);
+      bg.addColorStop(0, '#172968');
+      bg.addColorStop(.35, '#070b22');
+      bg.addColorStop(1, '#02030b');
+      ctx.fillStyle = bg;
+      ctx.fillRect(-40, -40, w + 80, h + 80);
 
-      s.stars.forEach(st => {
-        st.y += st.v; if (st.y > h) { st.y = -4; st.x = Math.random()*w; }
-        ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2); ctx.fill();
+      state.stars.forEach((s) => {
+        s.y += s.v * (state.boost > 0 ? 2 : 1);
+        if (s.y > h) {
+          s.y = -4;
+          s.x = Math.random() * w;
+        }
+        ctx.globalAlpha = s.a * (0.55 + Math.sin((t + s.x) / 28) * 0.45);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
+        ctx.fill();
       });
       ctx.globalAlpha = 1;
 
-      if (!s.dead && t % 30 === 0) spawn(w);
+      if (!state.dead && t % Math.max(16, 34 - Math.floor(difficulty * 5)) === 0) spawn(w, difficulty);
 
-      s.objects.forEach(o => {
+      state.objects.forEach((o) => {
         o.y += o.vy;
-        ctx.save(); ctx.textAlign='center'; ctx.shadowBlur=18;
-        if (o.type === 'asteroid') { ctx.shadowColor='#ff7a2f'; ctx.font=`${Math.floor(o.r*1.8)}px system-ui`; ctx.fillText('☄️',o.x,o.y+10); }
-        else if (o.type === 'shield') { ctx.shadowColor='#76faff'; ctx.font='30px system-ui'; ctx.fillText('🛡',o.x,o.y+10); }
-        else if (o.type === 'boost') { ctx.shadowColor='#ffd66e'; ctx.font='30px system-ui'; ctx.fillText('⚡',o.x,o.y+10); }
-        else { ctx.shadowColor='#34efff'; ctx.font='30px system-ui'; ctx.fillText('💎',o.x,o.y+10); }
-        ctx.restore();
+        o.spin += 0.04;
+        if (o.type === 'asteroid') {
+          ctx.save();
+          ctx.translate(o.x, o.y);
+          ctx.rotate(o.spin);
+          ctx.shadowColor = '#ff7a2f';
+          ctx.shadowBlur = 14;
+          const g = ctx.createRadialGradient(-6, -8, 3, 0, 0, o.r);
+          g.addColorStop(0, '#d8d8d8');
+          g.addColorStop(.55, '#383843');
+          g.addColorStop(1, '#08080d');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          for (let i = 0; i < 9; i += 1) {
+            const a = (Math.PI * 2 / 9) * i;
+            const rr = o.r * (.72 + ((i * 13) % 30) / 100);
+            ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        } else if (o.type === 'boost') {
+          ctx.font = '30px system-ui';
+          ctx.shadowColor = '#ffd66e';
+          ctx.shadowBlur = 20;
+          ctx.fillText('⚡', o.x - 14, o.y + 12);
+          ctx.shadowBlur = 0;
+        } else if (o.type === 'shield') {
+          ctx.font = '29px system-ui';
+          ctx.shadowColor = '#76faff';
+          ctx.shadowBlur = 20;
+          ctx.fillText('🛡', o.x - 14, o.y + 12);
+          ctx.shadowBlur = 0;
+        } else {
+          const emoji = o.crystalType === 'gold' ? '🔶' : o.crystalType === 'purple' ? '🔮' : '💎';
+          ctx.font = '28px system-ui';
+          ctx.shadowColor = o.crystalType === 'gold' ? '#ffd66e' : '#8b5cff';
+          ctx.shadowBlur = 18;
+          ctx.fillText(emoji, o.x - 14, o.y + 10);
+          ctx.shadowBlur = 0;
+        }
       });
 
-      if (!s.dead) s.shipX += (s.targetX - s.shipX) * .12;
-      const shipX = w * s.shipX;
-      const shipY = h - 92;
-      drawShip(shipX, shipY);
+      if (!state.dead) state.shipX += (state.targetX - state.shipX) * 0.11;
+      const shipX = w * state.shipX;
+      const shipY = h - 105;
+      const hitbox = 24;
+      drawShip(shipX, shipY, t);
 
-      if (!s.dead) {
-        for (const o of s.objects) {
-          const dx = o.x - shipX, dy = o.y - shipY;
-          if (Math.sqrt(dx*dx + dy*dy) < o.r + 24) {
-            o.y = h + 999;
-
+      if (!state.dead) {
+        for (const o of state.objects) {
+          const dx = o.x - shipX;
+          const dy = o.y - shipY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < o.r + hitbox) {
+            o.y = h + 100;
             if (o.type === 'asteroid') {
-              if (s.shield) {
-                s.shield = false; s.shake = 10; s.flash = 8;
-                burst(o.x,o.y,'#76faff',35); play('item');
-                cbRef.current.onNotice?.('Shield absorbed the impact.');
+              state.combo = 0;
+              if (state.shield > 0) {
+                state.shield = 0;
+                state.shake = 13;
+                state.flash = 10;
+                burst(o.x, o.y, '#76faff', 40, 6);
+                addFloater(o.x, o.y, 'SHIELD BLOCK!', '#76faff');
+                play('shield');
+                if (navigator.vibrate) navigator.vibrate(60);
+                onEvent?.('Shield absorbed the impact.');
               } else {
-                finish(shipX, shipY);
+                endGame(shipX, shipY);
                 break;
               }
             } else {
-              if (o.type === 'crystal') { s.score += 10; s.crystals += 1; play('crystal'); burst(o.x,o.y,'#34efff',18); }
-              if (o.type === 'boost') { s.score += 25; play('item'); burst(o.x,o.y,'#ffd66e',24); }
-              if (o.type === 'shield') { s.score += 18; s.shield = true; play('item'); burst(o.x,o.y,'#76faff',24); }
-              cbRef.current.onScore?.(s.score);
+              const points = o.type === 'boost' ? 25 : o.type === 'shield' ? 18 : o.crystalType === 'gold' ? 35 : o.crystalType === 'purple' ? 20 : 10;
+              state.score += points;
+              state.combo += 1;
+              if (o.type === 'crystal') state.crystals += 1;
+              burst(o.x, o.y, o.type === 'boost' ? '#ffd66e' : o.type === 'shield' ? '#76faff' : '#34efff', 20, 4);
+              addFloater(o.x, o.y, o.type === 'boost' ? 'BOOST!' : o.type === 'shield' ? 'SHIELD!' : `+${points}`, o.type === 'boost' ? '#ffd66e' : '#34efff');
+              if (o.type === 'boost') {
+                state.boost = 300;
+                play('item');
+              } else if (o.type === 'shield') {
+                state.shield = 520;
+                play('shield');
+              } else {
+                play('crystal');
+              }
+              if (state.combo === 10) addFloater(w / 2, h * .36, 'GREAT COMBO x10', '#ffd66e');
+              if (state.combo === 20) addFloater(w / 2, h * .36, 'GALAXY COMBO x20', '#ff3ce7');
+              onScore?.(state.score);
+              if (state.score - state.lastRewardScore >= 100 && dailyRemaining > 0) {
+                state.lastRewardScore = state.score;
+                onReward(Math.min(5, dailyRemaining));
+                addFloater(shipX, shipY - 80, '+5 SPNX', '#76ffb0');
+              }
             }
           }
         }
       }
 
-      s.objects = s.objects.filter(o => o.y < h + 80);
-      s.particles.forEach(p => {
-        p.x += p.vx; p.y += p.vy; p.vy += .04; p.life -= 1;
-        ctx.globalAlpha = Math.max(0, p.life/70); ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,Math.PI*2); ctx.fill();
+      state.objects = state.objects.filter((o) => o.y < h + 80);
+      state.particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += .025;
+        p.life -= 1;
+        ctx.globalAlpha = Math.max(0, p.life / p.max);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
       });
-      s.particles = s.particles.filter(p => p.life > 0);
+      state.particles = state.particles.filter((p) => p.life > 0);
       ctx.globalAlpha = 1;
 
-      ctx.fillStyle='rgba(2,5,20,.68)'; ctx.strokeStyle='rgba(52,239,255,.3)';
-      ctx.beginPath(); ctx.roundRect(12,12,168,70,16); ctx.fill(); ctx.stroke();
-      ctx.fillStyle='#34efff'; ctx.font='800 13px system-ui'; ctx.fillText('SCORE',28,35);
-      ctx.fillStyle='#fff'; ctx.font='900 24px system-ui'; ctx.fillText(String(s.score),28,64);
-      ctx.fillStyle=s.shield?'#76faff':'rgba(255,255,255,.45)'; ctx.font='800 12px system-ui'; ctx.fillText(s.shield?'SHIELD ON':'NO SHIELD',98,35);
+      state.floaters.forEach((f) => {
+        f.y -= .65;
+        f.life -= 1;
+        ctx.globalAlpha = Math.max(0, f.life / f.max);
+        ctx.fillStyle = f.color;
+        ctx.shadowColor = f.color;
+        ctx.shadowBlur = 16;
+        ctx.font = '900 18px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.shadowBlur = 0;
+        ctx.textAlign = 'start';
+      });
+      state.floaters = state.floaters.filter((f) => f.life > 0);
+      ctx.globalAlpha = 1;
 
-      if (s.dead) { ctx.fillStyle='rgba(1,3,12,.35)'; ctx.fillRect(-30,-30,w+60,h+60); }
-      if (s.flash > .2) { ctx.globalAlpha=Math.min(.38,s.flash/45); ctx.fillStyle='#ff2d55'; ctx.fillRect(-30,-30,w+60,h+60); ctx.globalAlpha=1; }
+      ctx.fillStyle = 'rgba(2,5,20,.66)';
+      ctx.strokeStyle = 'rgba(52,239,255,.28)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(12, 12, 172, 72, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#34efff';
+      ctx.font = '800 13px system-ui';
+      ctx.fillText('SCORE', 28, 34);
+      ctx.fillStyle = '#fff';
+      ctx.font = '900 22px system-ui';
+      ctx.fillText(String(state.score), 28, 60);
+      ctx.fillStyle = '#ffd66e';
+      ctx.font = '800 12px system-ui';
+      ctx.fillText(`COMBO x${state.combo}`, 102, 34);
+      ctx.fillStyle = '#76ffb0';
+      ctx.fillText(`CRYSTAL ${state.crystals}`, 102, 58);
+
+      if (state.dead) {
+        ctx.globalAlpha = .72;
+        ctx.fillStyle = 'rgba(1,3,12,.22)';
+        ctx.fillRect(-40, -40, w + 80, h + 80);
+        ctx.globalAlpha = 1;
+      }
+
+      if (state.flash > 0.2) {
+        ctx.globalAlpha = Math.min(.42, state.flash / 60);
+        ctx.fillStyle = '#ff2d55';
+        ctx.fillRect(-40, -40, w + 80, h + 80);
+        ctx.globalAlpha = 1;
+      }
 
       ctx.restore();
       raf = requestAnimationFrame(loop);
     };
 
     resize();
-    cbRef.current.onScore?.(0);
+    onScore?.(0);
     play('start');
 
-    const move = e => {
-      if (s.dead) return;
+    const onResize = () => resize();
+    const onMove = (e) => {
+      if (state.dead) return;
       const rect = canvas.getBoundingClientRect();
-      const x = e.touches?.[0]?.clientX ?? e.clientX;
-      s.targetX = Math.max(.08, Math.min(.92, (x - rect.left)/rect.width));
+      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+      state.targetX = Math.max(0.10, Math.min(0.90, (clientX - rect.left) / rect.width));
     };
-    window.addEventListener('resize', resize);
-    canvas.addEventListener('mousemove', move);
-    canvas.addEventListener('touchstart', move, { passive:true });
-    canvas.addEventListener('touchmove', move, { passive:true });
+
+    window.addEventListener('resize', onResize);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchmove', onMove, { passive: true });
+    canvas.addEventListener('touchstart', onMove, { passive: true });
     raf = requestAnimationFrame(loop);
 
     return () => {
-      stopped = true;
+      stopRef.current = true;
       cancelAnimationFrame(raf);
-      window.removeEventListener('resize', resize);
-      canvas.removeEventListener('mousemove', move);
-      canvas.removeEventListener('touchstart', move);
-      canvas.removeEventListener('touchmove', move);
+      window.removeEventListener('resize', onResize);
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('touchmove', onMove);
+      canvas.removeEventListener('touchstart', onMove);
     };
-  }, [restartKey, play]);
+  }, [dailyRemaining, onReward, onScore, onEvent, onGameOver, play, restartKey]);
 
   return <canvas className="arcade-canvas" ref={canvasRef} />;
 }
 
 function GamePage({ user, setUser }) {
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date().toISOString().slice(0, 10);
   const gs = user.gameReward || { date: today, earnedToday: 0, bestScore: 0 };
   const earned = gs.date === today ? Number(gs.earnedToday || 0) : 0;
-  const remaining = Math.max(0, 30 - earned);
+  const remaining = Math.max(0, 20 - earned);
   const [score, setScore] = useState(0);
-  const [notice, setNotice] = useState('Stable Arcade · 보석은 획득만, 운석은 GAME OVER');
+  const [notice, setNotice] = useState('Real Game Over Mode · 운석 충돌 시 Shield 없으면 즉시 종료');
   const [soundOn, setSoundOn] = useState(true);
   const [gameOver, setGameOver] = useState(null);
   const [restartKey, setRestartKey] = useState(0);
+
+  const rewardGame = useCallback(async (reward) => {
+    if (remaining <= 0) {
+      setNotice('오늘 게임 보상 20 SPNX를 모두 받았습니다. 랭킹은 계속 기록됩니다.');
+      return;
+    }
+    try {
+      const data = await api('/api/game/reward', { method: 'POST', body: JSON.stringify({ score: Math.max(score, 100), reward }) });
+      if (data.user) setUser(data.user);
+      setNotice(`💎 Arcade reward! +${data.reward} SPNX`);
+    } catch {
+      setNotice(`Preview reward: +${reward} SPNX · 서버 연결 후 실제 지급됩니다.`);
+    }
+  }, [remaining, score, setUser]);
 
   const restartArcade = () => {
     setGameOver(null);
     setScore(0);
     setNotice('3... 2... 1... LAUNCH!');
-    setRestartKey(v => v + 1);
+    setRestartKey((v) => v + 1);
   };
 
   return (
     <section className="page premium-card content-card game-page arcade-ultimate-page">
       <div className="arcade-title-row">
         <div>
-          <h2>🎮 Nova-X1 Arcade Stable</h2>
+          <h2>🎮 Nova-X1 Arcade Ultimate</h2>
           <p>{notice}</p>
         </div>
         <button className={soundOn ? 'sound-toggle on' : 'sound-toggle'} onClick={() => setSoundOn(!soundOn)}>
@@ -669,7 +897,7 @@ function GamePage({ user, setUser }) {
       </div>
 
       <div className="grid">
-        <div><small>Daily Game Reward</small><b>{earned}/30 SPNX</b></div>
+        <div><small>Daily Game Reward</small><b>{earned}/20 SPNX</b></div>
         <div><small>Remaining</small><b>{remaining} SPNX</b></div>
       </div>
 
@@ -677,9 +905,11 @@ function GamePage({ user, setUser }) {
 
       <div className="arcade-live arcade-ultimate">
         <NovaArcadeCanvas
+          onReward={rewardGame}
+          dailyRemaining={remaining}
           soundOn={soundOn}
           onScore={setScore}
-          onNotice={setNotice}
+          onEvent={setNotice}
           onGameOver={setGameOver}
           restartKey={restartKey}
         />
@@ -687,10 +917,10 @@ function GamePage({ user, setUser }) {
       </div>
 
       <div className="game-help">
-        <span>💎 보석/아이템 충돌 = 획득만, 게임 재시작 없음</span>
-        <span>☄️ Shield 없이 운석 충돌 = 폭발 후 GAME OVER</span>
+        <span>☄️ Shield 없이 운석 충돌 = GAME OVER</span>
+        <span>🛡 Shield는 1회 방어 · 💎 Crystal 수집 · ⚡ Boost</span>
       </div>
-      <div className="rank-row"><b>Score</b><span>Stable No Restart Mode</span><strong>{score}</strong></div>
+      <div className="rank-row"><b>Score</b><span>Real Game Over Mode</span><strong>{score}</strong></div>
     </section>
   );
 }
@@ -707,98 +937,13 @@ function MorePage() {
   );
 }
 
-const NOVA_STARTERS = [
-  '오늘 채굴 상태를 분석해줘',
-  '게임 보상은 얼마나 남았어?',
-  'SpaceNovaX 프로젝트를 설명해줘',
-  '내 다음 임무를 추천해줘',
-];
-
-function NovaAIPage({ user }) {
-  const [messages, setMessages] = useState([
-    { role: 'assistant', text: `캡틴 ${getCaptainCode(user)}, NOVA AI 지휘 링크가 연결되었습니다. 채굴, 게임, 임무, SpaceNovaX 생태계에 관해 무엇이든 질문하십시오.` },
-  ]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function ask(text = input) {
-    const clean = String(text || '').trim();
-    if (!clean || busy) return;
-    const next = [...messages, { role: 'user', text: clean }];
-    setMessages(next);
-    setInput('');
-    setBusy(true);
-    try {
-      const data = await api('/api/nova/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: clean,
-          history: next.slice(-10),
-          captainContext: {
-            id: user.id,
-            level: user.level,
-            balance: user.balance,
-            mining: user.mining,
-            gameReward: user.gameReward,
-          },
-        }),
-      });
-      setMessages((v) => [...v, { role: 'assistant', text: data.reply }]);
-    } catch {
-      const mining = user.mining?.active
-        ? `현재 채굴은 진행 중이며 다음 정산까지 ${time(user.mining.remainingMs)} 남았습니다.`
-        : '현재 채굴 엔진은 대기 상태입니다.';
-      setMessages((v) => [...v, {
-        role: 'assistant',
-        text: `현재 NOVA 지식 코어가 오프라인 모드로 작동 중입니다. ${mining} 전체 AI 대화 기능은 서버에 NOVA AI 키를 등록하면 활성화됩니다.`,
-      }]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="page nova-ai-page">
-      <div className="nova-ai-console premium-card">
-        <header className="nova-ai-title">
-          <div className="nova-core-mark"><span>N</span></div>
-          <div><small>SPACENOVAX INTELLIGENCE CORE</small><h2>NOVA AI</h2><p>Mining · Game · Web3 · Community Command</p></div>
-          <i>ONLINE</i>
-        </header>
-        <div className="nova-ai-status">
-          <span>CAPTAIN {getCaptainCode(user)}</span>
-          <span>LEVEL {user.level || 1}</span>
-          <span>{fmt(user.balance)} SPNX</span>
-        </div>
-        <div className="nova-chat-log">
-          {messages.map((m, i) => (
-            <article className={`nova-message ${m.role}`} key={`${m.role}-${i}`}>
-              <small>{m.role === 'assistant' ? 'NOVA' : 'CAPTAIN'}</small>
-              <p>{m.text}</p>
-            </article>
-          ))}
-          {busy && <article className="nova-message assistant thinking"><small>NOVA</small><p>분석 중<span>•••</span></p></article>}
-        </div>
-        <div className="nova-starters">
-          {NOVA_STARTERS.map((item) => <button key={item} onClick={() => ask(item)}>{item}</button>)}
-        </div>
-        <form className="nova-composer" onSubmit={(e) => { e.preventDefault(); ask(); }}>
-          <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="NOVA AI에게 질문하세요…" rows="2" />
-          <button disabled={busy || !input.trim()} aria-label="Send message">➤</button>
-        </form>
-        <p className="nova-ai-note">NOVA는 커뮤니티 안내와 계정 분석을 지원합니다. 지갑 비밀키나 비밀번호는 절대 입력하지 마십시오.</p>
-      </div>
-    </section>
-  );
-}
-
 
 function captainAiMessages(user = defaultUser()) {
   const m = user.mining || {};
   const today = new Date().toISOString().slice(0, 10);
   const game = user.gameReward || { date: today, earnedToday: 0 };
   const gameEarned = game.date === today ? Number(game.earnedToday || 0) : 0;
-  const gameLeft = Math.max(0, 30 - gameEarned);
+  const gameLeft = Math.max(0, 20 - gameEarned);
   const claims = user.missionClaims || {};
   const rank = getRank(user.level || 1);
 
@@ -815,9 +960,9 @@ function captainAiMessages(user = defaultUser()) {
   else if (m.active) messages.unshift(`Mining in progress. Next claim in ${time(m.remainingMs || 0)}.`);
   else messages.unshift('Mining engine is ready. Start your 24-hour expedition.');
 
-  messages.push(`Game reward remaining today: ${gameLeft}/30 SPNX.`);
+  messages.push(`Game reward remaining today: ${gameLeft}/20 SPNX.`);
   messages.push('Today\'s Galaxy Champion is waiting to be challenged. Enter Arcade and climb the leaderboard.');
-  messages.push(`Mission progress: ${Object.keys(claims).length}/6 completed. Lifetime missions can be claimed only once.`);
+  messages.push(`Mission progress: ${Object.keys(claims).length}/7 completed. Lifetime missions can be claimed only once.`);
   messages.push(`Current rank: ${rank.title}. Sector: ${rank.sector}.`);
   messages.push(user.solanaWallet ? 'Solana wallet registered. You are preparing for the future conversion window.' : 'Register your Solana wallet to prepare for future SPNX conversion.');
   messages.push('Official Launch is coming. 1 SPNX Point = 1 SPNX during the official conversion period.');
@@ -857,7 +1002,6 @@ function CaptainAI({ user }) {
 function BottomNav({ tab, setTab }) {
   const items = [
     ['home','🪐','HOME'],
-    ['nova','✦','NOVA AI'],
     ['mining','⛏','MINE'],
     ['missions','⭐','MISSIONS'],
     ['friends','👨‍🚀','FLEET'],
@@ -882,47 +1026,7 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
-function LaunchSplash({ onComplete }) {
-  const [leaving, setLeaving] = useState(false);
-
-  useEffect(() => {
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const hold = window.setTimeout(() => setLeaving(true), reducedMotion ? 900 : 3200);
-    const done = window.setTimeout(onComplete, reducedMotion ? 1200 : 3900);
-    return () => {
-      window.clearTimeout(hold);
-      window.clearTimeout(done);
-    };
-  }, [onComplete]);
-
-  return (
-    <div className={leaving ? 'launch-splash leaving' : 'launch-splash'} role="status" aria-label="SpaceNovaX launching">
-      <div className="splash-stars" />
-      <div className="splash-horizon" />
-      <div className="splash-energy-ring ring-a" />
-      <div className="splash-energy-ring ring-b" />
-      <div className="splash-logo-shell">
-        <span className="splash-orbit orbit-a" />
-        <span className="splash-orbit orbit-b" />
-        <img src="/spacenovax-symbol.jpg" alt="SpaceNovaX official logo" />
-        <span className="splash-glint" />
-      </div>
-      <div className="splash-brand">
-        <small>WELCOME TO</small>
-        <h1>SPACENOVA<span>X</span></h1>
-        <p>EXPLORE · MINE · EVOLVE</p>
-      </div>
-      <div className="splash-system">
-        <span><i /> NOVA AI COMMAND LINK</span>
-        <div><b /></div>
-        <small>INITIALIZING CAPTAIN SYSTEMS</small>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
-  const [launched, setLaunched] = useState(false);
   const [tab, setTab] = useState('home');
   const [user, setUserState] = useState(defaultUser());
   const [loading, setLoading] = useState(false);
@@ -933,7 +1037,6 @@ export default function App() {
   async function claimMining() { setLoading(true); try { const data = await api('/api/mining/claim', { method: 'POST', body: JSON.stringify({}) }); if (data.user) setUser(data.user); } catch(e) { alert(e.message); } setLoading(false); }
   const page = useMemo(() => {
     if (tab === 'home') return <HomePage user={user} startMining={startMining} claimMining={claimMining} loading={loading} />;
-    if (tab === 'nova') return <NovaAIPage user={user} />;
     if (tab === 'mining') return <MiningPage user={user} startMining={startMining} claimMining={claimMining} loading={loading} />;
     if (tab === 'missions') return <MissionsPage setUser={setUser} />;
     if (tab === 'friends') return <FriendsPage user={user} />;
@@ -943,10 +1046,6 @@ export default function App() {
     if (tab === 'game') return <GamePage user={user} setUser={setUser} />;
     return <MorePage />;
   }, [tab, user, loading]);
-  const finishLaunch = useCallback(() => setLaunched(true), []);
-  return <>
-    {!launched && <LaunchSplash onComplete={finishLaunch} />}
-    <div className={launched ? 'app-shell app-ready' : 'app-shell app-loading'}><AppHeader user={user} />{page}<CaptainAI user={user} />
-      <BottomNav tab={tab} setTab={setTab} /></div>
-  </>;
+  return <div className="app-shell"><AppHeader user={user} />{page}<CaptainAI user={user} />
+      <BottomNav tab={tab} setTab={setTab} /></div>;
 }

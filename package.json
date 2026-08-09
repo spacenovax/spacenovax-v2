@@ -1,28 +1,20 @@
 {
-  "name": "spacenovax-v15-command-network",
-  "version": "16.6.0-preview.13",
+  "name": "spacenovax-v13-4-2-real-gameover-final",
+  "version": "13.4.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "dev:preview": "vite --mode preview --host 0.0.0.0",
     "build": "vite build",
-    "build:preview": "vite build --mode preview",
     "start": "node server.js",
-    "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@solana/spl-token": "^0.4.15",
-    "@solana/web3.js": "^1.98.4",
     "@vitejs/plugin-react": "latest",
-    "bs58": "^6.0.0",
-    "express": "latest",
-    "pg": "^8.22.0",
+    "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "tweetnacl": "^1.0.3",
-    "vite": "latest"
+    "express": "latest"
   },
-  "description": "SpaceNovaX V15 English-first mining command network with multilingual UI, NOVA AI and official game portal"
+  "description": "SpaceNovaX V13.4.2 Real Game Over Final - full Arcade replacement"
 }
