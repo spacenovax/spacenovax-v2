@@ -143,20 +143,25 @@ void main() {
   // an ocean/land silhouette even when the current view is facing away from the sun.
   float day = smoothstep(-0.18, 0.22, light);
   float twilight = 1.0 - smoothstep(0.04, 0.28, abs(light));
-  vec3 dayColor = texture2D(dayMap, vUv).rgb;
+  vec3 surfaceColor = texture2D(dayMap, vUv).rgb;
   // Restrained satellite-grade colour treatment: preserve deserts, forests, ice and
   // shallow-water detail without the neon/cartoon saturation of the old fallback.
-  vec3 dayGray = vec3(dot(dayColor, vec3(0.299, 0.587, 0.114)));
-  dayColor = dayGray + (dayColor - dayGray) * 1.12;
-  dayColor = clamp((dayColor - 0.5) * 1.05 + 0.5, 0.0, 1.0);
+  vec3 dayGray = vec3(dot(surfaceColor, vec3(0.299, 0.587, 0.114)));
+  surfaceColor = dayGray + (surfaceColor - dayGray) * 1.12;
+  surfaceColor = clamp((surfaceColor - 0.5) * 1.05 + 0.5, 0.0, 1.0);
+  vec3 dayColor = surfaceColor;
   dayColor *= 0.60 + max(light, 0.0) * 0.62;
   vec3 nightColor = texture2D(nightMap, vUv).rgb;
   nightColor = pow(max(nightColor, vec3(0.0)), vec3(0.82)) * 0.96;
   // Night-light maps can be very dark (and are sometimes not decoded by an embedded
   // browser).  Blend a low blue ambient version of the day map underneath them so the
   // globe never degrades into a featureless black disk on mobile.
-  vec3 nightAmbient = dayColor * (0.26 + 0.10 * (1.0 - max(light, 0.0)));
-  vec3 color = mix(max(nightColor, nightAmbient), dayColor, day);
+  // Mobile OLED displays and Telegram's WebView crush low blue values.  This is a
+  // deliberate night-side floor, based on the full satellite map (before sunlight
+  // attenuation), so Earth remains recognisable rather than turning into a black disk.
+  vec3 nightAmbient = max(surfaceColor * vec3(0.34, 0.64, 1.06), vec3(0.026, 0.082, 0.175));
+  vec3 readableNight = max(nightColor * 1.34, nightAmbient);
+  vec3 color = mix(readableNight, dayColor, day);
   color += vec3(0.85, 0.30, 0.08) * twilight * 0.10;
 
   // Cloud shadow: sample the cloud layer's own alpha at its (independently rotated) UV
@@ -239,7 +244,9 @@ export default class EarthEngine {
     this.renderer.setSize(w, h);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    // A little extra exposure is essential on OLED phones where the night-side shader
+    // otherwise gets crushed to black even though the texture decoded correctly.
+    this.renderer.toneMappingExposure = this.lowPower ? 1.24 : 1.18;
     this.container.appendChild(this.renderer.domElement);
 
     this.sunDirection = new THREE.Vector3(1, 0.3, 0.4).normalize();
@@ -254,8 +261,8 @@ export default class EarthEngine {
     };
     // These are intentionally visible fallbacks, not black.  Telegram and older mobile
     // WebViews can render a frame before a large WebP texture is decoded.
-    const dayPlaceholder = placeholder('#1c5f86');
-    const nightPlaceholder = placeholder('#103a5b');
+    const dayPlaceholder = placeholder('#2e94bd');
+    const nightPlaceholder = placeholder('#1c5b92');
     const earthGeo = new THREE.SphereGeometry(EARTH_RADIUS, this.lowPower ? 48 : 96, this.lowPower ? 32 : 64);
     this.earthMaterial = new THREE.ShaderMaterial({
       uniforms: { sunDirection: { value: this.sunDirection }, dayMap: { value: dayPlaceholder }, nightMap: { value: nightPlaceholder }, specularMap: { value: nightPlaceholder }, cloudMap: { value: nightPlaceholder }, cloudOffset: { value: 0 }, uTime: { value: 0 } },

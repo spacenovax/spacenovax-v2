@@ -69,7 +69,8 @@ if (!earthEngineSource.includes('zoomProgress')
 }
 
 if (!earthEngineSource.includes('nightAmbient')
-  || !earthEngineSource.includes("nightPlaceholder = placeholder('#103a5b')")) {
+  || !earthEngineSource.includes('readableNight')
+  || !earthEngineSource.includes('vec3(0.026, 0.082, 0.175)')) {
   throw new Error('Orbit mobile night-side visibility fallback is missing.');
 }
 
