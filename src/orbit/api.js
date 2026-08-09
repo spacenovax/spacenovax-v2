@@ -128,10 +128,10 @@ export function reverseGeocode(lat, lon, language = 'en') {
 
 // Destination search — relayed through our server (Nominatim usage policy requires a
 // server-side User-Agent, not a direct browser call).
-export function searchDestination(query) {
-  const key = `geo:${query.toLowerCase()}`;
+export function searchDestination(query, language = 'en') {
+  const key = `geo:${query.toLowerCase()}:${language}`;
   return cachedFetch(key, 5 * 60_000, async () => {
-    const res = await fetch(`/api/orbit/geocode?q=${encodeURIComponent(query)}`);
+    const res = await fetch(`/api/orbit/geocode?q=${encodeURIComponent(query)}&lang=${encodeURIComponent(language)}`);
     const d = await res.json();
     if (!d.ok) throw new Error(d.message || 'Destination search unavailable');
     return d.results || [];

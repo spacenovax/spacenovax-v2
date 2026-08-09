@@ -332,7 +332,7 @@ export default function OrbitV20({ language, user }) {
     setSearchBusy(true);
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const results = await searchDestination(q);
+        const results = await searchDestination(q, language);
         if (requestId === searchRequestRef.current) setSearchResults(results);
       } catch {
         if (requestId === searchRequestRef.current) setSearchResults([]);

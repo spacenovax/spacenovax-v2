@@ -2632,20 +2632,20 @@ app.get('/api/orbit/geocode', async (req, res) => {
   const cached = geocodeCache.get(key);
   if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, results: cached.value, cached: true });
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
       signal: AbortSignal.timeout(12_000),
     });
     if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
     const items = await response.json();
-    const results = (items || []).map((item) => ({
-      id: String(item.place_id),
-      label: item.display_name,
-      lat: Number(item.lat),
-      lon: Number(item.lon),
-      country: item.address?.country || '',
-    }));
+    const results = (items || []).map((item) => {
+      const names = item.namedetails || {};
+      const localName = names[`name:${language}`] || names[`name:${language.split('-')[0]}`] || names.name || '';
+      const displayParts = String(item.display_name || '').split(',');
+      if (localName && displayParts.length) displayParts[0] = localName;
+      return { id: String(item.place_id), label: displayParts.join(',').trim(), lat: Number(item.lat), lon: Number(item.lon), country: item.address?.country || '' };
+    });
     geocodeCache.set(key, { at: now(), value: results });
     return res.json({ ok: true, results, cached: false });
   } catch (error) {

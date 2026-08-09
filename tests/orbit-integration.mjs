@@ -37,6 +37,12 @@ if (!serverSource.includes("app.get('/api/orbit/satellites'")
   throw new Error('Orbit server proxy or NOVA context integration is missing.');
 }
 
+if (!serverSource.includes('namedetails=1')
+  || !fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitV20.jsx', import.meta.url), 'utf8').includes('searchDestination(q, language)')
+  || !fs.readFileSync(new URL('../src/orbit/api.js', import.meta.url), 'utf8').includes('lang=${encodeURIComponent(language)}')) {
+  throw new Error('Orbit localized destination search is missing.');
+}
+
 if (!packageJson.dependencies?.three || !packageJson.dependencies?.['satellite.js']) {
   throw new Error('Orbit runtime dependencies are missing.');
 }
