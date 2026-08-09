@@ -18,8 +18,11 @@ export default function OrbitFloatingNova({
       onPointerUp={onPointerUp}
     >
       <div className="ov20-nova-grip"><i /><i /><i /><i /><i /><i /></div>
-      <div className="ov20-nova-avatar"><img src={NOVA_PORTRAIT} alt="NOVA AI" /></div>
-      {novaOpen && <b>NOVA AI</b>}
+      <div className="ov20-nova-avatar">
+        <img src={NOVA_PORTRAIT} alt="NOVA AI" draggable="false" />
+        <em className="ov20-nova-holo" /><em className="ov20-nova-eye" /><em className="ov20-nova-core" />
+        <span><i />NOVA AI</span>
+      </div>
       <div className="ov20-nova-status">
         <span><i />{t.online}</span>
         <span><i />{t.connected}</span>
