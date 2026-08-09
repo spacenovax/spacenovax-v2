@@ -8,7 +8,7 @@ function formatEta(hours, ko) {
 
 // A compact route readout for the 3D Earth. It deliberately reports an estimate rather
 // than claiming turn-by-turn transport guidance: this is a global/orbital visualisation.
-export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, onSearch }) {
+export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, onSearch, onStartNavigation, onStopNavigation }) {
   const hasRoute = Boolean(current && destination && distanceKm != null);
   const from = currentPlace?.city || currentPlace?.country || (t.ko ? '현재 위치' : 'Current position');
   const to = destination?.label?.split(',')[0] || (t.ko ? '목적지를 선택하세요' : 'Select a destination');
@@ -17,7 +17,7 @@ export default function OrbitRouteTelemetry({ t, current, currentPlace, destinat
     <section className={`ov20-route-telemetry ${hasRoute ? 'has-route' : ''}`} aria-label="Orbit route telemetry">
       <div className="ov20-route-head">
         <span className="ov20-route-icon">⌁</span>
-        <div><small>{t.ko ? 'NOVA GLOBAL NAVIGATION' : 'NOVA GLOBAL NAVIGATION'}</small><b>{from} <em>→</em> {to}</b></div>
+        <div><small>{hasArrived ? t.arrived : navigationActive ? t.liveGuidance : 'NOVA GLOBAL NAVIGATION'}</small><b>{from} <em>→</em> {to}</b></div>
         <button onClick={onSearch}>{hasRoute ? (t.ko ? '경로 변경' : 'CHANGE') : t.findDestination}</button>
       </div>
       <div className="ov20-route-metrics">
@@ -25,6 +25,9 @@ export default function OrbitRouteTelemetry({ t, current, currentPlace, destinat
         <div><small>{t.eta}</small><b>{formatEta(etaHours, t.ko)}</b></div>
         <div className="ov20-route-course"><small>{t.course}</small><b>{hasRoute ? `${compassLabel(courseDeg)} ${Math.round(courseDeg)}°` : '—'}</b></div>
       </div>
+      {hasRoute && !hasArrived && <button className={`ov20-route-guidance-btn ${navigationActive ? 'active' : ''}`} onClick={navigationActive ? onStopNavigation : onStartNavigation}>
+        {navigationActive ? `■ ${t.endNavigation}` : `▶ ${t.startNavigation}`}
+      </button>}
     </section>
   );
 }

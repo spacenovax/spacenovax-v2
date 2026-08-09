@@ -10,7 +10,7 @@ import MasterRenderLoop from '../MasterRenderLoop.js';
 import SatelliteEngine from '../SatelliteEngine.js';
 import PerformanceManager from '../PerformanceManager.js';
 import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination } from '../api.js';
-import { getCurrentPosition, haversineKm, bearingDeg, compassLabel } from '../geo.js';
+import { getCurrentPosition, watchCurrentPosition, haversineKm, bearingDeg, compassLabel } from '../geo.js';
 import { getCaptainBase, setBasePoint, addFavorite } from '../captainBase.js';
 import OrbitTopBar from './OrbitTopBar.jsx';
 import OrbitEarthView from './OrbitEarthView.jsx';
@@ -81,6 +81,8 @@ function useCopy(language) {
     system: ko ? '시스템' : 'SYSTEM', network: ko ? '네트워크' : 'NETWORK', dataRate: ko ? '데이터 속도' : 'DATA RATE', uptime: ko ? '가동시간' : 'UPTIME', version: ko ? '버전' : 'VERSION',
     nominal: ko ? '전체 시스템 정상' : 'ALL SYSTEMS NOMINAL', stable: ko ? '안정' : 'STABLE', offline: ko ? '오프라인' : 'OFFLINE',
     captainBase: ko ? '캡틴 베이스' : 'CAPTAIN BASE', setHome: ko ? '집 저장' : 'Save Home', setWork: ko ? '회사 저장' : 'Save Work', notSet: '—',
+    gpsLive: ko ? 'GPS 실시간 연결' : 'GPS LIVE', gpsLocating: ko ? 'GPS 위치 확인 중' : 'LOCATING GPS', gpsUnavailable: ko ? 'GPS 위치 확인 필요' : 'GPS CHECK REQUIRED',
+    startNavigation: ko ? '경로 안내 시작' : 'Start navigation', endNavigation: ko ? '경로 안내 종료' : 'End navigation', liveGuidance: ko ? '실시간 방향 안내' : 'LIVE GUIDANCE', arrived: ko ? '목적지 도착' : 'ARRIVED', remaining: ko ? '남은 거리' : 'REMAINING',
   }), [ko]);
 }
 
@@ -89,6 +91,24 @@ function aqiLabel(v, ko) {
   if (v <= 40) return { text: ko ? '좋음' : 'Good', cls: 'ok' };
   if (v <= 80) return { text: ko ? '보통' : 'Fair', cls: '' };
   return { text: ko ? '나쁨' : 'Poor', cls: '' };
+}
+
+function coordinateDestination(query, ko) {
+  // Latitude, longitude is a useful zero-network navigation entry point for pilots,
+  // travelers, and users who received a pin rather than a place name.
+  const match = String(query || '').trim().match(/^(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lon = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  const coords = `${lat.toFixed(5)}°, ${lon.toFixed(5)}°`;
+  return {
+    id: `coord_${lat.toFixed(5)}_${lon.toFixed(5)}`,
+    label: ko ? `좌표 · ${coords}` : `Coordinates · ${coords}`,
+    country: ko ? '직접 입력 좌표' : 'Manual coordinates',
+    lat,
+    lon,
+  };
 }
 
 export default function OrbitV20({ language, user }) {
@@ -104,6 +124,7 @@ export default function OrbitV20({ language, user }) {
   const [currentPlace, setCurrentPlace] = useState(null);
   const [heading, setHeading] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
+  const [gpsState, setGpsState] = useState('locating');
   const [issTracked, setIssTracked] = useState(0);
   const [otherTracked, setOtherTracked] = useState(0);
   const [issPosition, setIssPosition] = useState(null);
@@ -112,6 +133,7 @@ export default function OrbitV20({ language, user }) {
   const [aqi, setAqi] = useState(null);
   const [events, setEvents] = useState([]);
   const [destination, setDestination] = useState(null);
+  const [navigationActive, setNavigationActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -129,7 +151,9 @@ export default function OrbitV20({ language, user }) {
   const [apiHealthy, setApiHealthy] = useState(true);
   const mountedAt = useRef(Date.now());
   const searchTimerRef = useRef(null);
+  const searchRequestRef = useRef(0);
   const markerUpdateAt = useRef(0);
+  const initialGpsFixRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -161,12 +185,27 @@ export default function OrbitV20({ language, user }) {
   useEffect(() => { const c = setInterval(() => setClock(new Date()), 1000); return () => clearInterval(c); }, []);
 
   useEffect(() => {
-    getCurrentPosition().then((pos) => {
+    let active = true;
+    const applyPosition = (pos) => {
+      if (!active) return;
       setCurrent(pos);
       setAccuracy(pos.accuracy || null);
       setHeading(typeof pos.heading === 'number' ? pos.heading : null);
-      engineRef.current?.flyTo(pos.lat, pos.lon, { duration: 1100 });
-    }).catch(() => setCurrent(base.home || { lat: 37.5665, lon: 126.9780 }));
+      setGpsState('live');
+      if (!initialGpsFixRef.current) {
+        initialGpsFixRef.current = true;
+        engineRef.current?.flyTo(pos.lat, pos.lon, { duration: 1100 });
+      }
+    };
+    const useFallback = () => {
+      if (!active || initialGpsFixRef.current) return;
+      setGpsState('unavailable');
+      setCurrent(base.home || { lat: 37.5665, lon: 126.9780, accuracy: null, altitude: null, heading: null });
+    };
+
+    getCurrentPosition().then(applyPosition).catch(useFallback);
+    const stopWatching = watchCurrentPosition(applyPosition, useFallback);
+    return () => { active = false; stopWatching(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -216,7 +255,7 @@ export default function OrbitV20({ language, user }) {
         const markers = merged.filter((m) => Number.isFinite(m.lat)).map((m) => ({ id: m.id, lat: m.lat, lon: m.lon, color: m.kind === 'quake' ? 0xff6f6f : 0xffc15e }));
         engineRef.current.setMarkerLayer('events', markers, { size: 0.04 });
         // A historical storm path looks like a broken orange "tail" over the globe on
-        // a compact phone display. Keep the live storm eye only; it is clearer and
+        // a compact phone display.  Keep the live storm eye only; it is clearer and
         // closer to an operations display than a long, ambiguous route line.
         engineRef.current.clearEventTracks();
         const typhoonPoints = merged.filter((m) => m.kind === 'typhoon' && Number.isFinite(m.lat)).map((m) => ({ id: m.id, lat: m.lat, lon: m.lon }));
@@ -284,11 +323,23 @@ export default function OrbitV20({ language, user }) {
   function runSearch(q) {
     setSearchQuery(q);
     clearTimeout(searchTimerRef.current);
+    const requestId = ++searchRequestRef.current;
+    const coordinate = coordinateDestination(q, t.ko);
+    if (coordinate) {
+      setSearchResults([coordinate]);
+      setSearchBusy(false);
+      return;
+    }
     if (q.trim().length < 2) { setSearchResults([]); setSearchBusy(false); return; }
     setSearchBusy(true);
     searchTimerRef.current = setTimeout(async () => {
-      try { setSearchResults(await searchDestination(q)); } catch { setSearchResults([]); }
-      setSearchBusy(false);
+      try {
+        const results = await searchDestination(q);
+        if (requestId === searchRequestRef.current) setSearchResults(results);
+      } catch {
+        if (requestId === searchRequestRef.current) setSearchResults([]);
+      }
+      if (requestId === searchRequestRef.current) setSearchBusy(false);
     }, 320);
   }
 
@@ -312,7 +363,7 @@ export default function OrbitV20({ language, user }) {
     const nextRecent = [place, ...recentDestinations.filter((item) => item.id !== place.id)].slice(0, 5);
     setRecentDestinations(nextRecent);
     localStorage.setItem('spnx_orbit_recent_v1', JSON.stringify(nextRecent));
-    if (current) engineRef.current?.flyTo((current.lat + place.lat) / 2, (current.lon + place.lon) / 2, { duration: 1200 });
+    if (current) engineRef.current?.focusRoute(current, place, { duration: 1200 });
     setTab('live');
     if (current) {
       const km = haversineKm(current, place);
@@ -328,6 +379,22 @@ export default function OrbitV20({ language, user }) {
         : `Captain, route displayed. ${Math.round(km).toLocaleString()}km to ${place.label.split(',')[0]}, ETA ${etaText}.${destWeatherLine}`;
       speakOrbit(line, language, setVoiceState);
     }
+  }
+
+  function startNavigation() {
+    if (!current || !destination) return;
+    setNavigationActive(true);
+    engineRef.current?.focusRoute(current, destination, { duration: 850 });
+    const km = Math.round(haversineKm(current, destination));
+    const line = t.ko
+      ? `Captain, 실시간 경로 안내를 시작합니다. ${destination.label.split(',')[0]}까지 ${km.toLocaleString()}킬로미터입니다. 기기의 위치와 방향이 바뀌면 남은 거리와 방위가 자동으로 갱신됩니다.`
+      : `Captain, live guidance is active. ${destination.label.split(',')[0]} is ${km.toLocaleString()} kilometers away. Remaining distance and course will update as your device position changes.`;
+    speakOrbit(line, language, setVoiceState);
+  }
+
+  function stopNavigation() {
+    setNavigationActive(false);
+    speakOrbit(t.ko ? 'Captain, 경로 안내를 종료했습니다.' : 'Captain, navigation guidance has ended.', language, setVoiceState);
   }
 
   function saveSlot(slot) { if (current) setBase({ ...setBasePoint(slot, current) }); }
@@ -404,6 +471,8 @@ export default function OrbitV20({ language, user }) {
   const distanceKm = current && destination ? haversineKm(current, destination) : null;
   const etaHours = distanceKm != null ? distanceKm / 850 : null;
   const courseDeg = current && destination ? bearingDeg(current, destination) : null;
+  const arrivalRadiusM = Math.max(80, Math.min((accuracy || 40) * 2, 250));
+  const hasArrived = Boolean(navigationActive && distanceKm != null && distanceKm * 1000 <= arrivalRadiusM);
   const air = aqiLabel(aqi, t.ko);
   const netStable = navigator.onLine !== false && apiHealthy;
   const dataRate = navigator.connection?.downlink ? `${navigator.connection.downlink} Mbps` : '—';
@@ -416,13 +485,14 @@ export default function OrbitV20({ language, user }) {
     .slice(0, 4), [events]);
 
   const panelProps = {
-    t, current, currentPlace, heading, accuracy, satelliteCount: issTracked + otherTracked, compassLabel,
+    t, current, currentPlace, heading, accuracy, gpsState, satelliteCount: issTracked + otherTracked, compassLabel,
     onMyLocation: () => current && engineRef.current?.flyTo(current.lat, current.lon),
     issTracked, otherTracked, issPosition, satellites,
     weather, currentCity: currentPlace?.city, airQualityLabel: air, aqi,
     counts: eventCounts, topEvents,
-    destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base,
+    destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base, navigationActive, hasArrived, arrivalRadiusM,
     onSearchChange: runSearch, onOpenSearch: openDestinationSearch, onPick: pickDestination, onAddFavorite: () => addFavorite(destination), onClearRoute: () => setDestination(null),
+    onStartNavigation: startNavigation, onStopNavigation: stopNavigation,
     onSaveHome: () => saveSlot('home'), onSaveWork: () => saveSlot('work'),
     netStable, dataRate, uptimeStr,
   };
@@ -455,7 +525,11 @@ export default function OrbitV20({ language, user }) {
           etaHours={etaHours}
           courseDeg={courseDeg}
           compassLabel={compassLabel}
+          navigationActive={navigationActive}
+          hasArrived={hasArrived}
           onSearch={openDestinationSearch}
+          onStartNavigation={startNavigation}
+          onStopNavigation={stopNavigation}
         />
       </div>
       <OrbitFloatingNova
