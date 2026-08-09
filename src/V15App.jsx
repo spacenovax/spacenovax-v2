@@ -798,8 +798,8 @@ function Missions({ user, setUser, t, language }) {
 function Game({ user, t, language }) {
   const [gameOpen, setGameOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [gameUrl, setGameUrl] = useState('');
   const { voiceState, play: playGameVoice } = useNovaVoiceFeedback('game-reward-briefing');
-  const gameUrl = `${GAME_URL}/?source=mining-app&captain=${encodeURIComponent(user.id || 'guest')}&mode=fullscreen`;
   const launchBriefings = {
     en: 'Captain, NOVA-X launch sequence is ready. Beginning the Genesis Gate defense operation.',
     ko: '캡틴, NOVA-X 출격 준비가 완료되었습니다. 제네시스 게이트 방어 작전을 시작합니다.',
@@ -841,17 +841,25 @@ function Game({ user, t, language }) {
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [gameOpen]);
-  function launchGame() {
+  async function launchGame() {
     // Keep this inside the user's tap handler so mobile and Telegram WebViews
     // grant audio playback permission before the cross-origin game is mounted.
     triggerNovaHaptic('medium');
     speakNova(launchBriefings[language] || launchBriefings.en, language, .96, 'game-launch');
-    setLoaded(false);
-    setGameOpen(true);
+    try {
+      const launch = await api('/api/game/launch', { method: 'POST', body: {} });
+      const params = new URLSearchParams({ source: 'mining-app', mode: 'fullscreen', session: launch.session, api: window.location.origin, lang: language });
+      setGameUrl(`${GAME_URL}/?${params.toString()}`);
+      setLoaded(false);
+      setGameOpen(true);
+    } catch (error) {
+      window.alert(error.message || (language === 'ko' ? '게임 연결을 시작할 수 없습니다.' : 'Unable to start the game connection.'));
+    }
   }
   function closeGame() {
     setGameOpen(false);
     setLoaded(false);
+    setGameUrl('');
   }
   function playRewardBriefing() {
     playGameVoice(rewardBriefing, language, .94);

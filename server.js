@@ -31,6 +31,7 @@ let databaseRevision = 0;
 const MINING_DURATION = 24 * 60 * 60 * 1000;
 const BASE_MINING_REWARD = 30;
 const GAME_DAILY_LIMIT = 30;
+const GAME_SESSION_TTL_MS = 10 * 60 * 1000;
 const NOVA_DAILY_LIMIT = 10;
 const NOVA_PUBLIC_MODEL_NAME = 'NOVA Beta';
 const NOVA_DEFAULT_MODEL = 'gemini-2.5-flash';
@@ -875,6 +876,36 @@ function gameRewardSignatureValid(req, user) {
   return safeEqual(req.headers['x-spnx-game-signature'] || '', expected);
 }
 
+function gameLaunchSecret() {
+  // Keep the signing key on the application server. The browser only receives
+  // a short-lived session and never receives a reward signing secret.
+  return String(process.env.GAME_LAUNCH_SECRET || process.env.GAME_REWARD_SECRET || (IS_PRODUCTION ? '' : 'spnx-local-game-session')).trim();
+}
+
+function createGameLaunchSession(user) {
+  const secret = gameLaunchSecret();
+  if (!secret) return null;
+  const payload = Buffer.from(JSON.stringify({ userId: user.id, expiresAt: now() + GAME_SESSION_TTL_MS, nonce: crypto.randomBytes(12).toString('hex') })).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyGameLaunchSession(token) {
+  const secret = gameLaunchSecret();
+  const value = String(token || '');
+  const separator = value.lastIndexOf('.');
+  if (!secret || separator < 1) return null;
+  const payload = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  if (!safeEqual(signature, expected)) return null;
+  try {
+    const gameSession = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!gameSession?.userId || !Number.isFinite(Number(gameSession.expiresAt)) || Number(gameSession.expiresAt) < now()) return null;
+    return gameSession;
+  } catch { return null; }
+}
+
 function gameRewardWindowKey(timestamp = Date.now()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York', year: 'numeric', month: '2-digit',
@@ -955,6 +986,18 @@ app.use(express.json({
   }
 }));
 app.disable('x-powered-by');
+app.use((req, res, next) => {
+  const origin = String(req.headers.origin || '');
+  const allowedOrigins = new Set(['https://game.spacenovax.com', 'https://nova-x1-genesis-defense.kit372002.chatgpt.site', String(process.env.GAME_ORIGIN || '').replace(/\/$/, '')].filter(Boolean));
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+  return next();
+});
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
@@ -2241,13 +2284,24 @@ app.post('/api/missions/claim', (req, res) => {
 });
 
 
-// Server-signed game rewards. The browser can never authorize its own score or reward.
+app.post('/api/game/launch', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const session = createGameLaunchSession(user);
+  if (!session) return res.status(503).json({ ok: false, message: 'Game session signing is not configured.' });
+  res.json({ ok: true, session, expiresAt: now() + GAME_SESSION_TTL_MS });
+});
+
+// Reward totals, daily limits and duplicate event ids remain server-authoritative.
 app.post('/api/game/reward', (req, res) => {
   const data = readData();
   if (!data.settings?.gameRewardsEnabled) return res.status(503).json({ ok: false, message: 'Game rewards are temporarily disabled.' });
-  const user = getSessionUser(req, data);
+  const gameSession = verifyGameLaunchSession(req.body?.session);
+  const user = gameSession ? data.users?.[gameSession.userId] : getSessionUser(req, data);
+  if (!user) return res.status(401).json({ ok: false, message: 'Game session is invalid or has expired.' });
   if (!requireVerifiedCaptain(user, res)) return;
-  if (!gameRewardSignatureValid(req, user)) {
+  if (!gameSession && !gameRewardSignatureValid(req, user)) {
     return res.status(401).json({ ok: false, message: 'Game reward could not be verified by the SpaceNovaX game server.' });
   }
   const today = gameRewardWindowKey();
