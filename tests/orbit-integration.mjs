@@ -68,6 +68,11 @@ if (!earthEngineSource.includes('zoomProgress')
   throw new Error('Orbit responsive marker projection or render throttling is missing.');
 }
 
+if (!earthEngineSource.includes('nightAmbient')
+  || !earthEngineSource.includes("nightPlaceholder = placeholder('#103a5b')")) {
+  throw new Error('Orbit mobile night-side visibility fallback is missing.');
+}
+
 if (!routeSource.includes('NOVA GLOBAL NAVIGATION')
   || !routeSource.includes('distanceKm')
   || !satelliteSource.includes('satellites.slice(0, 3)')

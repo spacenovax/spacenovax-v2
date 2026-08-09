@@ -139,8 +139,9 @@ void main() {
   vec3 sunDir = normalize(sunDirection);
   vec3 viewDir = normalize(cameraPosition - vWorldPosition);
   float light = dot(normal, sunDir);
-  // Physically plausible, soft day/night terminator.
-  float day = smoothstep(-0.12, 0.18, light);
+  // Keep the night side readable on mobile WebViews.  A real globe should retain
+  // an ocean/land silhouette even when the current view is facing away from the sun.
+  float day = smoothstep(-0.18, 0.22, light);
   float twilight = 1.0 - smoothstep(0.04, 0.28, abs(light));
   vec3 dayColor = texture2D(dayMap, vUv).rgb;
   // Restrained satellite-grade colour treatment: preserve deserts, forests, ice and
@@ -148,10 +149,14 @@ void main() {
   vec3 dayGray = vec3(dot(dayColor, vec3(0.299, 0.587, 0.114)));
   dayColor = dayGray + (dayColor - dayGray) * 1.12;
   dayColor = clamp((dayColor - 0.5) * 1.05 + 0.5, 0.0, 1.0);
-  dayColor *= 0.42 + max(light, 0.0) * 0.72;
+  dayColor *= 0.60 + max(light, 0.0) * 0.62;
   vec3 nightColor = texture2D(nightMap, vUv).rgb;
-  nightColor = pow(nightColor, vec3(0.82)) * 0.72;
-  vec3 color = mix(nightColor, dayColor, day);
+  nightColor = pow(max(nightColor, vec3(0.0)), vec3(0.82)) * 0.96;
+  // Night-light maps can be very dark (and are sometimes not decoded by an embedded
+  // browser).  Blend a low blue ambient version of the day map underneath them so the
+  // globe never degrades into a featureless black disk on mobile.
+  vec3 nightAmbient = dayColor * (0.26 + 0.10 * (1.0 - max(light, 0.0)));
+  vec3 color = mix(max(nightColor, nightAmbient), dayColor, day);
   color += vec3(0.85, 0.30, 0.08) * twilight * 0.10;
 
   // Cloud shadow: sample the cloud layer's own alpha at its (independently rotated) UV
@@ -159,7 +164,7 @@ void main() {
   // no extra render pass, just a second texture sample in the same shader.
   vec2 cloudUv = vec2(fract(vUv.x + cloudOffset), vUv.y);
   float cloudShadow = texture2D(cloudMap, cloudUv).r;
-  color *= 1.0 - cloudShadow * 0.28 * day;
+  color *= 1.0 - cloudShadow * 0.20 * day;
 
   // Ocean specular glint: soft, tight highlight (not mirror-like) masked to water only.
   // An earlier animated "sparkle" perturbation caused visible diagonal streak artifacts
@@ -247,8 +252,10 @@ export default class EarthEngine {
       const ctx = c.getContext('2d'); ctx.fillStyle = hex; ctx.fillRect(0, 0, 2, 1);
       return new THREE.CanvasTexture(c);
     };
-    const dayPlaceholder = placeholder('#0a3d62');
-    const nightPlaceholder = placeholder('#05070c');
+    // These are intentionally visible fallbacks, not black.  Telegram and older mobile
+    // WebViews can render a frame before a large WebP texture is decoded.
+    const dayPlaceholder = placeholder('#1c5f86');
+    const nightPlaceholder = placeholder('#103a5b');
     const earthGeo = new THREE.SphereGeometry(EARTH_RADIUS, this.lowPower ? 48 : 96, this.lowPower ? 32 : 64);
     this.earthMaterial = new THREE.ShaderMaterial({
       uniforms: { sunDirection: { value: this.sunDirection }, dayMap: { value: dayPlaceholder }, nightMap: { value: nightPlaceholder }, specularMap: { value: nightPlaceholder }, cloudMap: { value: nightPlaceholder }, cloudOffset: { value: 0 }, uTime: { value: 0 } },
