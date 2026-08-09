@@ -1,0 +1,107 @@
+<svg width="1200" height="820" viewBox="0 0 1200 820" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="58%" r="55%">
+      <stop offset="0%" stop-color="#74f7ff" stop-opacity=".95"/>
+      <stop offset="38%" stop-color="#2e75ff" stop-opacity=".42"/>
+      <stop offset="100%" stop-color="#000014" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".18" stop-color="#dfe8f2"/>
+      <stop offset=".42" stop-color="#77899c"/>
+      <stop offset=".62" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#2e4058"/>
+    </linearGradient>
+    <linearGradient id="darkMetal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c9d6e2"/>
+      <stop offset=".4" stop-color="#1c2738"/>
+      <stop offset=".72" stop-color="#050b17"/>
+      <stop offset="1" stop-color="#61758e"/>
+    </linearGradient>
+    <linearGradient id="blueLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1cf0ff"/>
+      <stop offset=".5" stop-color="#316cff"/>
+      <stop offset="1" stop-color="#b15cff"/>
+    </linearGradient>
+    <radialGradient id="engine" cx="50%" cy="50%" r="55%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".18" stop-color="#76faff"/>
+      <stop offset=".44" stop-color="#4f68ff"/>
+      <stop offset=".72" stop-color="#7e34ff"/>
+      <stop offset="1" stop-color="#020617"/>
+    </radialGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".98"/>
+      <stop offset=".18" stop-color="#39f3ff" stop-opacity=".9"/>
+      <stop offset=".55" stop-color="#4773ff" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#b735ff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="hardShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity=".72"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#33eaff" flood-opacity=".55"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="820" fill="none"/>
+  <ellipse cx="600" cy="470" rx="520" ry="290" fill="url(#glow)" opacity=".8"/>
+
+  <!-- engine flames -->
+  <g filter="url(#softGlow)" opacity=".96">
+    <path d="M392 548 C360 650 345 735 378 815 C418 728 436 647 430 555 Z" fill="url(#flame)"/>
+    <path d="M600 570 C555 672 545 748 600 820 C655 748 645 672 600 570 Z" fill="url(#flame)"/>
+    <path d="M808 548 C770 646 760 730 822 815 C850 722 838 646 770 555 Z" fill="url(#flame)"/>
+  </g>
+
+  <!-- side engine pods -->
+  <g filter="url(#hardShadow)">
+    <path d="M300 390 C235 428 193 480 164 568 C285 560 390 536 492 482 C430 420 365 394 300 390 Z" fill="url(#darkMetal)"/>
+    <path d="M900 390 C965 428 1007 480 1036 568 C915 560 810 536 708 482 C770 420 835 394 900 390 Z" fill="url(#darkMetal)"/>
+    <path d="M262 472 C330 456 414 456 504 486 C396 532 292 558 166 570 C190 530 222 496 262 472 Z" fill="url(#metal)" opacity=".96"/>
+    <path d="M938 472 C870 456 786 456 696 486 C804 532 908 558 1034 570 C1010 530 978 496 938 472 Z" fill="url(#metal)" opacity=".96"/>
+  </g>
+
+  <!-- body -->
+  <g filter="url(#hardShadow)">
+    <path d="M600 88 C690 205 720 333 700 572 C658 632 628 666 600 692 C572 666 542 632 500 572 C480 333 510 205 600 88 Z" fill="url(#metal)"/>
+    <path d="M600 132 C653 226 666 356 648 545 C628 588 612 615 600 630 C588 615 572 588 552 545 C534 356 547 226 600 132 Z" fill="url(#darkMetal)" opacity=".72"/>
+    <path d="M538 265 C565 190 635 190 662 265 C654 348 636 404 600 438 C564 404 546 348 538 265 Z" fill="#071120"/>
+    <path d="M560 265 C578 216 622 216 640 265 C636 318 624 352 600 375 C576 352 564 318 560 265 Z" fill="url(#blueLine)" opacity=".9"/>
+    <path d="M512 474 C560 512 640 512 688 474 C676 546 650 602 600 650 C550 602 524 546 512 474 Z" fill="#0a1220" opacity=".92"/>
+  </g>
+
+  <!-- armor panels -->
+  <g opacity=".88">
+    <path d="M520 266 L438 360 L285 397 L490 451 Z" fill="url(#metal)" filter="url(#hardShadow)"/>
+    <path d="M680 266 L762 360 L915 397 L710 451 Z" fill="url(#metal)" filter="url(#hardShadow)"/>
+    <path d="M494 392 L285 397 L170 570 L500 505 Z" fill="url(#darkMetal)" opacity=".92"/>
+    <path d="M706 392 L915 397 L1030 570 L700 505 Z" fill="url(#darkMetal)" opacity=".92"/>
+    <path d="M440 412 L250 530" stroke="url(#blueLine)" stroke-width="9" stroke-linecap="round" filter="url(#softGlow)"/>
+    <path d="M760 412 L950 530" stroke="url(#blueLine)" stroke-width="9" stroke-linecap="round" filter="url(#softGlow)"/>
+    <path d="M552 470 L648 470" stroke="#44eaff" stroke-width="7" stroke-linecap="round" filter="url(#softGlow)"/>
+  </g>
+
+  <!-- engines -->
+  <g filter="url(#softGlow)">
+    <circle cx="392" cy="548" r="52" fill="#06111d"/>
+    <circle cx="392" cy="548" r="40" fill="url(#engine)"/>
+    <circle cx="600" cy="570" r="58" fill="#06111d"/>
+    <circle cx="600" cy="570" r="45" fill="url(#engine)"/>
+    <circle cx="808" cy="548" r="52" fill="#06111d"/>
+    <circle cx="808" cy="548" r="40" fill="url(#engine)"/>
+  </g>
+
+  <!-- small lights -->
+  <g filter="url(#softGlow)">
+    <circle cx="332" cy="455" r="9" fill="#36f4ff"/>
+    <circle cx="868" cy="455" r="9" fill="#36f4ff"/>
+    <circle cx="600" cy="122" r="7" fill="#ffffff"/>
+    <circle cx="520" cy="530" r="7" fill="#35eaff"/>
+    <circle cx="680" cy="530" r="7" fill="#35eaff"/>
+  </g>
+
+  <text x="600" y="720" font-family="Arial, sans-serif" font-size="42" fill="#cfeeff" text-anchor="middle" opacity=".82" font-weight="800">NOVA-X1</text>
+</svg>
