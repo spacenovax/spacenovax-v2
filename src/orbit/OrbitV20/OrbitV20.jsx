@@ -9,6 +9,7 @@ import EarthEngine from '../EarthEngine.js';
 import MasterRenderLoop from '../MasterRenderLoop.js';
 import SatelliteEngine from '../SatelliteEngine.js';
 import PerformanceManager from '../PerformanceManager.js';
+import { BrowserSpeechProvider } from '../../nova/voice/BrowserSpeechProvider.js';
 import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination, fetchDrivingRoute } from '../api.js';
 import { getCurrentPosition, watchCurrentPosition, haversineKm, bearingDeg, compassLabel } from '../geo.js';
 import { getCaptainBase, setBasePoint, addFavorite } from '../captainBase.js';
@@ -44,19 +45,8 @@ async function orbitApi(path, body) {
   return data;
 }
 
-function speakOrbit(text, language, onStateChange) {
-  const synth = window.speechSynthesis;
-  if (!synth || !window.SpeechSynthesisUtterance || !text) return false;
-  synth.cancel();
-  const utter = new window.SpeechSynthesisUtterance(text);
-  utter.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-  utter.rate = 1;
-  utter.onstart = () => onStateChange?.('playing');
-  utter.onend = () => onStateChange?.('idle');
-  utter.onerror = () => onStateChange?.('idle');
-  synth.speak(utter);
-  return true;
-}
+const orbitSpeech = new BrowserSpeechProvider();
+function speakOrbit(text, language, onStateChange) { return orbitSpeech.speak({ text, language, rate: 1, onStart: () => onStateChange?.('playing'), onEnd: () => onStateChange?.('idle'), onError: () => onStateChange?.('idle') }); }
 
 // i18n only — Korean stays 100% Korean, English stays 100% English, no mixing.
 function useCopy(language) {

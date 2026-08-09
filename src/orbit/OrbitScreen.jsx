@@ -5,6 +5,7 @@
 // Engine files (EarthEngine, SatelliteEngine, MasterRenderLoop, PerformanceManager) and
 // all data-fetch logic (api.js, geo.js, captainBase.js) are reused exactly as-is.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { BrowserSpeechProvider } from '../nova/voice/BrowserSpeechProvider.js';
 import EarthEngine from './EarthEngine.js';
 import MasterRenderLoop from './MasterRenderLoop.js';
 import SatelliteEngine from './SatelliteEngine.js';
@@ -38,19 +39,8 @@ async function orbitApi(path, body) {
   return data;
 }
 
-function speakOrbit(text, language, onStateChange) {
-  const synth = window.speechSynthesis;
-  if (!synth || !window.SpeechSynthesisUtterance || !text) return false;
-  synth.cancel();
-  const utter = new window.SpeechSynthesisUtterance(text);
-  utter.lang = language === 'ko' ? 'ko-KR' : 'en-US';
-  utter.rate = 1;
-  utter.onstart = () => onStateChange?.('playing');
-  utter.onend = () => onStateChange?.('idle');
-  utter.onerror = () => onStateChange?.('idle');
-  synth.speak(utter);
-  return true;
-}
+const orbitSpeech = new BrowserSpeechProvider();
+function speakOrbit(text, language, onStateChange) { return orbitSpeech.speak({ text, language, rate: 1, onStart: () => onStateChange?.('playing'), onEnd: () => onStateChange?.('idle'), onError: () => onStateChange?.('idle') }); }
 
 const TABS = [
   { id: 'live', label: 'LIVE' },
