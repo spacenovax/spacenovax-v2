@@ -4,7 +4,9 @@ import { NovaAIRouter } from './nova/index.js';
 
 const OrbitV20 = lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'));
 
-const GAME_URL = 'https://game.spacenovax.com';
+// Direct game loading prevents Telegram Android WebView from rendering the old
+// two-level cross-origin iframe chain as a blank/black game screen.
+const GAME_URL = import.meta.env.VITE_GAME_URL || 'https://nova-x1-genesis-defense.kit372002.chatgpt.site';
 const PREVIEW_BUILD = import.meta.env.VITE_PREVIEW_BUILD === 'true' || new URLSearchParams(window.location.search).get('preview') === '1';
 const LANGUAGES = [
   ['en', 'English'], ['ko', '한국어'], ['ja', '日本語'], ['zh', '中文'],
@@ -895,7 +897,7 @@ function Game({ user, t, language }) {
     speakNova(launchBriefings[language] || launchBriefings.en, language, .96, 'game-launch');
     try {
       const launch = await api('/api/game/launch', { method: 'POST', body: {} });
-      const params = new URLSearchParams({ source: 'mining-app', mode: 'fullscreen', session: launch.session, api: window.location.origin, lang: language });
+      const params = new URLSearchParams({ source: 'mining-app', mode: 'fullscreen', session: launch.session, api: window.location.origin, parentOrigin: window.location.origin, lang: language });
       setGameSession(launch.session);
       setGameSyncStatus('');
       setGameUrl(`${GAME_URL}/?${params.toString()}`);
