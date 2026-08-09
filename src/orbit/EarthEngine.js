@@ -251,9 +251,9 @@ export default class EarthEngine {
 
     this.sunDirection = new THREE.Vector3(1, 0.3, 0.4).normalize();
 
-    // All globe assets are self-hosted under /public/orbit. The previous implementation
-    // depended on third-party URLs; mobile WebViews frequently blocked those requests and
-    // displayed the blue placeholder seen in production screenshots.
+    // All globe assets are self-hosted under /public/orbit. Use the validated JPEG
+    // basemaps: the earlier high-resolution day/cloud WebP files can be truncated in
+    // a deployment, which leaves Telegram showing only a flat blue fallback sphere.
     const placeholder = (hex) => {
       const c = document.createElement('canvas'); c.width = 2; c.height = 1;
       const ctx = c.getContext('2d'); ctx.fillStyle = hex; ctx.fillRect(0, 0, 2, 1);
@@ -277,12 +277,12 @@ export default class EarthEngine {
       tex.needsUpdate = true;
       return tex;
     };
-    loader.load('/orbit/earth-day-real.webp', (tex) => {
+    loader.load('/orbit/earth-day.jpg', (tex) => {
       this.earthMaterial.uniforms.dayMap.value = prepareTexture(tex, { srgb: true });
-    }, undefined, (err) => console.error('Orbit: bundled day texture failed.', err));
-    loader.load('/orbit/earth-night-real.webp', (tex) => {
+    }, undefined, (err) => console.error('Orbit: validated day texture failed.', err));
+    loader.load('/orbit/earth-night.jpg', (tex) => {
       this.earthMaterial.uniforms.nightMap.value = prepareTexture(tex, { srgb: true });
-    }, undefined, (err) => console.error('Orbit: bundled night texture failed.', err));
+    }, undefined, (err) => console.error('Orbit: validated night texture failed.', err));
     this.earth = new THREE.Mesh(earthGeo, this.earthMaterial);
     this.scene.add(this.earth);
     this.navigationGrid = buildGrid();
@@ -312,6 +312,9 @@ export default class EarthEngine {
       blending: THREE.NormalBlending,
     });
     this.clouds = new THREE.Mesh(cloudGeo, this.cloudMaterial);
+    // Never put an untextured white shell over Earth. It becomes visible only after a
+    // valid cloud texture is decoded successfully.
+    this.clouds.visible = false;
     this.earth.add(this.clouds);
     loader.load(
       '/orbit/earth-clouds-real.webp',
@@ -320,6 +323,7 @@ export default class EarthEngine {
         this.cloudMaterial.map = tex;
         this.cloudMaterial.needsUpdate = true;
         this.earthMaterial.uniforms.cloudMap.value = tex;
+        this.clouds.visible = true;
       },
       undefined,
       (err) => console.warn('Orbit: cloud texture failed to load — globe still renders without clouds.', err),
