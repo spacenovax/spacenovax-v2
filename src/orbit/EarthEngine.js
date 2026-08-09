@@ -148,9 +148,9 @@ void main() {
   // shallow-water detail without the neon/cartoon saturation of the old fallback.
   vec3 dayGray = vec3(dot(surfaceColor, vec3(0.299, 0.587, 0.114)));
   surfaceColor = dayGray + (surfaceColor - dayGray) * 1.12;
-  surfaceColor = clamp((surfaceColor - 0.5) * 1.05 + 0.5, 0.0, 1.0);
+  surfaceColor = clamp((surfaceColor - 0.5) * 1.10 + 0.53, 0.0, 1.0);
   vec3 dayColor = surfaceColor;
-  dayColor *= 0.60 + max(light, 0.0) * 0.62;
+  dayColor *= 0.72 + max(light, 0.0) * 0.70;
   vec3 nightColor = texture2D(nightMap, vUv).rgb;
   nightColor = pow(max(nightColor, vec3(0.0)), vec3(0.82)) * 0.96;
   // Night-light maps can be very dark (and are sometimes not decoded by an embedded
@@ -159,8 +159,8 @@ void main() {
   // Mobile OLED displays and Telegram's WebView crush low blue values.  This is a
   // deliberate night-side floor, based on the full satellite map (before sunlight
   // attenuation), so Earth remains recognisable rather than turning into a black disk.
-  vec3 nightAmbient = max(surfaceColor * vec3(0.34, 0.64, 1.06), vec3(0.026, 0.082, 0.175));
-  vec3 readableNight = max(nightColor * 1.34, nightAmbient);
+  vec3 nightAmbient = max(surfaceColor * vec3(0.44, 0.76, 1.18), vec3(0.026, 0.082, 0.175) * 1.65);
+  vec3 readableNight = max(nightColor * 1.48, nightAmbient);
   vec3 color = mix(readableNight, dayColor, day);
   color += vec3(0.85, 0.30, 0.08) * twilight * 0.10;
 
@@ -246,7 +246,7 @@ export default class EarthEngine {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     // A little extra exposure is essential on OLED phones where the night-side shader
     // otherwise gets crushed to black even though the texture decoded correctly.
-    this.renderer.toneMappingExposure = this.lowPower ? 1.24 : 1.18;
+    this.renderer.toneMappingExposure = this.lowPower ? 1.38 : 1.32;
     this.container.appendChild(this.renderer.domElement);
 
     this.sunDirection = new THREE.Vector3(1, 0.3, 0.4).normalize();
