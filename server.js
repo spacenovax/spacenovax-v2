@@ -2360,6 +2360,47 @@ app.post('/api/game/reward', (req, res) => {
 });
 
 
+// Game scores are stored separately from point rewards. A browser session may
+// record a score, but it cannot create a financial or SPNX ledger entry.
+app.post('/api/game/result', (req, res) => {
+  const data = readData();
+  const gameSession = verifyGameLaunchSession(req.body?.session);
+  if (!gameSession) return res.status(401).json({ ok: false, message: 'Game session is invalid or has expired.' });
+  const user = data.users?.[gameSession.userId];
+  if (!user) return res.status(401).json({ ok: false, message: 'Captain session was not found.' });
+
+  const runId = String(req.body?.runId || '').trim().slice(0, 128);
+  const score = Math.floor(Number(req.body?.score));
+  const summary = {
+    kills: Math.max(0, Math.floor(Number(req.body?.kills || 0))),
+    rescued: Math.max(0, Math.floor(Number(req.body?.rescued || 0))),
+    missionCleared: Boolean(req.body?.missionCleared),
+    bossDefeated: Boolean(req.body?.bossDefeated),
+  };
+  if (!runId || !Number.isFinite(score) || score < 0 || score > 1_000_000_000) {
+    return res.status(400).json({ ok: false, message: 'Invalid game score payload.' });
+  }
+
+  data.gameResultKeys ||= {};
+  const key = `${user.id}:${runId}`;
+  user.gameScore ||= { bestScore: 0, lastScore: 0, lastRunId: '', updatedAt: 0 };
+  if (data.gameResultKeys[key]) {
+    return res.json({ ok: true, duplicate: true, score: user.gameScore.lastScore, bestScore: user.gameScore.bestScore });
+  }
+
+  user.gameScore.bestScore = Math.max(Number(user.gameScore.bestScore || 0), score);
+  user.gameScore.lastScore = score;
+  user.gameScore.lastRunId = runId;
+  user.gameScore.updatedAt = now();
+  user.updatedAt = now();
+  data.gameResultKeys[key] = now();
+  data.events.push({ type: 'game_score_recorded', userId: user.id, runId, score, ...summary, at: now() });
+  writeData(data);
+
+  res.json({ ok: true, score, bestScore: user.gameScore.bestScore, reward: 0, user: publicUser(data, user) });
+});
+
+
 // Legacy V8.2 conversion route retained only for migration compatibility.
 app.post('/api/legacy/conversion/request', (req, res) => {
   res.status(410).json({ ok: false, message: 'SPNX conversion is not open. KYC and conversion will launch after community activation.' });
