@@ -47,7 +47,9 @@ async function orbitApi(path, body) {
 }
 
 const orbitSpeech = new BrowserSpeechProvider();
-function speakOrbit(text, language, onStateChange) { return orbitSpeech.speak({ text, language, rate: 1, onStart: () => onStateChange?.('playing'), onEnd: () => onStateChange?.('idle'), onError: () => onStateChange?.('idle') }); }
+function speakOrbit(text, language, onStateChange) {
+  return orbitSpeech.speak({ text, language, rate: 1, onStart: () => onStateChange?.('playing'), onEnd: () => onStateChange?.('idle'), onError: () => onStateChange?.('idle') });
+}
 
 // i18n only — Korean stays 100% Korean, English stays 100% English, no mixing.
 function useCopy(language) {
@@ -117,6 +119,7 @@ export default function OrbitV20({ language, user }) {
   const [heading, setHeading] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
   const [gpsState, setGpsState] = useState('locating');
+  const [gpsRetry, setGpsRetry] = useState(0);
   const [issTracked, setIssTracked] = useState(0);
   const [otherTracked, setOtherTracked] = useState(0);
   const [issPosition, setIssPosition] = useState(null);
@@ -195,13 +198,15 @@ export default function OrbitV20({ language, user }) {
     const useFallback = () => {
       if (!active || initialGpsFixRef.current) return;
       setGpsState('unavailable');
+      // Keep a neutral map center only.  This must never be presented as the
+      // captain's current location when phone GPS permission is unavailable.
       setCurrent(base.home || { lat: 37.5665, lon: 126.9780, accuracy: null, altitude: null, heading: null });
     };
 
     getCurrentPosition().then(applyPosition).catch(useFallback);
     const stopWatching = watchCurrentPosition(applyPosition, useFallback);
     return () => { active = false; stopWatching(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gpsRetry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!current) return;
@@ -312,9 +317,25 @@ export default function OrbitV20({ language, user }) {
 
   useEffect(() => {
     let active = true;
-    if (!current || !destination) { setDrivingRoute(null); setRouteStatus('idle'); setDrivingViewOpen(false); engineRef.current?.clearRoute(); return undefined; }
-    setRouteStatus('loading'); engineRef.current?.setRoute(current, destination);
-    fetchDrivingRoute(current, destination).then((route) => { if (!active) return; setDrivingRoute(route); setRouteStatus('ready'); engineRef.current?.setRoadRoute(route?.points); }).catch(() => { if (!active) return; setDrivingRoute(null); setRouteStatus('unavailable'); });
+    if (!current || !destination) {
+      setDrivingRoute(null);
+      setRouteStatus('idle');
+      engineRef.current?.clearRoute();
+      setDrivingViewOpen(false);
+      return undefined;
+    }
+    setRouteStatus('loading');
+    engineRef.current?.setRoute(current, destination); // clear visual fallback while the road route loads
+    fetchDrivingRoute(current, destination).then((route) => {
+      if (!active) return;
+      setDrivingRoute(route);
+      setRouteStatus('ready');
+      engineRef.current?.setRoadRoute(route?.points);
+    }).catch(() => {
+      if (!active) return;
+      setDrivingRoute(null);
+      setRouteStatus('unavailable');
+    });
     return () => { active = false; };
   }, [current?.lat, current?.lon, destination?.lat, destination?.lon]);
 
@@ -338,7 +359,7 @@ export default function OrbitV20({ language, user }) {
         if (requestId === searchRequestRef.current) setSearchResults([]);
       }
       if (requestId === searchRequestRef.current) setSearchBusy(false);
-    }, 320);
+  }, 320);
   }
 
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
@@ -364,6 +385,7 @@ export default function OrbitV20({ language, user }) {
     if (current) engineRef.current?.focusRoute(current, place, { duration: 1200 });
     setTab('live');
     if (current) {
+      const km = haversineKm(current, place);
       let destWeatherLine = '';
       try {
         const w = await fetchWeather(place.lat, place.lon);
@@ -378,7 +400,10 @@ export default function OrbitV20({ language, user }) {
 
   function startNavigation() {
     if (!current || !destination) return;
-    if (!drivingRoute) { speakOrbit(t.ko ? 'Captain, 자동차 도로 경로를 계산 중입니다. 잠시 후 다시 시작해 주세요.' : 'Captain, the driving route is still calculating. Please start again in a moment.', language, setVoiceState); return; }
+    if (!drivingRoute) {
+      speakOrbit(t.ko ? 'Captain, 자동차 도로 경로를 계산 중입니다. 잠시 후 다시 시작해 주세요.' : 'Captain, the driving route is still calculating. Please start again in a moment.', language, setVoiceState);
+      return;
+    }
     setNavigationActive(true);
     setDrivingViewOpen(true);
     engineRef.current?.focusRoute(current, destination, { duration: 850 });
@@ -487,11 +512,15 @@ export default function OrbitV20({ language, user }) {
 
   const panelProps = {
     t, current, currentPlace, heading, accuracy, gpsState, satelliteCount: issTracked + otherTracked, compassLabel,
-    onMyLocation: () => current && engineRef.current?.flyTo(current.lat, current.lon),
+    onMyLocation: () => {
+      setGpsState('locating');
+      setGpsRetry((value) => value + 1);
+      if (current) engineRef.current?.flyTo(current.lat, current.lon);
+    },
     issTracked, otherTracked, issPosition, satellites,
     weather, currentCity: currentPlace?.city, airQualityLabel: air, aqi,
     counts: eventCounts, topEvents,
-    destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base, navigationActive, hasArrived, arrivalRadiusM, routeStatus,
+    destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base, navigationActive, hasArrived, arrivalRadiusM, routeStatus, drivingRoute,
     onSearchChange: runSearch, onOpenSearch: openDestinationSearch, onPick: pickDestination, onAddFavorite: () => addFavorite(destination), onClearRoute: () => setDestination(null),
     onStartNavigation: startNavigation, onStopNavigation: stopNavigation,
     onSaveHome: () => saveSlot('home'), onSaveWork: () => saveSlot('work'),

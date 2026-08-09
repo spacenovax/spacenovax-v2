@@ -79,6 +79,11 @@ if (!orbitSource.includes('<OrbitDrivingView')
   throw new Error('Orbit 2D driving guidance view is missing.');
 }
 
+if (!orbitSource.includes('gpsRetry')
+  || !fs.readFileSync(new URL('../src/orbit/OrbitV20/OrbitCurrentPosition.jsx', import.meta.url), 'utf8').includes('Allow location access')) {
+  throw new Error('Orbit GPS permission fallback must not present a default map point as a live location.');
+}
+
 if (!searchOverlaySource.includes('BrowserSpeechProvider')
   || !searchOverlaySource.includes('toggleVoiceSearch')
   || !searchOverlaySource.includes('ov20-search-mic')) {
