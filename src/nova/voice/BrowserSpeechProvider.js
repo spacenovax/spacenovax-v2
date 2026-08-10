@@ -68,7 +68,9 @@ export class BrowserSpeechProvider {
         this.synthesis.resume?.(); this.synthesis.speak(utterance);
       } catch (error) { retryOrFail(error?.message); }
     };
-    // Keep this call synchronous with the user's tap. Delaying it by even a few\n    // milliseconds loses playback permission in Telegram Android and iOS WebViews.\n    try { this.synthesis.cancel(); this.unlock(); play(); return true; }
+    // Keep this call synchronous with the user's tap. Delaying it by even a few
+    // milliseconds loses playback permission in Telegram Android and iOS WebViews.
+    try { this.synthesis.cancel(); this.unlock(); play(); return true; }
     catch (error) { onError?.(error?.message || 'speech-error'); return false; }
   }
 
