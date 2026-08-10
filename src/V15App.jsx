@@ -704,7 +704,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="hero-copy">
         <span className="eyebrow"><i />{t.verified}</span>
         <small>{t.balance} · {live.mining.active ? 'LIVE SESSION' : 'SETTLED LEDGER'}</small><strong className="hero-balance" aria-label={`${balanceInteger}${balanceFraction ? `.${balanceFraction}` : ''} SPNX POINTS`}><span className="hero-balance-int">{balanceInteger}</span>{balanceFraction && <span className="hero-balance-fraction">.{balanceFraction}</span>}</strong><h1>SPNX POINTS</h1>
-        <p>NOVA-X1 / AI CONTROLLED GENESIS FLAGSHIP</p>
+        <p>NOVA-X / AI CONTROLLED GENESIS FLAGSHIP</p>
       </div>
       <img className="hero-station" src="/spacenovax-orbital-hq-live-v16.webp" alt="SpaceNovaX Orbital Headquarters above Earth" />
       <div className="hero-live-light" aria-hidden="true"/>
@@ -1305,6 +1305,8 @@ function Ranking({ user, t }) {
 
 function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const w = WALLET_COPY[language] || WALLET_COPY.en;
+  const liveMining = useLiveMiningView(user);
+  const livePointsBalance = liveMining.displayBalance;
   const [wallet, setWallet] = useState(user.solanaWallet || '');
   const [notice, setNotice] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -1444,10 +1446,10 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   </section></main>;
   return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-shell">
     <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
-    <div className="nova-wallet-hero"><div><small>{w.portfolio.toUpperCase()} · LIVE SPNX POINTS LEDGER</small><strong>{format(user.balance)} <em>SPNX POINTS</em></strong><p>Live mining, mission and verified game credits settle here through your Captain ledger. KYC is required only when official SPNX conversion launches.</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
+    <div className="nova-wallet-hero"><div><small>{w.portfolio.toUpperCase()} · LIVE SPNX POINTS LEDGER</small><strong>{format(livePointsBalance)} <em>SPNX POINTS</em></strong><p>Live mining, mission and verified game credits settle here through your Captain ledger. KYC is required only when official SPNX conversion launches.</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
     <div className="nova-asset-grid">
       {[['SPNX','0.000000',w.coming],['USDT','0.00',w.coming]].map(([name,value,status]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span className={'asset-emblem ' + (name === 'SPNX' ? 'spnx' : 'usdt')}>{name === 'SPNX' ? <img src="/brand/spacenovax-symbol.jpg" alt="SPNX" /> : '₮'}</span><small>{name}</small><b>{value}</b><i>{status}</i></button>)}
-      <button className="nova-asset-card spnx-convert-card" onClick={() => setWalletPanel('convert')}><span className="asset-emblem points">✦</span><small>SPNX POINTS</small><b>LIVE LEDGER</b><i className="active">{format(user.balance)} AVAILABLE</i><strong>POINTS → SPNX <Icon name="arrow" size={14}/></strong></button>
+      <button className="nova-asset-card spnx-convert-card" onClick={() => setWalletPanel('convert')}><span className="asset-emblem points">✦</span><small>SPNX POINTS</small><b>LIVE LEDGER</b><i className="active">{format(livePointsBalance)} LIVE</i><strong>POINTS → SPNX <Icon name="arrow" size={14}/></strong></button>
     </div>
     <div className="nova-wallet-actions">
       <button className={walletPanel === 'receive' ? 'selected' : ''} onClick={() => setWalletPanel('receive')}><Icon name="arrow-down"/>RECEIVE <small>REWARDS ONLY</small></button>

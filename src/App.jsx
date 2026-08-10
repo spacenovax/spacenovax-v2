@@ -56,14 +56,14 @@ function getCaptainCode(user) {
 }
 
 function getRank(level = 1) {
-  if (level >= 70) return { emoji: '👑', title: 'Galactic Legend', className: 'rank-legend', ship: 'Nova-X1 Genesis', sector: 'Andromeda' };
-  if (level >= 60) return { emoji: '💎', title: 'Admiral', className: 'rank-admiral', ship: 'Nova-X1 Admiral', sector: 'Nebula-X' };
-  if (level >= 50) return { emoji: '🔴', title: 'Commander', className: 'rank-commander', ship: 'Nova-X1 Commander', sector: 'Alpha Centauri' };
-  if (level >= 40) return { emoji: '🟣', title: 'Explorer', className: 'rank-explorer', ship: 'Nova-X1 Titan', sector: 'Jupiter Station' };
-  if (level >= 30) return { emoji: '🔷', title: 'Pioneer', className: 'rank-pioneer', ship: 'Nova-X1 Falcon', sector: 'Mars Colony' };
-  if (level >= 20) return { emoji: '🟡', title: 'Voyager', className: 'rank-voyager', ship: 'Nova-X1 Voyager', sector: 'Moon Base' };
-  if (level >= 10) return { emoji: '⚪', title: 'Cadet', className: 'rank-cadet', ship: 'Nova-X1 Scout', sector: 'Earth Orbit' };
-  return { emoji: '🥉', title: 'Rookie', className: 'rank-rookie', ship: 'Nova-X1 Basic', sector: 'Earth Orbit' };
+  if (level >= 70) return { emoji: '👑', title: 'Galactic Legend', className: 'rank-legend', ship: 'NOVA-X Genesis', sector: 'Andromeda' };
+  if (level >= 60) return { emoji: '💎', title: 'Admiral', className: 'rank-admiral', ship: 'NOVA-X Admiral', sector: 'Nebula-X' };
+  if (level >= 50) return { emoji: '🔴', title: 'Commander', className: 'rank-commander', ship: 'NOVA-X Commander', sector: 'Alpha Centauri' };
+  if (level >= 40) return { emoji: '🟣', title: 'Explorer', className: 'rank-explorer', ship: 'NOVA-X Titan', sector: 'Jupiter Station' };
+  if (level >= 30) return { emoji: '🔷', title: 'Pioneer', className: 'rank-pioneer', ship: 'NOVA-X Falcon', sector: 'Mars Colony' };
+  if (level >= 20) return { emoji: '🟡', title: 'Voyager', className: 'rank-voyager', ship: 'NOVA-X Voyager', sector: 'Moon Base' };
+  if (level >= 10) return { emoji: '⚪', title: 'Cadet', className: 'rank-cadet', ship: 'NOVA-X Scout', sector: 'Earth Orbit' };
+  return { emoji: '🥉', title: 'Rookie', className: 'rank-rookie', ship: 'NOVA-X Basic', sector: 'Earth Orbit' };
 }
 
 function openUrl(url) {
@@ -119,7 +119,7 @@ function AppHeader({ user }) {
 function CinematicShip({ active = false, game = false }) {
   return (
     <div className={game ? 'ship-wrap game-ship' : 'ship-wrap'}>
-      <img src="/nova-x1-cinematic.svg" alt="Nova-X1" />
+      <img src="/nova-x1-cinematic.svg" alt="NOVA-X" />
       <div className="ship-aura" />
       <div className="ship-flare" />
       {active && (
@@ -180,7 +180,7 @@ function HomePage({ user, startMining, claimMining, loading }) {
           <small>TOTAL BALANCE</small>
           <strong>{fmt(user.balance)}</strong>
           <h2>SPNX Points</h2>
-          <p>Nova-X1 Cinematic Class</p>
+      <p>NOVA-X Cinematic Class</p>
         </div>
         <CinematicShip active={isMining} />
         <div className="mining-glass">
@@ -204,7 +204,7 @@ function MiningPage({ user, startMining, claimMining, loading }) {
   return (
     <section className="page premium-card content-card">
       <h2>⛏️ Expedition Mining</h2>
-      <p>Server-based 24h mining · Nova-X1 = 24 SPNX / day</p>
+  <p>Server-based 24h mining · NOVA-X = 24 SPNX / day</p>
       <div className="progress"><span><i style={{ width: `${progress}%` }} /></span><b>{progress}%</b></div>
       <div className="grid">
         <div><small>Remaining</small><b>{time(m.remainingMs || 86400000)}</b></div>
@@ -888,7 +888,7 @@ function GamePage({ user, setUser }) {
     <section className="page premium-card content-card game-page arcade-ultimate-page">
       <div className="arcade-title-row">
         <div>
-          <h2>🎮 Nova-X1 Arcade Ultimate</h2>
+          <h2>🎮 NOVA-X Arcade Ultimate</h2>
           <p>{notice}</p>
         </div>
         <button className={soundOn ? 'sound-toggle on' : 'sound-toggle'} onClick={() => setSoundOn(!soundOn)}>

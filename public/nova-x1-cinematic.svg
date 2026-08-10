@@ -103,5 +103,5 @@
     <circle cx="680" cy="530" r="7" fill="#35eaff"/>
   </g>
 
-  <text x="600" y="720" font-family="Arial, sans-serif" font-size="42" fill="#cfeeff" text-anchor="middle" opacity=".82" font-weight="800">NOVA-X1</text>
+  <text x="600" y="720" font-family="Arial, sans-serif" font-size="42" fill="#cfeeff" text-anchor="middle" opacity=".82" font-weight="800">NOVA-X</text>
 </svg>
