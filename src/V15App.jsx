@@ -1380,6 +1380,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       <button className={walletPanel === 'send' ? 'selected' : ''} onClick={() => setWalletPanel('send')}><Icon name="arrow-up"/>SEND <small>KYC GATED</small></button>
       <button className={walletPanel === 'history' ? 'selected' : ''} onClick={() => setWalletPanel('history')}><Icon name="chart"/>HISTORY <small>SERVER LEDGER</small></button>
       <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>SECURITY <small>PIN PROTECTED</small></button>
+      <button className={walletPanel === 'nft' ? 'selected nft-command' : 'nft-command'} onClick={() => setWalletPanel('nft')}><Icon name="mission"/>NFT VAULT <small>RESERVED SPACE</small></button>
     </div>
     <section className="nova-wallet-operation">
       {walletPanel === 'overview' && <><small>WALLET COMMAND DECK</small><b>Choose an action to manage your NOVA Wallet.</b><p>Every asset, transfer request and security action is recorded through the server-authoritative SpaceNovaX ledger.</p></>}
