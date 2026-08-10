@@ -1343,9 +1343,9 @@ function Wallet({ user, setUser, t, language }) {\n  const w = WALLET_COPY[langu
       setVerifying(false);
     }
   }
-  if (walletLocked && user.kyc?.status === 'approved') return <main className="v15-page"><section className="command-card ops-module wallet-theme">
+  if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme">
     <div className="section-heading"><div><small>NOVA WALLET · SECURE ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Create 6-digit Wallet PIN'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>LOCKED</span></div>
-    <p>Wallet access is protected. The app locks again when it moves to the background.</p>
+    <p>Set up or unlock your Wallet with PIN now. KYC is required only for transfers, withdrawals, Marketplace payments and live assets.</p>
     <div className="wallet-form"><label>6-DIGIT PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/><button disabled={walletBusy} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING…' : walletSecurity?.pinConfigured ? 'UNLOCK WALLET' : 'CREATE SECURE PIN'}</button></div>
     <p className="privacy-note">PIN is stored as a secure server hash, never as readable text. Five failed attempts trigger a 15-minute lock.</p>{notice && <p className="module-notice">{notice}</p>}
   </section></main>;
