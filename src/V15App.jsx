@@ -1078,7 +1078,7 @@ function PreviewPanel({ open, close, t }) {
 
 function More({ t, setTab, language }) {
   const ko = language === 'ko';
-  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', ko ? '국제 네비게이션' : 'Global Navigation', 'globe'], ['community', t.community, 'community'], ['nodes', ko ? '커뮤니티 노드' : 'Community Node', 'bolt'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
+  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', ko ? '국제 네비게이션' : 'Global Navigation', 'globe'], ['community', t.community, 'community'], ['nodes', ko ? '커뮤니티 노드' : 'Community Node', 'bolt'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['nft', 'NOVA NFT Vault', 'mission'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
   return <main className="v15-page"><section className="command-card command-grid command-theme">
     <div className="section-heading"><div><small>NOVA OPERATIONS</small><h2>{t.command}</h2></div></div>
     <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>{id === 'wallet' ? (ko ? 'PIN 설정 · 보안 관리' : 'PIN SETUP · SECURITY') : 'Open module'}</small></span><Icon name="arrow" size={18}/></button>)}</div>
@@ -1303,7 +1303,7 @@ function Ranking({ user, t }) {
   </section></main>;
 }
 
-function Wallet({ user, setUser, t, language }) {
+function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const w = WALLET_COPY[language] || WALLET_COPY.en;
   const [wallet, setWallet] = useState(user.solanaWallet || '');
   const [notice, setNotice] = useState('');
@@ -1313,8 +1313,9 @@ function Wallet({ user, setUser, t, language }) {
   const [walletLocked, setWalletLocked] = useState(true);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletAsset, setWalletAsset] = useState('SPNX Points');
-  const [walletPanel, setWalletPanel] = useState('overview');
+  const [walletPanel, setWalletPanel] = useState(initialPanel);
   useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => setWalletSecurity(data.security)).catch(() => {}); }, []);
+  useEffect(() => { setWalletPanel(initialPanel); }, [initialPanel]);
   useEffect(() => { const lock = () => setWalletLocked(true); const hidden = () => { if (document.hidden) lock(); }; document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', lock); return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', lock); }; }, []);
   async function unlockNOVAWallet() {
     setWalletBusy(true);
@@ -1355,11 +1356,18 @@ function Wallet({ user, setUser, t, language }) {
       setVerifying(false);
     }
   }
-  if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme">
-    <div className="section-heading"><div><small>NOVA WALLET · SECURE ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Create 6-digit Wallet PIN'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>LOCKED</span></div>
-    <p>Set up or unlock your Wallet with PIN now. KYC is required only for transfers, withdrawals, Marketplace payments and live assets.</p>
-    <div className="wallet-form"><label>6-DIGIT PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/><button disabled={walletBusy} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING…' : walletSecurity?.pinConfigured ? 'UNLOCK WALLET' : 'CREATE SECURE PIN'}</button></div>
-    <p className="privacy-note">Keep your PIN and account access safe. If forgotten, a verified Captain can request a protected new Wallet profile; the prior Wallet profile is archived and cannot be reopened.</p><button className="wallet-recovery-link" onClick={requestWalletRecovery}>FORGOT PIN? CREATE A NEW WALLET</button>{notice && <p className="module-notice">{notice}</p>}
+  if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-onboarding">
+    <div className="wallet-security-scan"/><div className="section-heading"><div><small>NOVA WALLET · GENESIS ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Initialize NOVA Wallet'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>SECURE LOCK</span></div>
+    <p className="wallet-onboard-lead">{walletSecurity?.pinConfigured ? 'Enter your six-digit PIN to open your protected command deck.' : 'Create a six-digit PIN to activate your personal SpaceNovaX command deck.'}</p>
+    <div className="wallet-onboard-grid">
+      <div className="wallet-pin-console"><small>01 · SECURITY KEY</small><label>6-DIGIT NOVA PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/>
+        <div className="wallet-pin-slots">{Array.from({ length: 6 }, (_, index) => <i key={index} className={walletPin[index] ? 'filled' : ''}>{walletPin[index] ? '•' : ''}</i>)}</div>
+        <div className="wallet-pin-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','⌫'].map((key) => <button key={key} type="button" className={key === 'CLEAR' ? 'clear' : key === '⌫' ? 'back' : ''} onClick={() => setWalletPin((current) => key === 'CLEAR' ? '' : key === '⌫' ? current.slice(0,-1) : current.length < 6 ? current + key : current)}>{key}</button>)}</div>
+        <button className="wallet-primary-launch" disabled={walletBusy || walletPin.length !== 6} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING SECURE ACCESS…' : walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : 'ACTIVATE NOVA WALLET'}</button>
+      </div>
+      <aside className="wallet-genesis-preview"><small>WALLET ECOSYSTEM</small><div><Icon name="wallet" size={28}/><b>SPNX Points</b><span>ACTIVE LEDGER</span></div><div><Icon name="mission" size={28}/><b>NOVA NFT Vault</b><span>COMING SOON</span></div><p>KYC is required only for transfers, withdrawals, Marketplace payments and live assets. Wallet access and PIN setup are available to every Captain.</p></aside>
+    </div>
+    <div className="wallet-recovery-row"><div><Icon name="shield"/><span><b>Keep your PIN safe.</b><small>A recovered Wallet uses a new security profile. Your SpaceNovaX Points ledger remains attached to your Captain account.</small></span></div><button className="wallet-recovery-link" onClick={requestWalletRecovery}>FORGOT PIN? CREATE NEW SECURITY PROFILE</button></div>{notice && <p className="module-notice">{notice}</p>}
   </section></main>;
   return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-shell">
     <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
@@ -1379,6 +1387,7 @@ function Wallet({ user, setUser, t, language }) {
       {walletPanel === 'send' && <><small>SEND · SECURITY GATE</small><b>KYC approval is required before any transfer can be opened.</b><p>After KYC launch, sending will require PIN confirmation and server-side risk validation. No asset can leave this Wallet before that approval.</p></>}
       {walletPanel === 'history' && <><small>HISTORY · SERVER LEDGER</small><b>Your settled SPNX Points activity is protected on the server.</b><p>Mining, mission and game settlements appear in the activity ledger. Live token transactions will be added only after official asset activation.</p></>}
       {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>Your Wallet is protected with a six-digit PIN.</b><p>Lock this session whenever you are finished. Never share a seed phrase, private key or PIN with anyone.</p><button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
+      {walletPanel === 'nft' && <><small>NOVA NFT VAULT · RESERVED</small><b>Your future collectibles, mission badges and game assets will live here.</b><p>The NFT Vault is reserved in the Wallet structure now. Minting, transfers and Marketplace trading remain disabled until the official network and KYC release.</p></>}
     </section>
     <div className="conversion-card conversion-locked"><div><b>{w.unlock}</b><p>KYC approval is required for SPNX Points transfers, Marketplace payments, future SPNX / USDT / SOL / USDC assets and withdrawals. Until then, this Wallet is view-only.</p></div><button disabled>KYC REQUIRED<Icon name="shield"/></button></div>
     <div className="wallet-form"><label>SOLANA WALLET ADDRESS · FUTURE SETTLEMENT</label><input readOnly value={wallet} placeholder="Connect Phantom or a compatible Solana wallet"/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{verifying ? 'VERIFYING SIGNATURE…' : user.walletVerified ? 'WALLET VERIFIED' : 'CONNECT & VERIFY WALLET'}</button><p className="privacy-note"><Icon name="shield" size={15}/>Never enter a seed phrase or private key. Supported assets and live price data activate only after the official launch.</p></div>
@@ -1632,7 +1641,7 @@ export default function V15App() {
   else if (tab === 'fleet') page = <Fleet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'whitepaper') page = <Whitepaper language={language}/>;
   else if (tab === 'rank') page = <Ranking user={user} t={t}/>;
-  else if (tab === 'wallet') page = <Wallet user={user} setUser={setUser} t={t} language={language}/>;
+  else if (tab === 'wallet' || tab === 'nft') page = <Wallet user={user} setUser={setUser} t={t} language={language} initialPanel={tab === 'nft' ? 'nft' : 'overview'}/>;
   else if (tab === 'kyc') page = <Kyc t={t} language={language}/>;
   else page = <More t={t} setTab={setTab}/>;
   return <>
