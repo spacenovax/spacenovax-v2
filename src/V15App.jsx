@@ -31,7 +31,7 @@ const COPY = {
     emptyLedger: 'No reward activity yet. Start your first mining cycle.',
     realGame: 'OFFICIAL LIVE GAME', openGame: 'Open game in a new window',
     overview: 'Operations overview', dailyCap: 'Daily game reward cap',
-    security: 'Security', wallet: 'Wallet', kyc: 'KYC', ranking: 'Ranking',
+    security: 'Security', wallet: 'NOVA Wallet', kyc: 'KYC', ranking: 'Ranking',
     referrals: 'Fleet', logout: 'Language & settings', official: 'Official channels',
     newChat: 'New chat', listening: 'Listening…', thinking: 'NOVA is thinking',
     copy: 'Copy', read: 'Read aloud', stop: 'Stop', preview: 'PREVIEW BUILD',
@@ -53,7 +53,7 @@ const COPY = {
     emptyLedger: '아직 보상 내역이 없습니다. 첫 채굴을 시작하세요.',
     realGame: '공식 실시간 게임', openGame: '새 창에서 게임 열기',
     overview: '운영 현황', dailyCap: '일일 게임 보상 한도',
-    security: '보안', wallet: '지갑', kyc: 'KYC', ranking: '랭킹',
+    security: '보안', wallet: 'NOVA Wallet', kyc: 'KYC', ranking: '랭킹',
     referrals: '함대', logout: '언어 및 설정', official: '공식 채널',
     newChat: '새 대화', listening: '듣고 있습니다…', thinking: 'NOVA가 답변을 준비 중입니다',
     copy: '복사', read: '음성으로 듣기', stop: '중지', preview: '검토용 빌드',
@@ -1081,7 +1081,7 @@ function More({ t, setTab, language }) {
   const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', ko ? '국제 네비게이션' : 'Global Navigation', 'globe'], ['community', t.community, 'community'], ['nodes', ko ? '커뮤니티 노드' : 'Community Node', 'bolt'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
   return <main className="v15-page"><section className="command-card command-grid command-theme">
     <div className="section-heading"><div><small>NOVA OPERATIONS</small><h2>{t.command}</h2></div></div>
-    <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>Open module</small></span><Icon name="arrow" size={18}/></button>)}</div>
+    <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>{id === 'wallet' ? (ko ? 'PIN 설정 · 보안 관리' : 'PIN SETUP · SECURITY') : 'Open module'}</small></span><Icon name="arrow" size={18}/></button>)}</div>
     <h3>{t.official}</h3><div className="official-links" aria-label="SpaceNovaX official channels">
       <a className="official-channel website-channel" href="https://spacenovax.com" target="_blank" rel="noreferrer"><Icon name="globe" size={15}/><span>WEBSITE</span></a>
       <a className="official-channel telegram-channel" href="https://t.me/spacenovaxteam" target="_blank" rel="noreferrer"><Icon name="telegram" size={15}/><span>TELEGRAM</span></a>
