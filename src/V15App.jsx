@@ -567,8 +567,8 @@ function Splash({ done }) {
   }, [done]);
   return <div className={`v15-splash ${launching ? 'launching' : ''} ${exit ? 'exit' : ''}`}>
     <div className="splash-nebula" /><div className="splash-stars-v15" />
-    <div className="splash-comet-trail"/><div className="splash-arrival-flash"/>
-    <div className="v15-mark"><img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" /></div>
+    {launching && <><div key="meteor-trail" className="splash-comet-trail"/><div key="arrival-flash" className="splash-arrival-flash"/></>}
+    <div key={launching ? 'symbol-arrival' : 'symbol-ready'} className="v15-mark"><img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" /></div>
     <div className="v15-splash-copy"><small>NOVA NETWORK PRESENTS</small><h1>SPACENOVA<span>X</span></h1><p>EXPLORE · MINE · EVOLVE</p></div>
     <div className="boot-line"><i /><span>NOVA CORE INITIALIZING</span></div>
   </div>;
