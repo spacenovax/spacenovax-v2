@@ -7,6 +7,12 @@ import pg from 'pg';
 import bs58 from 'bs58';
 import nacl from 'tweetnacl';
 import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from '@simplewebauthn/server';
+import {
   broadcastSignedPayout,
   inspectSignedPayout,
   prepareSignedPayout,
@@ -41,6 +47,9 @@ const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data
 // Public share links must resolve to this server so KakaoTalk and Telegram can
 // read the Open Graph card before a Captain opens the Telegram Mini App.
 const PUBLIC_APP_ORIGIN = String(process.env.PUBLIC_APP_ORIGIN || 'https://app.spacenovax.com').replace(/\/$/, '');
+const WEBAUTHN_RP_ID = String(process.env.WEBAUTHN_RP_ID || new URL(PUBLIC_APP_ORIGIN).hostname).toLowerCase();
+const WEBAUTHN_ORIGIN = String(process.env.WEBAUTHN_ORIGIN || PUBLIC_APP_ORIGIN).replace(/\/$/, '');
+const WEBAUTHN_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const REFERRAL_HARD_LIMIT = 1000;
 const COMMUNITY_MEDIA_DIR = process.env.COMMUNITY_MEDIA_DIR || path.join(__dirname, 'community-media');
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -101,6 +110,7 @@ function createInitialData() {
       ledger: [],
       ledgerKeys: {},
       walletChallenges: {},
+      webauthnChallenges: {},
       convertRequests: [],
       payouts: [],
       payoutKeys: {},
@@ -169,6 +179,10 @@ function normalizeData(data) {
   data.settings.convertEnabled ??= false;
   data.settings.autoPayoutEnabled ??= false;
   data.walletChallenges ||= {};
+  data.webauthnChallenges ||= {};
+  for (const [challengeId, challenge] of Object.entries(data.webauthnChallenges)) {
+    if (!challenge || Number(challenge.expiresAt || 0) < now()) delete data.webauthnChallenges[challengeId];
+  }
   data.payouts ||= [];
   data.payoutKeys ||= {};
   data.fleetMessages ||= [];
@@ -2587,15 +2601,43 @@ app.post('/api/kyc/submit', (req, res) => {
 
 // V9 Ultimate Wallet API
 function novaWalletSecurity(user) {
-  user.novaWalletSecurity ||= { pinHash: '', pinSalt: '', failedAttempts: 0, lockedUntil: 0, lastUnlockedAt: 0 };
+  user.novaWalletSecurity ||= { pinHash: '', pinSalt: '', failedAttempts: 0, lockedUntil: 0, lastUnlockedAt: 0, webauthnCredentials: [] };
+  user.novaWalletSecurity.webauthnCredentials ||= [];
   return user.novaWalletSecurity;
+}
+function walletBiometricCredentials(security) {
+  security.webauthnCredentials ||= [];
+  return security.webauthnCredentials.filter((credential) => credential?.id && credential?.publicKey);
 }
 function publicWalletSecurity(user) {
   const security = novaWalletSecurity(user);
-  return { pinConfigured: Boolean(security.pinHash), failedAttempts: Number(security.failedAttempts || 0), lockedUntil: Number(security.lockedUntil || 0), lastUnlockedAt: Number(security.lastUnlockedAt || 0), biometricAvailable: false };
+  const credentials = walletBiometricCredentials(security);
+  return {
+    pinConfigured: Boolean(security.pinHash),
+    failedAttempts: Number(security.failedAttempts || 0),
+    lockedUntil: Number(security.lockedUntil || 0),
+    lastUnlockedAt: Number(security.lastUnlockedAt || 0),
+    biometricAvailable: credentials.length > 0,
+    biometricCredentialCount: credentials.length,
+  };
 }
 function validWalletPin(pin) { return /^\d{6}$/.test(String(pin || '')); }
 function walletPinHash(pin, salt) { return crypto.scryptSync(String(pin), salt, 64).toString('hex'); }
+function issueWebAuthnChallenge(data, user, purpose, challenge) {
+  const challengeId = crypto.randomUUID();
+  data.webauthnChallenges ||= {};
+  data.webauthnChallenges[challengeId] = { userId: user.id, purpose, challenge, expiresAt: now() + WEBAUTHN_CHALLENGE_TTL_MS };
+  return challengeId;
+}
+function consumeWebAuthnChallenge(data, user, challengeId, purpose) {
+  const challenge = data.webauthnChallenges?.[String(challengeId || '')];
+  delete data.webauthnChallenges?.[String(challengeId || '')];
+  if (!challenge || challenge.userId !== user.id || challenge.purpose !== purpose || Number(challenge.expiresAt || 0) < now()) return null;
+  return challenge;
+}
+function walletDisplayName(user) {
+  return String(user.name || user.username || `Captain ${user.id}`).slice(0, 80);
+}
 
 app.post('/api/nova-wallet/status', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data);
@@ -2631,6 +2673,103 @@ app.post('/api/nova-wallet/pin/unlock', (req, res) => {
   security.failedAttempts = 0; security.lockedUntil = 0; security.lastUnlockedAt = now();
   data.events.push({ type: 'nova_wallet_unlocked', userId: user.id, at: now() }); writeData(data);
   res.json({ ok: true, security: publicWalletSecurity(user) });
+});
+
+// WebAuthn keeps fingerprint / Face ID material on the Captain's device. This
+// server persists only credential public keys, counters and audit events.
+app.post('/api/nova-wallet/biometric/register/options', async (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const security = novaWalletSecurity(user);
+  if (!security.pinHash) return res.status(400).json({ ok: false, message: 'Create a Wallet PIN before registering device biometrics.' });
+  const credentials = walletBiometricCredentials(security);
+  try {
+    const options = await generateRegistrationOptions({
+      rpName: 'SpaceNovaX NOVA Wallet', rpID: WEBAUTHN_RP_ID,
+      userID: Buffer.from(String(user.id)), userName: `captain-${user.id}`, userDisplayName: walletDisplayName(user),
+      timeout: 60000, attestationType: 'none',
+      excludeCredentials: credentials.map((credential) => ({ id: credential.id, transports: credential.transports || [] })),
+      authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'required' },
+    });
+    const challengeId = issueWebAuthnChallenge(data, user, 'register', options.challenge);
+    data.events.push({ type: 'nova_wallet_biometric_registration_started', userId: user.id, at: now() });
+    writeData(data); res.json({ ok: true, challengeId, options });
+  } catch (error) {
+    console.error('Wallet biometric registration options failed', error);
+    res.status(503).json({ ok: false, message: 'Device biometric setup is not available right now.' });
+  }
+});
+
+app.post('/api/nova-wallet/biometric/register/verify', async (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const challenge = consumeWebAuthnChallenge(data, user, req.body?.challengeId, 'register');
+  if (!challenge) return res.status(400).json({ ok: false, message: 'The device biometric request expired. Start again.' });
+  try {
+    const verification = await verifyRegistrationResponse({ response: req.body?.response, expectedChallenge: challenge.challenge, expectedOrigin: WEBAUTHN_ORIGIN, expectedRPID: WEBAUTHN_RP_ID, requireUserVerification: true });
+    if (!verification.verified || !verification.registrationInfo?.userVerified) throw new Error('Device verification was not confirmed.');
+    const security = novaWalletSecurity(user);
+    const credentials = walletBiometricCredentials(security);
+    const registration = verification.registrationInfo;
+    if (!credentials.some((credential) => credential.id === registration.credentialID)) {
+      credentials.push({
+        id: registration.credentialID,
+        publicKey: Buffer.from(registration.credentialPublicKey).toString('base64url'),
+        counter: registration.counter,
+        transports: Array.isArray(req.body?.response?.response?.transports) ? req.body.response.response.transports : [],
+        deviceType: registration.credentialDeviceType,
+        backedUp: registration.credentialBackedUp,
+        registeredAt: now(), lastUsedAt: 0,
+      });
+    }
+    data.events.push({ type: 'nova_wallet_biometric_registered', userId: user.id, at: now() });
+    writeData(data); res.json({ ok: true, security: publicWalletSecurity(user) });
+  } catch (error) {
+    data.events.push({ type: 'nova_wallet_biometric_registration_failed', userId: user.id, at: now() });
+    writeData(data); console.error('Wallet biometric registration failed', error);
+    res.status(400).json({ ok: false, message: 'Device biometric verification failed. Your Wallet was not changed.' });
+  }
+});
+
+app.post('/api/nova-wallet/biometric/authenticate/options', async (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const security = novaWalletSecurity(user); const credentials = walletBiometricCredentials(security);
+  if (!credentials.length) return res.status(400).json({ ok: false, message: 'No device biometric is registered for this Wallet.' });
+  try {
+    const options = await generateAuthenticationOptions({ rpID: WEBAUTHN_RP_ID, timeout: 60000, userVerification: 'required', allowCredentials: credentials.map((credential) => ({ id: credential.id, transports: credential.transports || [] })) });
+    const challengeId = issueWebAuthnChallenge(data, user, 'authenticate', options.challenge);
+    data.events.push({ type: 'nova_wallet_biometric_authentication_started', userId: user.id, at: now() });
+    writeData(data); res.json({ ok: true, challengeId, options });
+  } catch (error) {
+    console.error('Wallet biometric authentication options failed', error);
+    res.status(503).json({ ok: false, message: 'Device biometric authentication is not available right now.' });
+  }
+});
+
+app.post('/api/nova-wallet/biometric/authenticate/verify', async (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const challenge = consumeWebAuthnChallenge(data, user, req.body?.challengeId, 'authenticate');
+  if (!challenge) return res.status(400).json({ ok: false, message: 'The device biometric request expired. Start again.' });
+  const security = novaWalletSecurity(user);
+  const credential = walletBiometricCredentials(security).find((item) => item.id === String(req.body?.response?.id || ''));
+  if (!credential) return res.status(401).json({ ok: false, message: 'This device credential is not registered for the Wallet.' });
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: req.body?.response, expectedChallenge: challenge.challenge, expectedOrigin: WEBAUTHN_ORIGIN, expectedRPID: WEBAUTHN_RP_ID,
+      authenticator: { credentialID: credential.id, credentialPublicKey: Buffer.from(credential.publicKey, 'base64url'), counter: Number(credential.counter || 0), transports: credential.transports || [] }, requireUserVerification: true,
+    });
+    if (!verification.verified || !verification.authenticationInfo?.userVerified) throw new Error('Device verification was not confirmed.');
+    credential.counter = verification.authenticationInfo.newCounter;
+    credential.lastUsedAt = now(); security.failedAttempts = 0; security.lockedUntil = 0; security.lastUnlockedAt = now();
+    data.events.push({ type: 'nova_wallet_biometric_unlocked', userId: user.id, at: now() });
+    writeData(data); res.json({ ok: true, security: publicWalletSecurity(user) });
+  } catch (error) {
+    data.events.push({ type: 'nova_wallet_biometric_unlock_failed', userId: user.id, at: now() });
+    writeData(data); console.error('Wallet biometric authentication failed', error);
+    res.status(401).json({ ok: false, message: 'Device biometric verification failed. Use your Wallet PIN.' });
+  }
 });
 
 app.post('/api/nova-wallet/recovery/request', (req, res) => {

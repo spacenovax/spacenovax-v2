@@ -1314,9 +1314,21 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const [walletPinStep, setWalletPinStep] = useState('create');
   const [walletLocked, setWalletLocked] = useState(true);
   const [walletBusy, setWalletBusy] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
   const [walletAsset, setWalletAsset] = useState('SPNX');
   const [walletPanel, setWalletPanel] = useState(initialPanel);
   useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => setWalletSecurity(data.security)).catch(() => {}); }, []);
+  useEffect(() => {
+    let active = true;
+    const check = async () => {
+      try {
+        const supported = Boolean(window.PublicKeyCredential && navigator.credentials?.create && await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.());
+        if (active) setBiometricSupported(supported);
+      } catch { if (active) setBiometricSupported(false); }
+    };
+    check(); return () => { active = false; };
+  }, []);
   useEffect(() => { setWalletPanel(initialPanel); }, [initialPanel]);
   useEffect(() => { const lock = () => setWalletLocked(true); const hidden = () => { if (document.hidden) lock(); }; document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', lock); return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', lock); }; }, []);
   const isPinSetup = !walletSecurity?.pinConfigured;
@@ -1346,6 +1358,50 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       const ready = new Date(data.recoveryAvailableAt).toLocaleString();
       setNotice('Recovery protection started. You can create a new Wallet security profile after ' + ready + '. Keep your PIN and recovery access safe.');
     } catch (error) { setNotice(error.message); }
+  }
+  function webauthnBytes(value) {
+    const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(normalized + '='.repeat((4 - normalized.length % 4) % 4));
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  }
+  function webauthnText(value) {
+    const bytes = new Uint8Array(value); let binary = '';
+    bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+  function registrationOptionsForBrowser(options) {
+    return { ...options, challenge: webauthnBytes(options.challenge), user: { ...options.user, id: webauthnBytes(options.user.id) }, excludeCredentials: (options.excludeCredentials || []).map((credential) => ({ ...credential, id: webauthnBytes(credential.id) })) };
+  }
+  function authenticationOptionsForBrowser(options) {
+    return { ...options, challenge: webauthnBytes(options.challenge), allowCredentials: (options.allowCredentials || []).map((credential) => ({ ...credential, id: webauthnBytes(credential.id) })) };
+  }
+  function registrationResponseJSON(credential) {
+    return { id: credential.id, rawId: webauthnText(credential.rawId), type: credential.type, clientExtensionResults: credential.getClientExtensionResults?.() || {}, response: { attestationObject: webauthnText(credential.response.attestationObject), clientDataJSON: webauthnText(credential.response.clientDataJSON), transports: credential.response.getTransports?.() || [] } };
+  }
+  function authenticationResponseJSON(credential) {
+    return { id: credential.id, rawId: webauthnText(credential.rawId), type: credential.type, clientExtensionResults: credential.getClientExtensionResults?.() || {}, response: { authenticatorData: webauthnText(credential.response.authenticatorData), clientDataJSON: webauthnText(credential.response.clientDataJSON), signature: webauthnText(credential.response.signature), userHandle: credential.response.userHandle ? webauthnText(credential.response.userHandle) : undefined } };
+  }
+  async function registerWalletBiometric() {
+    if (!biometricSupported) return setNotice('This device does not provide supported Face ID or fingerprint authentication. Your PIN remains available.');
+    setBiometricBusy(true); setNotice('');
+    try {
+      const begin = await api('/api/nova-wallet/biometric/register/options', { method: 'POST', body: {} });
+      const credential = await navigator.credentials.create({ publicKey: registrationOptionsForBrowser(begin.options) });
+      if (!credential) throw new Error('Device biometric registration was cancelled.');
+      const data = await api('/api/nova-wallet/biometric/register/verify', { method: 'POST', body: { challengeId: begin.challengeId, response: registrationResponseJSON(credential) } });
+      setWalletSecurity(data.security); setNotice('Device biometric access is registered. You may use Face ID or fingerprint instead of PIN on this device.');
+    } catch (error) { setNotice(error.message || 'Device biometric registration was not completed.'); } finally { setBiometricBusy(false); }
+  }
+  async function unlockWalletWithBiometric() {
+    if (!biometricSupported) return setNotice('This device does not provide supported Face ID or fingerprint authentication. Use your PIN.');
+    setBiometricBusy(true); setNotice('');
+    try {
+      const begin = await api('/api/nova-wallet/biometric/authenticate/options', { method: 'POST', body: {} });
+      const credential = await navigator.credentials.get({ publicKey: authenticationOptionsForBrowser(begin.options) });
+      if (!credential) throw new Error('Device biometric authentication was cancelled.');
+      const data = await api('/api/nova-wallet/biometric/authenticate/verify', { method: 'POST', body: { challengeId: begin.challengeId, response: authenticationResponseJSON(credential) } });
+      setWalletSecurity(data.security); setWalletLocked(false); setNotice('NOVA Wallet opened with device biometrics.');
+    } catch (error) { setNotice(error.message || 'Device biometric authentication was not completed. Use your PIN.'); } finally { setBiometricBusy(false); }
   }
   async function connectAndVerify() {
     if (PREVIEW_BUILD) return setNotice('Preview validation passed. No production wallet was changed.');
@@ -1380,6 +1436,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
         {isPinSetup && <div className="wallet-pin-stage"><i className={walletPinStep === 'create' ? 'active' : ''}>1</i><span/><i className={walletPinStep === 'confirm' ? 'active' : ''}>2</i><b>{walletPinStep === 'confirm' ? 'CONFIRM PIN' : 'CREATE PIN'}</b></div>}
         <div className="wallet-pin-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','⌫'].map((key) => <button key={key} type="button" className={key === 'CLEAR' ? 'clear' : key === '⌫' ? 'back' : ''} onClick={() => pressWalletPin(key)}>{key}</button>)}</div>
         <button className="wallet-primary-launch" disabled={walletBusy || activePin.length !== 6} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING SECURE ACCESS…' : walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : walletPinStep === 'confirm' ? 'CONFIRM & ACTIVATE WALLET' : 'CONTINUE TO CONFIRM PIN'}</button>
+        {walletSecurity?.biometricAvailable && <button className="wallet-biometric-launch" disabled={biometricBusy} onClick={unlockWalletWithBiometric}><Icon name="shield"/>{biometricBusy ? 'VERIFYING DEVICE…' : 'USE FACE ID / FINGERPRINT'}</button>}
       </div>
       <aside className="wallet-genesis-preview"><small>WALLET ECOSYSTEM</small><div><Icon name="wallet" size={28}/><b>SPNX Points</b><span>ACTIVE LEDGER</span></div><div><Icon name="mission" size={28}/><b>NOVA NFT Vault</b><span>COMING SOON</span></div><p>KYC is required only for transfers, withdrawals, Marketplace payments and live assets. Wallet access and PIN setup are available to every Captain.</p></aside>
     </div>
@@ -1405,7 +1462,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       {walletPanel === 'receive' && <><small>RECEIVE · REWARD LEDGER</small><b>SPNX Points are credited only by verified SpaceNovaX rewards.</b><p>Mining, mission and verified game rewards are automatically recorded in your live balance. External deposits are not enabled.</p></>}
       {walletPanel === 'send' && <><small>SEND · SECURITY GATE</small><b>KYC approval is required before any transfer can be opened.</b><p>After KYC launch, sending will require PIN confirmation and server-side risk validation. No asset can leave this Wallet before that approval.</p></>}
       {walletPanel === 'history' && <><small>HISTORY · SERVER LEDGER</small><b>Your settled SPNX Points activity is protected on the server.</b><p>Mining, mission and game settlements appear in the activity ledger. Live token transactions will be added only after official asset activation.</p></>}
-      {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>Your Wallet is protected with a six-digit PIN.</b><p>Lock this session whenever you are finished. Never share a seed phrase, private key or PIN with anyone.</p><button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
+      {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>{walletSecurity?.biometricAvailable ? 'Device biometric access is registered for this Wallet.' : 'Your Wallet is protected with a six-digit PIN.'}</b><p>PIN or registered device biometrics can open the Wallet. Biometrics stay on your device; SpaceNovaX stores only a verification public key. Never share a seed phrase, private key or PIN with anyone.</p>{!walletSecurity?.biometricAvailable && <button className="wallet-security-action" disabled={biometricBusy || !biometricSupported} onClick={registerWalletBiometric}><Icon name="shield"/>{biometricBusy ? 'REGISTERING DEVICE…' : biometricSupported ? 'REGISTER FACE ID / FINGERPRINT' : 'DEVICE BIOMETRICS NOT AVAILABLE'}</button>}<button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
       {walletPanel === 'swap' && <><small>SWAP · KYC SECURITY GATE</small><b>SPNX swap will activate only after KYC approval and official live-asset release.</b><p>Before then, no exchange rate, liquidity, quote or transfer can be executed. The final Swap flow will require PIN reconfirmation, KYC status, server validation and a signed transaction.</p></>}
       {walletPanel === 'convert' && <><small>SPNX POINTS → SPNX · KYC SECURITY GATE</small><b>Your live SPNX Points balance will be eligible for conversion only after KYC approval and the official SPNX launch.</b><p>No conversion rate, token issuance, balance reduction or transaction is executed today. When activation is announced, this command will require KYC, PIN re-authentication, server validation and an auditable conversion record.</p><button className="wallet-security-action" disabled><Icon name="shield"/>KYC & TOKEN LAUNCH REQUIRED</button></>}
       {walletPanel === 'nft' && <><small>NOVA NFT VAULT · INSIDE NOVA WALLET</small><b>Your future collectibles, mission badges and game assets will live here.</b><p>The NFT Vault belongs inside NOVA Wallet. Minting, transfers and Marketplace trading remain disabled until the official network and KYC release.</p></>}

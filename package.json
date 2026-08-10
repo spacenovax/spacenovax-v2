@@ -13,6 +13,7 @@
     "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs tests/orbit-integration.mjs tests/community-node-auto.mjs tests/mining-live-balance.mjs"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^10.0.1",
     "@solana/spl-token": "^0.4.15",
     "@solana/web3.js": "^1.98.4",
     "@vitejs/plugin-react": "latest",
