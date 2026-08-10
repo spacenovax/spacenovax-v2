@@ -1313,6 +1313,7 @@ function Wallet({ user, setUser, t, language }) {
   const [walletLocked, setWalletLocked] = useState(true);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletAsset, setWalletAsset] = useState('SPNX Points');
+  const [walletPanel, setWalletPanel] = useState('overview');
   useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => setWalletSecurity(data.security)).catch(() => {}); }, []);
   useEffect(() => { const lock = () => setWalletLocked(true); const hidden = () => { if (document.hidden) lock(); }; document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', lock); return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', lock); }; }, []);
   async function unlockNOVAWallet() {
@@ -1366,7 +1367,19 @@ function Wallet({ user, setUser, t, language }) {
     <div className="nova-asset-grid">
       {[['SPNX','0.000000',w.coming,'🚀'],['USDT','0.00',w.coming,'◈'],['SPNX Points',format(user.balance),w.active,'✦']].map(([name,value,status,mark]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span>{mark}</span><small>{name}</small><b>{value}</b><i className={status === w.active ? 'active' : ''}>{status}</i></button>)}
     </div>
-    <div className="nova-wallet-actions"><button disabled={walletAsset !== 'SPNX Points'}><Icon name="arrow-down"/>RECEIVE <small>{walletAsset === 'SPNX Points' ? 'KYC REQUIRED' : 'COMING SOON'}</small></button><button disabled><Icon name="arrow-up"/>SEND <small>KYC REQUIRED</small></button><button><Icon name="chart"/>{w.portfolio.toUpperCase()} <small>SPNX · USDT · POINTS</small></button></div>
+    <div className="nova-wallet-actions">
+      <button className={walletPanel === 'receive' ? 'selected' : ''} onClick={() => setWalletPanel('receive')}><Icon name="arrow-down"/>RECEIVE <small>{walletAsset === 'SPNX Points' ? 'POINTS INBOX' : 'COMING SOON'}</small></button>
+      <button className={walletPanel === 'send' ? 'selected' : ''} onClick={() => setWalletPanel('send')}><Icon name="arrow-up"/>SEND <small>KYC GATED</small></button>
+      <button className={walletPanel === 'history' ? 'selected' : ''} onClick={() => setWalletPanel('history')}><Icon name="chart"/>HISTORY <small>SERVER LEDGER</small></button>
+      <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>SECURITY <small>PIN PROTECTED</small></button>
+    </div>
+    <section className="nova-wallet-operation">
+      {walletPanel === 'overview' && <><small>WALLET COMMAND DECK</small><b>Choose an action to manage your NOVA Wallet.</b><p>Every asset, transfer request and security action is recorded through the server-authoritative SpaceNovaX ledger.</p></>}
+      {walletPanel === 'receive' && <><small>RECEIVE · {walletAsset.toUpperCase()}</small><b>{walletAsset === 'SPNX Points' ? 'SPNX Points are credited only by verified SpaceNovaX rewards.' : 'This asset is preparing for official launch.'}</b><p>{walletAsset === 'SPNX Points' ? 'Mining, mission and verified game rewards are automatically recorded in your balance. External deposits are not enabled.' : 'No external deposit address is issued until the live asset is officially activated.'}</p></>}
+      {walletPanel === 'send' && <><small>SEND · SECURITY GATE</small><b>KYC approval is required before any transfer can be opened.</b><p>After KYC launch, sending will require PIN confirmation and server-side risk validation. No asset can leave this Wallet before that approval.</p></>}
+      {walletPanel === 'history' && <><small>HISTORY · SERVER LEDGER</small><b>Your settled SPNX Points activity is protected on the server.</b><p>Mining, mission and game settlements appear in the activity ledger. Live token transactions will be added only after official asset activation.</p></>}
+      {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>Your Wallet is protected with a six-digit PIN.</b><p>Lock this session whenever you are finished. Never share a seed phrase, private key or PIN with anyone.</p><button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
+    </section>
     <div className="conversion-card conversion-locked"><div><b>{w.unlock}</b><p>KYC approval is required for SPNX Points transfers, Marketplace payments, future SPNX / USDT / SOL / USDC assets and withdrawals. Until then, this Wallet is view-only.</p></div><button disabled>KYC REQUIRED<Icon name="shield"/></button></div>
     <div className="wallet-form"><label>SOLANA WALLET ADDRESS · FUTURE SETTLEMENT</label><input readOnly value={wallet} placeholder="Connect Phantom or a compatible Solana wallet"/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{verifying ? 'VERIFYING SIGNATURE…' : user.walletVerified ? 'WALLET VERIFIED' : 'CONNECT & VERIFY WALLET'}</button><p className="privacy-note"><Icon name="shield" size={15}/>Never enter a seed phrase or private key. Supported assets and live price data activate only after the official launch.</p></div>
     {notice && <p className="module-notice">{notice}</p>}
