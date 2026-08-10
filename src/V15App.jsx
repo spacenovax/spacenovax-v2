@@ -564,7 +564,7 @@ function Splash({ done }) {
   return <div className={`v15-splash ${exit ? 'exit' : ''}`}>
     <div className="splash-nebula" /><div className="splash-stars-v15" />
     <div className="v15-mark">
-      <img src="/spacenovax-symbol.jpg" alt="SpaceNovaX" />
+      <img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" />
     </div>
     <div className="v15-splash-copy"><small>NOVA NETWORK PRESENTS</small><h1>SPACENOVA<span>X</span></h1><p>EXPLORE · MINE · EVOLVE</p></div>
     <div className="boot-line"><i /><span>NOVA CORE INITIALIZING</span></div>
@@ -575,7 +575,7 @@ function Header({ user, language, setLanguage, t, onPreview }) {
   const [open, setOpen] = useState(false);
   return <header className="v15-header">
     <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-      <img src="/spacenovax-symbol.jpg" alt="" /><span><b>SpaceNovaX</b><small>{t.tagline}</small></span>
+      <img src="/brand/spacenovax-symbol.jpg" alt="" /><span><b>SpaceNovaX</b><small>{t.tagline}</small></span>
     </button>
     <div className="header-actions">
       {PREVIEW_BUILD && <button className="preview-chip" onClick={onPreview}>{t.preview}</button>}
@@ -964,10 +964,10 @@ function Game({ user, t, language }) {
     </section>
     {gameOpen && <div className="game-fullscreen" role="dialog" aria-modal="true" aria-label="NOVA-X">
       <div className="game-fullscreen-bar">
-        <div><img src="/spacenovax-symbol.jpg" alt=""/><span><small>SPACENOVAX</small><b>NOVA-X</b></span></div>
+        <div><img src="/brand/spacenovax-symbol.jpg" alt=""/><span><small>SPACENOVAX</small><b>NOVA-X</b></span></div>
         <button onClick={closeGame} aria-label={language === 'ko' ? '게임 닫기' : 'Close game'}>×</button>
       </div>
-      {!loaded && <div className="game-loading game-fullscreen-loading"><img src="/spacenovax-symbol.jpg" alt=""/><b>CONNECTING TO FLIGHT SERVER</b><span><i/></span></div>}
+      {!loaded && <div className="game-loading game-fullscreen-loading"><img src="/brand/spacenovax-symbol.jpg" alt=""/><b>CONNECTING TO FLIGHT SERVER</b><span><i/></span></div>}
       {gameSyncStatus && <div className="game-sync-status" role="status">{gameSyncStatus}</div>}
       <iframe ref={gameFrameRef} title="SpaceNovaX official game" src={gameUrl} onLoad={() => setLoaded(true)} allow="autoplay; fullscreen; gamepad" />
     </div>}
