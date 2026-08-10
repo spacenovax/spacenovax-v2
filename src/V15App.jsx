@@ -1099,10 +1099,26 @@ function Community({ user, language, setTab }) {
     navigator.clipboard?.writeText(dashboard?.referralLink || '');
     setNotice(ko ? '함대 초대 링크를 복사했습니다.' : 'Fleet invitation link copied.');
   }
-  function shareInvite() {
+  async function shareInvite() {
     const url = dashboard?.referralLink || '';
-    if (navigator.share) navigator.share({ title: 'Join my SpaceNovaX Fleet', text: ko ? '나의 SpaceNovaX 함대에 합류하세요.' : 'Join my SpaceNovaX fleet.', url });
-    else copyInvite();
+    if (!url) return;
+    const active = Number(dashboard?.activeFleet || 0);
+    const limit = Number(dashboard?.referralLimit || user.fleetMaxMembers || 1000);
+    const bonus = Number(dashboard?.fleetBonus || user.fleetBonus || 0);
+    const text = ko
+      ? `나의 SpaceNovaX 함대에 합류하세요. 활성 추천인 ${active}/${limit}, 현재 채굴 속도 +${bonus}%`
+      : `Join my SpaceNovaX Fleet. Active referrals ${active}/${limit}; current mining speed bonus +${bonus}%.`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'SpaceNovaX · Explore · Earn · Beyond', text, url });
+        setNotice(ko ? '공유 카드 링크를 전송했습니다. 신규 캡틴이 공식 앱을 열면 추천이 자동 연결됩니다.' : 'Share card link sent. A new Captain is linked automatically after opening the official app.');
+      } else {
+        await navigator.clipboard?.writeText(url);
+        setNotice(ko ? '공유 카드 링크를 복사했습니다.' : 'Share card link copied.');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') setNotice(ko ? '공유를 완료하지 못했습니다. 링크를 복사해 다시 시도하세요.' : 'Could not complete sharing. Copy the link and try again.');
+    }
   }
   function explainCommunityFleet() {
     const text = ko
