@@ -293,3 +293,6 @@
 
 /* Fixed 3-second boot timeline: travel → lock → boot complete. */
 .v15-splash .v15-mark{animation-duration:2.55s!important}.v15-splash .v15-mark img{animation-duration:2.38s!important}.splash-comet-trail,.splash-arrival-flash{animation-duration:2.55s!important}.v15-splash .boot-line i{animation:bootProgress 2.8s cubic-bezier(.2,.75,.18,1) both}.v15-splash .boot-line span{animation:bootCaption 2.8s steps(1,end) both}@keyframes bootProgress{0%{width:0;opacity:.2}36%{width:18%;opacity:1}74%{width:68%}100%{width:100%;opacity:1}}@keyframes bootCaption{0%,30%{opacity:0}31%,69%{opacity:1}70%,100%{opacity:.82}}
+
+/* First-paint guard for Android/Telegram WebView: hide the mark until launch begins. */
+.v15-splash:not(.launching) .v15-mark,.v15-splash:not(.launching) .splash-comet-trail,.v15-splash:not(.launching) .splash-arrival-flash{opacity:0!important;animation-play-state:paused!important}.v15-splash.launching .v15-mark,.v15-splash.launching .v15-mark img,.v15-splash.launching .splash-comet-trail,.v15-splash.launching .splash-arrival-flash{animation-play-state:running!important}
