@@ -556,12 +556,16 @@ function Icon({ name, size = 22 }) {
 
 function Splash({ done }) {
   const [exit, setExit] = useState(false);
+  const [launching, setLaunching] = useState(false);
   useEffect(() => {
-    const a = setTimeout(() => setExit(true), 3000);
-    const b = setTimeout(done, 3350);
-    return () => { clearTimeout(a); clearTimeout(b); };
+    // Start only after the first paint: Android WebView otherwise skips the
+    // beginning of a CSS animation and shows only its final static frame.
+    const start = setTimeout(() => setLaunching(true), 180);
+    const a = setTimeout(() => setExit(true), 3200);
+    const b = setTimeout(done, 3550);
+    return () => { clearTimeout(start); clearTimeout(a); clearTimeout(b); };
   }, [done]);
-  return <div className={`v15-splash ${exit ? 'exit' : ''}`}>
+  return <div className={`v15-splash ${launching ? 'launching' : ''} ${exit ? 'exit' : ''}`}>
     <div className="splash-nebula" /><div className="splash-stars-v15" />
     <div className="splash-comet-trail"/><div className="splash-arrival-flash"/>
     <div className="v15-mark"><img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" /></div>
