@@ -1078,7 +1078,7 @@ function PreviewPanel({ open, close, t }) {
 
 function More({ t, setTab, language }) {
   const ko = language === 'ko';
-  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', ko ? '국제 네비게이션' : 'Global Navigation', 'globe'], ['community', t.community, 'community'], ['nodes', ko ? '커뮤니티 노드' : 'Community Node', 'bolt'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['nft', 'NOVA NFT Vault', 'mission'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
+  const cards = [['whitepaper', 'Whitepaper', 'mission'], ['orbit', ko ? '국제 네비게이션' : 'Global Navigation', 'globe'], ['community', t.community, 'community'], ['nodes', ko ? '커뮤니티 노드' : 'Community Node', 'bolt'], ['missions', t.missions, 'shield'], ['fleet', t.referrals, 'fleet'], ['rank', t.ranking, 'home'], ['wallet', t.wallet, 'wallet'], ['kyc', t.kyc, 'shield'], ['game', t.game, 'game']];
   return <main className="v15-page"><section className="command-card command-grid command-theme">
     <div className="section-heading"><div><small>NOVA OPERATIONS</small><h2>{t.command}</h2></div></div>
     <div className="module-grid">{cards.map(([id, label, icon]) => <button key={id} onClick={() => setTab(id)}><Icon name={icon}/><span><b>{label}</b><small>{id === 'wallet' ? (ko ? 'PIN 설정 · 보안 관리' : 'PIN SETUP · SECURITY') : 'Open module'}</small></span><Icon name="arrow" size={18}/></button>)}</div>
@@ -1373,14 +1373,15 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
     <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
     <div className="nova-wallet-hero"><div><small>{w.portfolio.toUpperCase()} · POINTS MODE</small><strong>{format(user.balance)} <em>SPNX POINTS</em></strong><p>{w.view}</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
     <div className="nova-asset-grid">
-      {[['SPNX','0.000000',w.coming,'🚀'],['USDT','0.00',w.coming,'◈'],['SPNX Points',format(user.balance),w.active,'✦']].map(([name,value,status,mark]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span>{mark}</span><small>{name}</small><b>{value}</b><i className={status === w.active ? 'active' : ''}>{status}</i></button>)}
+      {[['SPNX','0.000000',w.coming],['USDT','0.00',w.coming],['SPNX Points',format(user.balance),w.active]].map(([name,value,status]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span className={'asset-emblem ' + (name === 'SPNX' ? 'spnx' : name === 'USDT' ? 'usdt' : 'points')}>{name === 'SPNX' ? <img src="/brand/spacenovax-symbol.jpg" alt="SPNX" /> : name === 'USDT' ? '₮' : '✦'}</span><small>{name}</small><b>{value}</b><i className={status === w.active ? 'active' : ''}>{status}</i></button>)}
     </div>
     <div className="nova-wallet-actions">
       <button className={walletPanel === 'receive' ? 'selected' : ''} onClick={() => setWalletPanel('receive')}><Icon name="arrow-down"/>RECEIVE <small>{walletAsset === 'SPNX Points' ? 'POINTS INBOX' : 'COMING SOON'}</small></button>
       <button className={walletPanel === 'send' ? 'selected' : ''} onClick={() => setWalletPanel('send')}><Icon name="arrow-up"/>SEND <small>KYC GATED</small></button>
       <button className={walletPanel === 'history' ? 'selected' : ''} onClick={() => setWalletPanel('history')}><Icon name="chart"/>HISTORY <small>SERVER LEDGER</small></button>
+      <button className={walletPanel === 'swap' ? 'selected swap-command' : 'swap-command'} onClick={() => setWalletPanel('swap')}><Icon name="bolt"/>SWAP <small>KYC GATED</small></button>
+      <button className={walletPanel === 'nft' ? 'selected nft-command' : 'nft-command'} onClick={() => setWalletPanel('nft')}><Icon name="mission"/>NFT VAULT <small>INSIDE WALLET</small></button>
       <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>SECURITY <small>PIN PROTECTED</small></button>
-      <button className={walletPanel === 'nft' ? 'selected nft-command' : 'nft-command'} onClick={() => setWalletPanel('nft')}><Icon name="mission"/>NFT VAULT <small>RESERVED SPACE</small></button>
     </div>
     <section className="nova-wallet-operation">
       {walletPanel === 'overview' && <><small>WALLET COMMAND DECK</small><b>Choose an action to manage your NOVA Wallet.</b><p>Every asset, transfer request and security action is recorded through the server-authoritative SpaceNovaX ledger.</p></>}
@@ -1388,7 +1389,8 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       {walletPanel === 'send' && <><small>SEND · SECURITY GATE</small><b>KYC approval is required before any transfer can be opened.</b><p>After KYC launch, sending will require PIN confirmation and server-side risk validation. No asset can leave this Wallet before that approval.</p></>}
       {walletPanel === 'history' && <><small>HISTORY · SERVER LEDGER</small><b>Your settled SPNX Points activity is protected on the server.</b><p>Mining, mission and game settlements appear in the activity ledger. Live token transactions will be added only after official asset activation.</p></>}
       {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>Your Wallet is protected with a six-digit PIN.</b><p>Lock this session whenever you are finished. Never share a seed phrase, private key or PIN with anyone.</p><button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
-      {walletPanel === 'nft' && <><small>NOVA NFT VAULT · RESERVED</small><b>Your future collectibles, mission badges and game assets will live here.</b><p>The NFT Vault is reserved in the Wallet structure now. Minting, transfers and Marketplace trading remain disabled until the official network and KYC release.</p></>}
+      {walletPanel === 'swap' && <><small>SWAP · KYC SECURITY GATE</small><b>SPNX swap will activate only after KYC approval and official live-asset release.</b><p>Before then, no exchange rate, liquidity, quote or transfer can be executed. The final Swap flow will require PIN reconfirmation, KYC status, server validation and a signed transaction.</p></>}
+      {walletPanel === 'nft' && <><small>NOVA NFT VAULT · INSIDE NOVA WALLET</small><b>Your future collectibles, mission badges and game assets will live here.</b><p>The NFT Vault belongs inside NOVA Wallet. Minting, transfers and Marketplace trading remain disabled until the official network and KYC release.</p></>}
     </section>
     <div className="conversion-card conversion-locked"><div><b>{w.unlock}</b><p>KYC approval is required for SPNX Points transfers, Marketplace payments, future SPNX / USDT / SOL / USDC assets and withdrawals. Until then, this Wallet is view-only.</p></div><button disabled>KYC REQUIRED<Icon name="shield"/></button></div>
     <div className="wallet-form"><label>SOLANA WALLET ADDRESS · FUTURE SETTLEMENT</label><input readOnly value={wallet} placeholder="Connect Phantom or a compatible Solana wallet"/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{verifying ? 'VERIFYING SIGNATURE…' : user.walletVerified ? 'WALLET VERIFIED' : 'CONNECT & VERIFY WALLET'}</button><p className="privacy-note"><Icon name="shield" size={15}/>Never enter a seed phrase or private key. Supported assets and live price data activate only after the official launch.</p></div>
@@ -1642,7 +1644,7 @@ export default function V15App() {
   else if (tab === 'fleet') page = <Fleet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'whitepaper') page = <Whitepaper language={language}/>;
   else if (tab === 'rank') page = <Ranking user={user} t={t}/>;
-  else if (tab === 'wallet' || tab === 'nft') page = <Wallet user={user} setUser={setUser} t={t} language={language} initialPanel={tab === 'nft' ? 'nft' : 'overview'}/>;
+  else if (tab === 'wallet') page = <Wallet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'kyc') page = <Kyc t={t} language={language}/>;
   else page = <More t={t} setTab={setTab}/>;
   return <>
