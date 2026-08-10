@@ -557,8 +557,8 @@ function Icon({ name, size = 22 }) {
 function Splash({ done }) {
   const [exit, setExit] = useState(false);
   useEffect(() => {
-    const a = setTimeout(() => setExit(true), 3550);
-    const b = setTimeout(done, 4100);
+    const a = setTimeout(() => setExit(true), 3000);
+    const b = setTimeout(done, 3350);
     return () => { clearTimeout(a); clearTimeout(b); };
   }, [done]);
   return <div className={`v15-splash ${exit ? 'exit' : ''}`}>
