@@ -61,6 +61,20 @@ const COPY = {
   },
 };
 
+const WALLET_COPY = {
+  en: { assets: 'Assets', active: w.active, coming: w.coming, view: 'View-only until KYC approval', unlock: 'Complete KYC to activate transfers and all Wallet features', portfolio: 'Portfolio' },
+  ko: { assets: '자산', active: '활성', coming: '출시 예정', view: 'KYC 승인 전에는 조회 전용입니다', unlock: 'KYC 승인 후 송금과 모든 지갑 기능이 활성화됩니다', portfolio: '포트폴리오' },
+  ja: { assets: '資産', active: '有効', coming: '近日公開', view: 'KYC承認前は閲覧専用です', unlock: 'KYC承認後に送金と全機能が有効になります', portfolio: 'ポートフォリオ' },
+  zh: { assets: '资产', active: '已启用', coming: '即将推出', view: 'KYC 审核前仅可查看', unlock: 'KYC 审核后可启用转账及全部钱包功能', portfolio: '资产组合' },
+  es: { assets: 'Activos', active: 'ACTIVO', coming: 'PRÓXIMAMENTE', view: 'Solo consulta hasta la aprobación KYC', unlock: 'Completa KYC para activar transferencias y todas las funciones', portfolio: 'Cartera' },
+  pt: { assets: 'Ativos', active: 'ATIVO', coming: 'EM BREVE', view: 'Somente consulta até a aprovação KYC', unlock: 'Conclua o KYC para ativar transferências e todos os recursos', portfolio: 'Portfólio' },
+  de: { assets: 'Vermögen', active: 'AKTIV', coming: 'DEMNÄCHST', view: 'Nur Ansicht bis zur KYC-Genehmigung', unlock: 'KYC abschließen, um Überweisungen und alle Funktionen zu aktivieren', portfolio: 'Portfolio' },
+  fr: { assets: 'Actifs', active: 'ACTIF', coming: 'BIENTÔT DISPONIBLE', view: 'Consultation uniquement avant validation KYC', unlock: 'Terminez le KYC pour activer les transferts et toutes les fonctions', portfolio: 'Portefeuille' },
+  ru: { assets: 'Активы', active: 'АКТИВНО', coming: 'СКОРО', view: 'Только просмотр до одобрения KYC', unlock: 'Пройдите KYC для активации переводов и всех функций', portfolio: 'Портфель' },
+  vi: { assets: 'Tài sản', active: 'ĐANG HOẠT ĐỘNG', coming: 'SẮP RA MẮT', view: 'Chỉ xem cho đến khi KYC được phê duyệt', unlock: 'Hoàn tất KYC để kích hoạt chuyển tiền và mọi tính năng', portfolio: 'Danh mục' },
+  id: { assets: 'Aset', active: 'AKTIF', coming: 'SEGERA HADIR', view: 'Hanya lihat hingga KYC disetujui', unlock: 'Selesaikan KYC untuk mengaktifkan transfer dan semua fitur', portfolio: 'Portofolio' },
+};
+
 function getClientId() {
   const key = 'spnx_client_id_v1';
   let value = localStorage.getItem(key);
@@ -1286,7 +1300,7 @@ function Ranking({ user, t }) {
   </section></main>;
 }
 
-function Wallet({ user, setUser, t }) {
+function Wallet({ user, setUser, t, language }) {\n  const w = WALLET_COPY[language] || WALLET_COPY.en;
   const [wallet, setWallet] = useState(user.solanaWallet || '');
   const [notice, setNotice] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -1329,20 +1343,20 @@ function Wallet({ user, setUser, t }) {
       setVerifying(false);
     }
   }
-  if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme">
+  if (walletLocked && user.kyc?.status === 'approved') return <main className="v15-page"><section className="command-card ops-module wallet-theme">
     <div className="section-heading"><div><small>NOVA WALLET · SECURE ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Create 6-digit Wallet PIN'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>LOCKED</span></div>
     <p>Wallet access is protected. The app locks again when it moves to the background.</p>
     <div className="wallet-form"><label>6-DIGIT PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/><button disabled={walletBusy} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING…' : walletSecurity?.pinConfigured ? 'UNLOCK WALLET' : 'CREATE SECURE PIN'}</button></div>
     <p className="privacy-note">PIN is stored as a secure server hash, never as readable text. Five failed attempts trigger a 15-minute lock.</p>{notice && <p className="module-notice">{notice}</p>}
   </section></main>;
   return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-shell">
-    <div className="section-heading"><div><small>NOVA WALLET · ASSET COMMAND</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
-    <div className="nova-wallet-hero"><div><small>TOTAL PORTFOLIO · POINTS MODE</small><strong>{format(user.balance)} <em>SPNX POINTS</em></strong><p>Future digital-asset wallet. Your current balance is protected by server validation and Wallet PIN security.</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
+    <div className="section-heading"><div><small>NOVA WALLET · ${w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
+    <div className="nova-wallet-hero"><div><small>{w.portfolio.toUpperCase()} · POINTS MODE</small><strong>{format(user.balance)} <em>SPNX POINTS</em></strong><p>{w.view}</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
     <div className="nova-asset-grid">
       {[['SPNX','0.000000','COMING SOON','🚀'],['USDT','0.00','COMING SOON','◈'],['SPNX Points',format(user.balance),'ACTIVE','✦']].map(([name,value,status,mark]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span>{mark}</span><small>{name}</small><b>{value}</b><i className={status === 'ACTIVE' ? 'active' : ''}>{status}</i></button>)}
     </div>
-    <div className="nova-wallet-actions"><button disabled={walletAsset !== 'SPNX Points'}><Icon name="arrow-down"/>RECEIVE <small>{walletAsset === 'SPNX Points' ? 'KYC REQUIRED' : 'COMING SOON'}</small></button><button disabled><Icon name="arrow-up"/>SEND <small>KYC REQUIRED</small></button><button><Icon name="chart"/>PORTFOLIO <small>SPNX · USDT · POINTS</small></button></div>
-    <div className="conversion-card conversion-locked"><div><b>Complete KYC to unlock all NOVA Wallet features</b><p>KYC approval is required for SPNX Points transfers, Marketplace payments, future SPNX / USDT / SOL / USDC assets and withdrawals. Until then, this Wallet is view-only.</p></div><button disabled>KYC REQUIRED<Icon name="shield"/></button></div>
+    <div className="nova-wallet-actions"><button disabled={walletAsset !== 'SPNX Points'}><Icon name="arrow-down"/>RECEIVE <small>{walletAsset === 'SPNX Points' ? 'KYC REQUIRED' : 'COMING SOON'}</small></button><button disabled><Icon name="arrow-up"/>SEND <small>KYC REQUIRED</small></button><button><Icon name="chart"/>{w.portfolio.toUpperCase()} <small>SPNX · USDT · POINTS</small></button></div>
+    <div className="conversion-card conversion-locked"><div><b>{w.unlock}</b><p>KYC approval is required for SPNX Points transfers, Marketplace payments, future SPNX / USDT / SOL / USDC assets and withdrawals. Until then, this Wallet is view-only.</p></div><button disabled>KYC REQUIRED<Icon name="shield"/></button></div>
     <div className="wallet-form"><label>SOLANA WALLET ADDRESS · FUTURE SETTLEMENT</label><input readOnly value={wallet} placeholder="Connect Phantom or a compatible Solana wallet"/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{verifying ? 'VERIFYING SIGNATURE…' : user.walletVerified ? 'WALLET VERIFIED' : 'CONNECT & VERIFY WALLET'}</button><p className="privacy-note"><Icon name="shield" size={15}/>Never enter a seed phrase or private key. Supported assets and live price data activate only after the official launch.</p></div>
     {notice && <p className="module-notice">{notice}</p>}
   </section></main>;
@@ -1594,7 +1608,7 @@ export default function V15App() {
   else if (tab === 'fleet') page = <Fleet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'whitepaper') page = <Whitepaper language={language}/>;
   else if (tab === 'rank') page = <Ranking user={user} t={t}/>;
-  else if (tab === 'wallet') page = <Wallet user={user} setUser={setUser} t={t}/>;
+  else if (tab === 'wallet') page = <Wallet user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'kyc') page = <Kyc t={t} language={language}/>;
   else page = <More t={t} setTab={setTab}/>;
   return <>
