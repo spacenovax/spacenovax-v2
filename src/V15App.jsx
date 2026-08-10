@@ -62,7 +62,7 @@ const COPY = {
 };
 
 const WALLET_COPY = {
-  en: { assets: 'Assets', active: w.active, coming: w.coming, view: 'View-only until KYC approval', unlock: 'Complete KYC to activate transfers and all Wallet features', portfolio: 'Portfolio' },
+  en: { assets: 'Assets', active: 'Active', coming: 'Coming Soon', view: 'View-only until KYC approval', unlock: 'Complete KYC to activate transfers and all Wallet features', portfolio: 'Portfolio' },
   ko: { assets: '자산', active: '활성', coming: '출시 예정', view: 'KYC 승인 전에는 조회 전용입니다', unlock: 'KYC 승인 후 송금과 모든 지갑 기능이 활성화됩니다', portfolio: '포트폴리오' },
   ja: { assets: '資産', active: '有効', coming: '近日公開', view: 'KYC承認前は閲覧専用です', unlock: 'KYC承認後に送金と全機能が有効になります', portfolio: 'ポートフォリオ' },
   zh: { assets: '资产', active: '已启用', coming: '即将推出', view: 'KYC 审核前仅可查看', unlock: 'KYC 审核后可启用转账及全部钱包功能', portfolio: '资产组合' },
