@@ -82,7 +82,7 @@ async function api(path, options = {}) {
 function SymbolLogo() {
   return (
     <div className="symbol-logo">
-      <img src="/spacenovax-symbol.jpg" alt="SpaceNovaX" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+      <img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
       <span>X</span>
     </div>
   );
