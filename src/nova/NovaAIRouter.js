@@ -51,7 +51,15 @@ export class NovaAIRouter {
     const speakBrowser = () => this.browserSpeech.speak({ text, language, rate, onStart, onEnd, onError });
     const localEvent = event || this.localAudio.inferEvent(text);
     if (!localEvent) return speakBrowser();
-    this.localAudio.play(localEvent, { onStart, onEnd, onError: () => {} }).then((played) => { if (!played) speakBrowser(); });
+    // A local cue is optional. If it cannot start *or* fails after starting,
+    // continue with browser speech instead of leaving NOVA silent.
+    let fallbackStarted = false;
+    const fallback = () => {
+      if (fallbackStarted) return;
+      fallbackStarted = true;
+      speakBrowser();
+    };
+    this.localAudio.play(localEvent, { onStart, onEnd, onError: fallback }).then((played) => { if (!played) fallback(); });
     return true;
   }
 
