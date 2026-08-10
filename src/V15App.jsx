@@ -1310,6 +1310,8 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const [verifying, setVerifying] = useState(false);
   const [walletSecurity, setWalletSecurity] = useState(null);
   const [walletPin, setWalletPin] = useState('');
+  const [walletPinConfirm, setWalletPinConfirm] = useState('');
+  const [walletPinStep, setWalletPinStep] = useState('create');
   const [walletLocked, setWalletLocked] = useState(true);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletAsset, setWalletAsset] = useState('SPNX Points');
@@ -1317,12 +1319,25 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => setWalletSecurity(data.security)).catch(() => {}); }, []);
   useEffect(() => { setWalletPanel(initialPanel); }, [initialPanel]);
   useEffect(() => { const lock = () => setWalletLocked(true); const hidden = () => { if (document.hidden) lock(); }; document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', lock); return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', lock); }; }, []);
+  const isPinSetup = !walletSecurity?.pinConfigured;
+  const activePin = isPinSetup && walletPinStep === 'confirm' ? walletPinConfirm : walletPin;
+  const setActivePin = (next) => isPinSetup && walletPinStep === 'confirm' ? setWalletPinConfirm(next) : setWalletPin(next);
+  function pressWalletPin(key) {
+    setActivePin(key === 'CLEAR' ? '' : key === '⌫' ? activePin.slice(0, -1) : activePin.length < 6 ? activePin + key : activePin);
+  }
   async function unlockNOVAWallet() {
+    if (isPinSetup && walletPinStep === 'create') {
+      if (walletPin.length !== 6) return setNotice('Enter all six PIN digits first.');
+      setWalletPinStep('confirm'); setWalletPinConfirm(''); setNotice('Re-enter the same six digits to confirm your PIN.'); return;
+    }
+    if (isPinSetup && walletPin !== walletPinConfirm) {
+      setWalletPin(''); setWalletPinConfirm(''); setWalletPinStep('create'); setNotice('PINs did not match. Create your six-digit PIN again.'); return;
+    }
     setWalletBusy(true);
     try {
       const endpoint = walletSecurity?.pinConfigured ? '/api/nova-wallet/pin/unlock' : '/api/nova-wallet/pin/setup';
-      const data = await api(endpoint, { method: 'POST', body: { pin: walletPin } });
-      setWalletSecurity(data.security); setWalletPin(''); setWalletLocked(false); setNotice('NOVA Wallet security verified.');
+      const data = await api(endpoint, { method: 'POST', body: { pin: activePin } });
+      setWalletSecurity(data.security); setWalletPin(''); setWalletPinConfirm(''); setWalletPinStep('create'); setWalletLocked(false); setNotice('NOVA Wallet security verified.');
     } catch (error) { setNotice(error.message); } finally { setWalletBusy(false); }
   }
   async function requestWalletRecovery() {
@@ -1358,12 +1373,13 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   }
   if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-onboarding">
     <div className="wallet-security-scan"/><div className="section-heading"><div><small>NOVA WALLET · GENESIS ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Initialize NOVA Wallet'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>SECURE LOCK</span></div>
-    <p className="wallet-onboard-lead">{walletSecurity?.pinConfigured ? 'Enter your six-digit PIN to open your protected command deck.' : 'Create a six-digit PIN to activate your personal SpaceNovaX command deck.'}</p>
+    <p className="wallet-onboard-lead">{walletSecurity?.pinConfigured ? 'Enter your six-digit PIN to open your protected command deck.' : walletPinStep === 'confirm' ? 'Re-enter the same six-digit PIN. Your Wallet activates only after both entries match.' : 'Create a six-digit PIN to activate your personal SpaceNovaX command deck.'}</p>
     <div className="wallet-onboard-grid">
-      <div className="wallet-pin-console"><small>01 · SECURITY KEY</small><label>6-DIGIT NOVA PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/>
-        <div className="wallet-pin-slots">{Array.from({ length: 6 }, (_, index) => <i key={index} className={walletPin[index] ? 'filled' : ''}>{walletPin[index] ? '•' : ''}</i>)}</div>
-        <div className="wallet-pin-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','⌫'].map((key) => <button key={key} type="button" className={key === 'CLEAR' ? 'clear' : key === '⌫' ? 'back' : ''} onClick={() => setWalletPin((current) => key === 'CLEAR' ? '' : key === '⌫' ? current.slice(0,-1) : current.length < 6 ? current + key : current)}>{key}</button>)}</div>
-        <button className="wallet-primary-launch" disabled={walletBusy || walletPin.length !== 6} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING SECURE ACCESS…' : walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : 'ACTIVATE NOVA WALLET'}</button>
+      <div className="wallet-pin-console"><small>{walletSecurity?.pinConfigured ? '01 · SECURITY KEY' : walletPinStep === 'confirm' ? '02 · CONFIRM SECURITY KEY' : '01 · CREATE SECURITY KEY'}</small><label>{walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : walletPinStep === 'confirm' ? 'CONFIRM 6-DIGIT NOVA PIN' : 'CREATE 6-DIGIT NOVA PIN'}</label><input inputMode="numeric" type="password" maxLength="6" value={activePin} onChange={(e) => setActivePin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/>
+        <div className="wallet-pin-slots">{Array.from({ length: 6 }, (_, index) => <i key={index} className={activePin[index] ? 'filled' : ''}>{activePin[index] ? '•' : ''}</i>)}</div>
+        {isPinSetup && <div className="wallet-pin-stage"><i className={walletPinStep === 'create' ? 'active' : ''}>1</i><span/><i className={walletPinStep === 'confirm' ? 'active' : ''}>2</i><b>{walletPinStep === 'confirm' ? 'CONFIRM PIN' : 'CREATE PIN'}</b></div>}
+        <div className="wallet-pin-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','⌫'].map((key) => <button key={key} type="button" className={key === 'CLEAR' ? 'clear' : key === '⌫' ? 'back' : ''} onClick={() => pressWalletPin(key)}>{key}</button>)}</div>
+        <button className="wallet-primary-launch" disabled={walletBusy || activePin.length !== 6} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING SECURE ACCESS…' : walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : walletPinStep === 'confirm' ? 'CONFIRM & ACTIVATE WALLET' : 'CONTINUE TO CONFIRM PIN'}</button>
       </div>
       <aside className="wallet-genesis-preview"><small>WALLET ECOSYSTEM</small><div><Icon name="wallet" size={28}/><b>SPNX Points</b><span>ACTIVE LEDGER</span></div><div><Icon name="mission" size={28}/><b>NOVA NFT Vault</b><span>COMING SOON</span></div><p>KYC is required only for transfers, withdrawals, Marketplace payments and live assets. Wallet access and PIN setup are available to every Captain.</p></aside>
     </div>
