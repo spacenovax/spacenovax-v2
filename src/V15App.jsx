@@ -557,12 +557,13 @@ function Icon({ name, size = 22 }) {
 function Splash({ done }) {
   const [exit, setExit] = useState(false);
   useEffect(() => {
-    const a = setTimeout(() => setExit(true), 2300);
-    const b = setTimeout(done, 2850);
+    const a = setTimeout(() => setExit(true), 3550);
+    const b = setTimeout(done, 4100);
     return () => { clearTimeout(a); clearTimeout(b); };
   }, [done]);
   return <div className={`v15-splash ${exit ? 'exit' : ''}`}>
     <div className="splash-nebula" /><div className="splash-stars-v15" />
+    <div className="splash-comet-trail"/><div className="splash-arrival-flash"/>
     <div className="v15-mark"><img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" /></div>
     <div className="v15-splash-copy"><small>NOVA NETWORK PRESENTS</small><h1>SPACENOVA<span>X</span></h1><p>EXPLORE · MINE · EVOLVE</p></div>
     <div className="boot-line"><i /><span>NOVA CORE INITIALIZING</span></div>
