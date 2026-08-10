@@ -3042,6 +3042,12 @@ function escapeHtml(value = '') {
 // This route deliberately does not mutate referral data. Link crawlers from
 // KakaoTalk/Telegram must never count as people. The recipient is linked only
 // after opening the signed Telegram start link and creating a new account.
+app.get('/brand/spacenovax-symbol.jpg', (req, res) => {
+  const encoded = fs.readFileSync(path.join(__dirname, 'brand-symbol.base64'), 'utf8').trim();
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.type('jpeg').send(Buffer.from(encoded, 'base64'));
+});
+
 app.get('/spacenovax-referral-card.jpg', (req, res) => {
   const encoded = fs.readFileSync(path.join(__dirname, 'referral-card.base64'), 'utf8').trim();
   res.setHeader('Cache-Control', 'public, max-age=86400');
