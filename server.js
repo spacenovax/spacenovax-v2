@@ -40,7 +40,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data.json');
 // Public share links must resolve to this server so KakaoTalk and Telegram can
 // read the Open Graph card before a Captain opens the Telegram Mini App.
-const PUBLIC_APP_ORIGIN = String(process.env.PUBLIC_APP_ORIGIN || 'https://spacenovax-v2.onrender.com').replace(/\/$/, '');
+const PUBLIC_APP_ORIGIN = String(process.env.PUBLIC_APP_ORIGIN || 'https://app.spacenovax.com').replace(/\/$/, '');
 const REFERRAL_HARD_LIMIT = 1000;
 const COMMUNITY_MEDIA_DIR = process.env.COMMUNITY_MEDIA_DIR || path.join(__dirname, 'community-media');
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
