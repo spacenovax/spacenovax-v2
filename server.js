@@ -1469,10 +1469,10 @@ app.post('/api/fleet/security-circle', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   if (!requireVerifiedCaptain(user, res)) return;
-  if (!data.settings?.kycEnabled) return res.status(409).json({ ok: false, message: 'KYC and Security Circle activation are coming soon.' });
+  // Legacy endpoint: never allow a one-sided addition. New connections must be
+  // created through the mutual invitation workflow above.
   const member = data.users[String(req.body?.userId || '')];
-  if (!member || member.referredBy !== user.id) return res.status(403).json({ ok: false, message: 'Select a member from your direct fleet.' });
-  if (String(member.kyc?.status || '').toLowerCase() !== 'approved') return res.status(409).json({ ok: false, message: 'Security Circle requires a KYC-approved member.' });
+  if (!member || !(user.securityCircle || []).includes(member.id) || !(member.securityCircle || []).includes(user.id)) return res.status(403).json({ ok: false, message: 'Use a mutually approved Security Circle invitation first.' });
   user.securityCircle ||= [];
   const removing = user.securityCircle.includes(member.id);
   if (!removing && user.securityCircle.length >= 5) return res.status(409).json({ ok: false, message: 'Security Circle is limited to five members.' });
