@@ -1290,6 +1290,20 @@ function Wallet({ user, setUser, t }) {
   const [wallet, setWallet] = useState(user.solanaWallet || '');
   const [notice, setNotice] = useState('');
   const [verifying, setVerifying] = useState(false);
+  const [walletSecurity, setWalletSecurity] = useState(null);
+  const [walletPin, setWalletPin] = useState('');
+  const [walletLocked, setWalletLocked] = useState(true);
+  const [walletBusy, setWalletBusy] = useState(false);
+  useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => setWalletSecurity(data.security)).catch(() => {}); }, []);
+  useEffect(() => { const lock = () => setWalletLocked(true); const hidden = () => { if (document.hidden) lock(); }; document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', lock); return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', lock); }; }, []);
+  async function unlockNOVAWallet() {
+    setWalletBusy(true);
+    try {
+      const endpoint = walletSecurity?.pinConfigured ? '/api/nova-wallet/pin/unlock' : '/api/nova-wallet/pin/setup';
+      const data = await api(endpoint, { method: 'POST', body: { pin: walletPin } });
+      setWalletSecurity(data.security); setWalletPin(''); setWalletLocked(false); setNotice('NOVA Wallet security verified.');
+    } catch (error) { setNotice(error.message); } finally { setWalletBusy(false); }
+  }
   async function connectAndVerify() {
     if (PREVIEW_BUILD) return setNotice('Preview validation passed. No production wallet was changed.');
     const provider = window.solana;
@@ -1314,6 +1328,12 @@ function Wallet({ user, setUser, t }) {
       setVerifying(false);
     }
   }
+  if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme">
+    <div className="section-heading"><div><small>NOVA WALLET · SECURE ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Create 6-digit Wallet PIN'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>LOCKED</span></div>
+    <p>Wallet access is protected. The app locks again when it moves to the background.</p>
+    <div className="wallet-form"><label>6-DIGIT PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/><button disabled={walletBusy} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING…' : walletSecurity?.pinConfigured ? 'UNLOCK WALLET' : 'CREATE SECURE PIN'}</button></div>
+    <p className="privacy-note">PIN is stored as a secure server hash, never as readable text. Five failed attempts trigger a 15-minute lock.</p>{notice && <p className="module-notice">{notice}</p>}
+  </section></main>;
   return <main className="v15-page"><section className="command-card ops-module wallet-theme">
     <div className="section-heading"><div><small>SPNX SECURE VAULT</small><h2>{t.wallet}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>PROTECTED</span></div>
     <div className="vault-balance"><small>AVAILABLE SPNX POINTS</small><strong>{format(user.balance)}</strong><span>Conversion rate at official conversion window: 1 Point = 1 SPNX</span></div>
