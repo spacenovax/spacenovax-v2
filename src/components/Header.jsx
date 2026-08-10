@@ -2,7 +2,7 @@ export default function Header({ user }) {
   return (
     <header className="header">
       <div className="header-row">
-        <img className="official-logo" src="/spnx-official-logo.jpg" alt="SPNX" />
+        <img className="official-logo" src="/brand/spacenovax-symbol.jpg" alt="SPNX" />
         <div className="brand">
           <h1>SpaceNovaX <span className="version">V6</span></h1>
           <p>Explore. Earn. Beyond.</p>
