@@ -59,8 +59,8 @@ export class BrowserSpeechProvider {
         const utterance = new this.Utterance(value);
         utterance.lang = voice?.lang || NOVA_SPEECH_LOCALES[normalizeNOVAFontLanguage(language)]; utterance.voice = voice || null; utterance.rate = rate; utterance.pitch = 1; utterance.volume = 1;
         let started = false;
-        const retryOrFail = (reason) => { if (request !== this.speechRequest) return; if (attempt === 0) return schedule(() => play(1), 180); onError?.(reason || 'speech-error'); };
-        const watchdog = window.setTimeout(() => { this.pendingTimers.delete(watchdog); if (!started) { this.synthesis.cancel(); retryOrFail('speech-timeout'); } }, 3200);
+        const retryOrFail = (reason) => { if (request !== this.speechRequest) return; if (attempt < 2) return schedule(() => play(attempt + 1), attempt === 0 ? 120 : 420); onError?.(reason || 'speech-error'); };
+        const watchdog = window.setTimeout(() => { this.pendingTimers.delete(watchdog); if (!started) { this.synthesis.cancel(); retryOrFail('speech-timeout'); } }, 2200);
         this.pendingTimers.add(watchdog);
         utterance.onstart = () => { started = true; clearTimeout(watchdog); this.pendingTimers.delete(watchdog); onStart?.(); };
         utterance.onend = () => { clearTimeout(watchdog); this.pendingTimers.delete(watchdog); onEnd?.(); };
@@ -68,7 +68,7 @@ export class BrowserSpeechProvider {
         this.synthesis.resume?.(); this.synthesis.speak(utterance);
       } catch (error) { retryOrFail(error?.message); }
     };
-    try { this.synthesis.cancel(); this.unlock(); schedule(() => play(), 70); return true; }
+    // Keep this call synchronous with the user's tap. Delaying it by even a few\n    // milliseconds loses playback permission in Telegram Android and iOS WebViews.\n    try { this.synthesis.cancel(); this.unlock(); play(); return true; }
     catch (error) { onError?.(error?.message || 'speech-error'); return false; }
   }
 
