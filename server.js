@@ -2633,6 +2633,31 @@ app.post('/api/nova-wallet/pin/unlock', (req, res) => {
   res.json({ ok: true, security: publicWalletSecurity(user) });
 });
 
+app.post('/api/nova-wallet/recovery/request', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const security = novaWalletSecurity(user);
+  if (!security.pinHash) return res.status(400).json({ ok: false, message: 'Create a Wallet PIN first.' });
+  if (!security.recoveryAvailableAt) {
+    security.recoveryRequestedAt = now();
+    security.recoveryAvailableAt = now() + 24 * 60 * 60 * 1000;
+    data.events.push({ type: 'nova_wallet_recovery_requested', userId: user.id, at: now(), availableAt: security.recoveryAvailableAt });
+    writeData(data);
+  }
+  res.json({ ok: true, recoveryAvailableAt: security.recoveryAvailableAt, message: 'Recovery protection period has started.' });
+});
+app.post('/api/nova-wallet/recovery/confirm', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const security = novaWalletSecurity(user);
+  if (!security.recoveryAvailableAt || Number(security.recoveryAvailableAt) > now()) return res.status(403).json({ ok: false, message: 'Recovery protection period is not complete.', recoveryAvailableAt: security.recoveryAvailableAt || 0 });
+  user.novaWalletSecurityArchives ||= [];
+  user.novaWalletSecurityArchives.push({ archivedAt: now(), reason: 'pin_forgotten_new_wallet', profileId: crypto.randomUUID() });
+  user.novaWalletSecurity = { pinHash: '', pinSalt: '', failedAttempts: 0, lockedUntil: 0, lastUnlockedAt: 0, recoveryRequestedAt: 0, recoveryAvailableAt: 0 };
+  data.events.push({ type: 'nova_wallet_new_profile_created', userId: user.id, at: now() });
+  writeData(data); res.json({ ok: true, security: publicWalletSecurity(user), message: 'New Wallet security profile created.' });
+});
+
 app.post('/api/wallet/challenge', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
