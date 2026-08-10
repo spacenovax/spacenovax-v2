@@ -1319,6 +1319,13 @@ function Wallet({ user, setUser, t, language }) {\n  const w = WALLET_COPY[langu
       setWalletSecurity(data.security); setWalletPin(''); setWalletLocked(false); setNotice('NOVA Wallet security verified.');
     } catch (error) { setNotice(error.message); } finally { setWalletBusy(false); }
   }
+  async function requestWalletRecovery() {
+    try {
+      const data = await api('/api/nova-wallet/recovery/request', { method: 'POST', body: {} });
+      const ready = new Date(data.recoveryAvailableAt).toLocaleString();
+      setNotice('Recovery protection started. You can create a new Wallet security profile after ' + ready + '. Keep your PIN and recovery access safe.');
+    } catch (error) { setNotice(error.message); }
+  }
   async function connectAndVerify() {
     if (PREVIEW_BUILD) return setNotice('Preview validation passed. No production wallet was changed.');
     const provider = window.solana;
@@ -1347,7 +1354,7 @@ function Wallet({ user, setUser, t, language }) {\n  const w = WALLET_COPY[langu
     <div className="section-heading"><div><small>NOVA WALLET · SECURE ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Create 6-digit Wallet PIN'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>LOCKED</span></div>
     <p>Set up or unlock your Wallet with PIN now. KYC is required only for transfers, withdrawals, Marketplace payments and live assets.</p>
     <div className="wallet-form"><label>6-DIGIT PIN</label><input inputMode="numeric" type="password" maxLength="6" value={walletPin} onChange={(e) => setWalletPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/><button disabled={walletBusy} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING…' : walletSecurity?.pinConfigured ? 'UNLOCK WALLET' : 'CREATE SECURE PIN'}</button></div>
-    <p className="privacy-note">PIN is stored as a secure server hash, never as readable text. Five failed attempts trigger a 15-minute lock.</p>{notice && <p className="module-notice">{notice}</p>}
+    <p className="privacy-note">Keep your PIN and account access safe. If forgotten, a verified Captain can request a protected new Wallet profile; the prior Wallet profile is archived and cannot be reopened.</p><button className="wallet-recovery-link" onClick={requestWalletRecovery}>FORGOT PIN? CREATE A NEW WALLET</button>{notice && <p className="module-notice">{notice}</p>}
   </section></main>;
   return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-shell">
     <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
