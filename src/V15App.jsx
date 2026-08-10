@@ -1300,7 +1300,8 @@ function Ranking({ user, t }) {
   </section></main>;
 }
 
-function Wallet({ user, setUser, t, language }) {\n  const w = WALLET_COPY[language] || WALLET_COPY.en;
+function Wallet({ user, setUser, t, language }) {
+  const w = WALLET_COPY[language] || WALLET_COPY.en;
   const [wallet, setWallet] = useState(user.solanaWallet || '');
   const [notice, setNotice] = useState('');
   const [verifying, setVerifying] = useState(false);
