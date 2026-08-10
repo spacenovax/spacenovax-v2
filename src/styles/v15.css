@@ -280,3 +280,13 @@
 @keyframes haloIgnition{0%{opacity:0;transform:scale(.15) rotate(-90deg)}52%{opacity:1;transform:scale(1.42) rotate(12deg)}100%{opacity:.72;transform:scale(1) rotate(0)}}
 @keyframes copyArrival{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.v15-splash .v15-mark,.v15-splash .v15-mark img,.v15-splash .mark-halo,.v15-splash .v15-splash-copy,.v15-splash .boot-line{animation:none!important}}
+
+/* Long-form meteor arrival: visible for the full launch beat before the mark locks in. */
+.v15-splash .v15-mark{animation:meteorMarkArrival 2.25s cubic-bezier(.12,.74,.22,1) both!important}
+.v15-splash .v15-mark img{animation:meteorSymbolSpin 2.12s cubic-bezier(.14,.76,.2,1) both!important}
+.splash-comet-trail{position:absolute;z-index:2;left:50%;top:39%;width:520px;height:22px;transform-origin:right center;background:linear-gradient(90deg,transparent 0%,rgba(32,125,255,.05) 28%,rgba(80,223,255,.4) 73%,rgba(239,255,255,.98) 100%);filter:blur(2px);border-radius:999px;opacity:0;animation:meteorTrail 2.25s ease-out both;pointer-events:none}.splash-arrival-flash{position:absolute;z-index:2;left:50%;top:39%;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 18px 8px #b9faff,0 0 90px 34px #188dff;opacity:0;animation:meteorFlash 2.25s ease-out both;pointer-events:none}
+@keyframes meteorMarkArrival{0%{opacity:0;transform:translate(260px,-180px) scale(.08) rotate(-540deg)}22%{opacity:1;transform:translate(184px,-126px) scale(.2) rotate(-430deg)}68%{opacity:1;transform:translate(-15px,10px) scale(1.2) rotate(16deg)}82%{transform:translate(5px,-3px) scale(.94) rotate(-4deg)}100%{opacity:1;transform:translate(0) scale(1) rotate(0)}}
+@keyframes meteorSymbolSpin{0%{filter:brightness(3) saturate(2);transform:rotate(720deg) scale(.65)}65%{filter:brightness(1.6) saturate(1.4);transform:rotate(72deg) scale(1.08)}100%{filter:brightness(1);transform:rotate(0) scale(1)}}
+@keyframes meteorTrail{0%,12%{opacity:0;transform:translate(-650px,-250px) rotate(-35deg) scaleX(.1)}25%{opacity:.85;transform:translate(-440px,-164px) rotate(-35deg) scaleX(.42)}70%{opacity:.7;transform:translate(-115px,-36px) rotate(-35deg) scaleX(1)}100%{opacity:0;transform:translate(-15px,0) rotate(-35deg) scaleX(.2)}}
+@keyframes meteorFlash{0%,58%{opacity:0;transform:translate(-50%,-50%) scale(.1)}70%{opacity:1;transform:translate(-50%,-50%) scale(2.8)}100%{opacity:0;transform:translate(-50%,-50%) scale(6)}}
+@media(prefers-reduced-motion:reduce){.v15-splash .v15-mark,.v15-splash .v15-mark img,.splash-comet-trail,.splash-arrival-flash{animation:none!important}}
