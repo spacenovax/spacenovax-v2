@@ -55,6 +55,12 @@ const biometricOptions = await request('/api/nova-wallet/biometric/register/opti
   headers,
   body: '{}',
 });
+const rejectedBiometric = await fetch(`${base}/api/nova-wallet/biometric/register/verify`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ challengeId: biometricOptions.challengeId, response: {} }),
+});
+const rejectedBiometricBody = await rejectedBiometric.json();
 const keypair = nacl.sign.keyPair();
 const wallet = bs58.encode(keypair.publicKey);
 const challenge = await request('/api/wallet/challenge', {
@@ -133,6 +139,7 @@ const result = {
   freshSession: Boolean(session.user?.id),
   walletPinSecured: Boolean(walletPin.security?.pinConfigured),
   biometricOptionsSecured: Boolean(biometricOptions.challengeId && biometricOptions.options?.challenge && biometricOptions.options?.authenticatorSelection?.userVerification === 'required'),
+  biometricFailureRejected: rejectedBiometric.status === 400 && /not changed/i.test(rejectedBiometricBody.message || ''),
   walletVerified: Boolean(verification.user?.walletVerified),
   missionUrlPersisted: missions.missions.find((item) => item.id === 'telegram')?.url === originalUrl,
   cancelRelease: queue.queue.find((item) => item.id === requestId)?.status === 'cancelled',
