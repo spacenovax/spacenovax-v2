@@ -24,7 +24,7 @@ function AdminLogin({ onLogin }) {
       setToken(data.token); onLogin(data.admin);
     } catch (error) { setNotice(error.message); }
   }
-  return <section className="admin-login glass"><div className="admin-login-logo"><img src="/spnx-official-logo.jpg" alt="SPNX" /></div><h2>SpaceNovaX Admin</h2><p>{notice}</p><form onSubmit={login}><input placeholder="Admin ID" value={form.id} onChange={(e)=>setForm({...form,id:e.target.value})}/><input placeholder="Password" type="password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/><button type="submit">Login</button></form></section>;
+  return <section className="admin-login glass"><div className="admin-login-logo"><img src="/brand/spacenovax-symbol.jpg" alt="SPNX" /></div><h2>SpaceNovaX Admin</h2><p>{notice}</p><form onSubmit={login}><input placeholder="Admin ID" value={form.id} onChange={(e)=>setForm({...form,id:e.target.value})}/><input placeholder="Password" type="password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/><button type="submit">Login</button></form></section>;
 }
 
 function RiskBadge({ risk }) {
