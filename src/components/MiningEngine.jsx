@@ -32,7 +32,7 @@ export default function MiningEngine({ user, onStart, onClaim, loading }) {
       </div>
 
       <div className="mining-ship-wrap">
-        <img className={isActive ? 'mining-ship mining-on' : 'mining-ship'} src="/spnx-official-logo.jpg" alt="SPNX" />
+        <img className={isActive ? 'mining-ship mining-on' : 'mining-ship'} src="/brand/spacenovax-symbol.jpg" alt="SPNX" />
         <div className={isActive ? 'engine-flame engine-on' : 'engine-flame'} />
       </div>
 
