@@ -38,6 +38,10 @@ app.use((req, res, next) => {
 });
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data.json');
+// Public share links must resolve to this server so KakaoTalk and Telegram can
+// read the Open Graph card before a Captain opens the Telegram Mini App.
+const PUBLIC_APP_ORIGIN = String(process.env.PUBLIC_APP_ORIGIN || 'https://spacenovax-v2.onrender.com').replace(/\/$/, '');
+const REFERRAL_HARD_LIMIT = 1000;
 const COMMUNITY_MEDIA_DIR = process.env.COMMUNITY_MEDIA_DIR || path.join(__dirname, 'community-media');
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const { Pool } = pg;
@@ -425,10 +429,15 @@ function findUserByReferralCode(data, code = '') {
   return Object.values(data.users || {}).find((user) => String(user.referralCode || makeReferralCode(user.id)).toUpperCase() === normalized);
 }
 
+function fleetReferralLimit(data) {
+  // The program policy is a hard cap: configuration must never raise it above 1,000.
+  const configured = Number(data?.settings?.fleetMaxMembers ?? REFERRAL_HARD_LIMIT);
+  return Math.max(0, Math.min(REFERRAL_HARD_LIMIT, Math.floor(configured)));
+}
+
 function fleetBonusPercent(activeFleet, data) {
-  const perMember = Number(data?.settings?.fleetBonusPerActiveReferral ?? 5);
-  const maxMembers = Number(data?.settings?.fleetMaxMembers ?? 1000);
-  return Math.max(0, Math.min(maxMembers, Number(activeFleet || 0))) * perMember;
+  const perMember = Math.max(0, Number(data?.settings?.fleetBonusPerActiveReferral ?? 5));
+  return Math.max(0, Math.min(fleetReferralLimit(data), Number(activeFleet || 0))) * perMember;
 }
 
 function fleetGrade(activeFleet) {
@@ -442,8 +451,12 @@ function fleetGrade(activeFleet) {
 }
 
 function getActiveFleetCount(data, userId) {
-  const cutoff = now() - 7 * 24 * 60 * 60 * 1000;
-  return Object.values(data.users).filter((u) => u.referredBy === userId && (u.lastMiningAt || 0) >= cutoff).length;
+  const activeDays = Math.max(1, Math.min(30, Number(data?.settings?.activeFleetDays ?? 7)));
+  const cutoff = now() - activeDays * 24 * 60 * 60 * 1000;
+  return Math.min(
+    fleetReferralLimit(data),
+    Object.values(data.users).filter((u) => u.referredBy === userId && (u.lastMiningAt || 0) >= cutoff).length,
+  );
 }
 
 const HALVING_CAPTAINS_PER_STEP = 10_000;
@@ -478,8 +491,11 @@ function ensureUser(data, telegramUser, referralCode = '') {
   const userId = tUser.id;
 
   if (!data.users[userId]) {
-    const referralOwner = referralCode ? findUserByReferralCode(data, referralCode) || data.users[referralCode] : null;
-    const referrer = referralOwner?.id || null;
+    const referralOwner = referralCode ? findUserByReferralCode(data, referralCode) : null;
+    const referralAtCapacity = Boolean(referralOwner && (referralOwner.referrals || []).length >= fleetReferralLimit(data));
+    // A referral is assigned once, only for a new Captain, never to oneself,
+    // and never after the inviter reaches the policy cap.
+    const referrer = referralOwner && referralOwner.id !== userId && !referralAtCapacity ? referralOwner.id : null;
     data.users[userId] = {
       ...tUser,
       balance: 0,
@@ -503,7 +519,13 @@ function ensureUser(data, telegramUser, referralCode = '') {
       if (!data.users[referrer].referrals.includes(userId)) data.users[referrer].referrals.push(userId);
     }
 
-    data.events.push({ type: 'user_created', userId, referredBy: referrer, at: now() });
+    data.events.push({
+      type: referralAtCapacity ? 'user_created_referral_capacity_reached' : 'user_created',
+      userId,
+      referredBy: referrer,
+      referralCode: referralCode ? String(referralCode).toUpperCase().slice(0, 32) : '',
+      at: now()
+    });
   } else {
     data.users[userId] = { ...data.users[userId], ...tUser, updatedAt: now() };
   }
@@ -749,14 +771,25 @@ function recoverGuestCaptain(data, telegramUser, clientId) {
   return data.users[captainId];
 }
 
+function verifiedTelegramStartParam(req, telegramUser) {
+  if (!telegramUser?.id) return '';
+  try {
+    const startParam = new URLSearchParams(String(req.headers['x-telegram-init-data'] || '')).get('start_param') || '';
+    return String(startParam).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  } catch {
+    return '';
+  }
+}
+
 function getSessionUser(req, data) {
   const telegramUser = verifiedTelegramUser(req);
   const clientId = String(req.headers['x-spnx-client-id'] || req.body?.clientId || '');
   const recoveredUser = recoverGuestCaptain(data, telegramUser, clientId);
   if (recoveredUser) return recoveredUser;
   const fallbackUser = IS_PRODUCTION ? { clientId } : (req.body?.telegramUser || { clientId });
-  const user = ensureUser(data, telegramUser || fallbackUser, req.body?.ref || req.query?.ref || '');
-  return user;
+  // The signed Telegram start_param is preferred over any client-supplied field.
+  const referralCode = verifiedTelegramStartParam(req, telegramUser) || req.body?.ref || req.query?.ref || '';
+  return ensureUser(data, telegramUser || fallbackUser, referralCode);
 }
 
 function requireVerifiedCaptain(user, res) {
@@ -1455,8 +1488,10 @@ app.post('/api/community/dashboard', (req, res) => {
     ok: true,
     dashboard: {
       referralCode: user.referralCode || makeReferralCode(user.id),
-      referralLink: `https://t.me/SpaceNovaXBot?start=${user.referralCode || makeReferralCode(user.id)}`,
-      totalInvites: (user.referrals || []).length,
+      referralLink: `${PUBLIC_APP_ORIGIN}/join/${user.referralCode || makeReferralCode(user.id)}`,
+      telegramReferralLink: `https://t.me/SpaceNovaXBot?start=${user.referralCode || makeReferralCode(user.id)}`,
+      totalInvites: Math.min(fleetReferralLimit(data), (user.referrals || []).length),
+      referralLimit: fleetReferralLimit(data),
       activeFleet,
       fleetBonus: fleetBonusPercent(activeFleet, data),
       fleetRank: fleetRankIndex >= 0 ? fleetRankIndex + 1 : null,
@@ -2847,6 +2882,31 @@ async function runAutomaticPayoutWorker() {
 const distPath = path.join(__dirname, 'dist');
 fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
 app.use('/community-media', express.static(COMMUNITY_MEDIA_DIR, { fallthrough: false, maxAge: '7d', immutable: false }));
+
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+}
+
+// This route deliberately does not mutate referral data. Link crawlers from
+// KakaoTalk/Telegram must never count as people. The recipient is linked only
+// after opening the signed Telegram start link and creating a new account.
+app.get('/join/:code', (req, res) => {
+  const code = String(req.params.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  const data = readData();
+  const referrer = code ? findUserByReferralCode(data, code) : null;
+  if (!referrer) return res.status(404).send('SpaceNovaX invitation not found.');
+  const inviter = escapeHtml(referrer.firstName || 'a SpaceNovaX Captain');
+  const shareUrl = `${PUBLIC_APP_ORIGIN}/join/${code}`;
+  const telegramUrl = `https://t.me/SpaceNovaXBot?start=${code}`;
+  const imageUrl = `${PUBLIC_APP_ORIGIN}/spacenovax-orbital-hq-v15.png`;
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.type('html').send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpaceNovaX Fleet Invitation</title><meta name="description" content="${inviter} Captain invites you to explore, earn and build beyond with SpaceNovaX.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="SpaceNovaX"><meta property="og:title" content="Join ${inviter}'s SpaceNovaX Fleet"><meta property="og:description" content="Explore · Earn · Beyond. Open the official SpaceNovaX invitation."><meta property="og:url" content="${shareUrl}"><meta property="og:image" content="${imageUrl}"><meta property="og:image:alt" content="SpaceNovaX — Explore, Earn, Beyond">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Join ${inviter}'s SpaceNovaX Fleet"><meta name="twitter:description" content="Explore · Earn · Beyond."><meta name="twitter:image" content="${imageUrl}">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#020714;color:#eff8ff;font:16px system-ui,-apple-system,sans-serif}.card{width:min(92vw,460px);padding:30px;border:1px solid #19d6ff;border-radius:24px;background:#071426;box-shadow:0 0 42px #0aa8e855;text-align:center}.brand{color:#21d6ff;letter-spacing:.16em;font-weight:800}.code{font-size:30px;font-weight:900;letter-spacing:.1em}.open{display:block;margin:24px 0 8px;padding:16px;border-radius:14px;background:linear-gradient(100deg,#1674ff,#19d6ff);color:white;text-decoration:none;font-weight:800}</style></head><body><main class="card"><p class="brand">SPACENOVAX</p><h1>${inviter} Captain’s Fleet</h1><p>Explore · Earn · Beyond</p><p class="code">${code}</p><a class="open" href="${telegramUrl}">Open SpaceNovaX</a><small>Referral is recorded only after a new Captain opens the official app.</small></main></body></html>`);
+});
+
 app.use(express.static(distPath));
 
 app.use((req, res) => {
