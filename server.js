@@ -2970,6 +2970,12 @@ function escapeHtml(value = '') {
 // This route deliberately does not mutate referral data. Link crawlers from
 // KakaoTalk/Telegram must never count as people. The recipient is linked only
 // after opening the signed Telegram start link and creating a new account.
+app.get('/spacenovax-referral-card.jpg', (req, res) => {
+  const encoded = fs.readFileSync(path.join(__dirname, 'referral-card.base64'), 'utf8').trim();
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.type('jpeg').send(Buffer.from(encoded, 'base64'));
+});
+
 app.get('/join/:code', (req, res) => {
   const code = String(req.params.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
   const data = readData();
@@ -2978,7 +2984,7 @@ app.get('/join/:code', (req, res) => {
   const inviter = escapeHtml(referrer.firstName || 'a SpaceNovaX Captain');
   const shareUrl = `${PUBLIC_APP_ORIGIN}/join/${code}`;
   const telegramUrl = `https://t.me/SpaceNovaXBot?start=${code}`;
-  const imageUrl = `${PUBLIC_APP_ORIGIN}/spacenovax-orbital-hq-v15.png`;
+  const imageUrl = `${PUBLIC_APP_ORIGIN}/spacenovax-referral-card.jpg`;
   res.setHeader('Cache-Control', 'public, max-age=300');
   res.type('html').send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SpaceNovaX Fleet Invitation</title><meta name="description" content="${inviter} Captain invites you to explore, earn and build beyond with SpaceNovaX.">
