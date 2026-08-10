@@ -584,7 +584,7 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
   return <section className={`command-card mining-core ${detailed ? 'detailed' : ''}`}>
     <div className="section-heading">
       <div><small>SPNX DISTRIBUTION ENGINE</small><h2>{t.mining}</h2></div>
-      <span className={`live-state ${active ? 'pulse' : ''}`}><i /}>{active ? t.active : t.ready}</span>
+      <span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span>
     </div>
     <MiningReactor
       active={active}
