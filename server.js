@@ -440,6 +440,10 @@ function fleetBonusPercent(activeFleet, data) {
   return Math.max(0, Math.min(fleetReferralLimit(data), Number(activeFleet || 0))) * perMember;
 }
 
+function verifiedReferralCount(data, user) {
+  return (user?.referrals || []).filter((userId) => Boolean(data.users?.[userId]?.telegramId)).length;
+}
+
 function fleetGrade(activeFleet) {
   if (activeFleet >= 1000) return 'Nova Command';
   if (activeFleet >= 500) return 'Diamond Fleet';
@@ -492,7 +496,7 @@ function ensureUser(data, telegramUser, referralCode = '') {
 
   if (!data.users[userId]) {
     const referralOwner = referralCode ? findUserByReferralCode(data, referralCode) : null;
-    const referralAtCapacity = Boolean(referralOwner && (referralOwner.referrals || []).length >= fleetReferralLimit(data));
+    const referralAtCapacity = Boolean(referralOwner && verifiedReferralCount(data, referralOwner) >= fleetReferralLimit(data));
     // A referral is assigned once, only for a new Captain, never to oneself,
     // and never after the inviter reaches the policy cap.
     const referrer = referralOwner && referralOwner.id !== userId && !referralAtCapacity ? referralOwner.id : null;
@@ -787,8 +791,10 @@ function getSessionUser(req, data) {
   const recoveredUser = recoverGuestCaptain(data, telegramUser, clientId);
   if (recoveredUser) return recoveredUser;
   const fallbackUser = IS_PRODUCTION ? { clientId } : (req.body?.telegramUser || { clientId });
-  // The signed Telegram start_param is preferred over any client-supplied field.
-  const referralCode = verifiedTelegramStartParam(req, telegramUser) || req.body?.ref || req.query?.ref || '';
+  // In production, referral attribution accepts only Telegram's signed start
+  // parameter. This prevents scripted guest requests from consuming a fleet's
+  // 1,000-member capacity. Local previews may still pass ref explicitly.
+  const referralCode = verifiedTelegramStartParam(req, telegramUser) || (!IS_PRODUCTION ? (req.body?.ref || req.query?.ref || '') : '');
   return ensureUser(data, telegramUser || fallbackUser, referralCode);
 }
 
@@ -1490,7 +1496,7 @@ app.post('/api/community/dashboard', (req, res) => {
       referralCode: user.referralCode || makeReferralCode(user.id),
       referralLink: `${PUBLIC_APP_ORIGIN}/join/${user.referralCode || makeReferralCode(user.id)}`,
       telegramReferralLink: `https://t.me/SpaceNovaXBot?start=${user.referralCode || makeReferralCode(user.id)}`,
-      totalInvites: Math.min(fleetReferralLimit(data), (user.referrals || []).length),
+      totalInvites: Math.min(fleetReferralLimit(data), verifiedReferralCount(data, user)),
       referralLimit: fleetReferralLimit(data),
       activeFleet,
       fleetBonus: fleetBonusPercent(activeFleet, data),
