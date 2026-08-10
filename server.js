@@ -106,6 +106,8 @@ function createInitialData() {
       payoutKeys: {},
       distributions: [],
       fleetMessages: [],
+      securityInvites: [],
+      securityMessages: [],
       fleetNotifications: [],
       fleetWeeklySettlements: {},
       communityPosts: [],
@@ -170,6 +172,10 @@ function normalizeData(data) {
   data.payouts ||= [];
   data.payoutKeys ||= {};
   data.fleetMessages ||= [];
+  data.securityInvites ||= [];
+  data.securityMessages ||= [];
+  data.securityInvites = data.securityInvites.filter((invite) => invite?.status === 'pending' && Number(invite.expiresAt || 0) > now());
+  data.securityMessages = data.securityMessages.slice(-2000);
   data.fleetNotifications ||= [];
   data.fleetWeeklySettlements ||= {};
   data.communityPosts ||= [];
@@ -345,6 +351,11 @@ function securityCircleCount(data, user) {
   return (user.securityCircle || [])
     .filter((id) => data.users[id] && String(data.users[id].kyc?.status || '').toLowerCase() === 'approved')
     .slice(0, 5).length;
+}
+
+function securityCircleProgress(data, user) {
+  const linked = [...new Set(user?.securityCircle || [])].filter((id) => Boolean(data.users?.[id])).slice(0, 5).length;
+  return { linked, verified: securityCircleCount(data, user), percent: linked * 20, maximum: 5 };
 }
 
 function communityPostPermission(data, user) {
@@ -722,7 +733,8 @@ function publicUser(data, user) {
     referrals: user.referrals || [],
     securityCircle: user.securityCircle || [],
     securityCircleCount: (user.securityCircle || []).filter((id) => data.users[id] && String(data.users[id].kyc?.status || '').toLowerCase() === 'approved').slice(0, 5).length,
-    securityCircleBonus: (user.securityCircle || []).filter((id) => data.users[id] && String(data.users[id].kyc?.status || '').toLowerCase() === 'approved').slice(0, 5).length,
+    securityCircleBonus: securityCircleCount(data, user),
+    securityCircleProgress: securityCircleProgress(data, user),
     activeFleet,
     fleetBonus: bonus,
     fleetGrade: fleetGrade(activeFleet),
@@ -1389,6 +1401,68 @@ app.post('/api/fleet/dashboard', (req, res) => {
     },
     user: publicUser(data, user)
   });
+});
+
+// Security Circle is a mutual trust relationship, not a unilateral referral action.
+app.post('/api/security-circle/dashboard', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const progress = securityCircleProgress(data, user);
+  const members = (user.securityCircle || []).map((id) => data.users[id]).filter(Boolean).slice(0, 5).map((member) => ({
+    id: member.id, firstName: member.firstName || 'Captain', username: member.username || '',
+    kycVerified: String(member.kyc?.status || '').toLowerCase() === 'approved',
+  }));
+  const pending = data.securityInvites || [];
+  const incoming = pending.filter((invite) => invite.toUserId === user.id).map((invite) => ({ ...invite, fromName: data.users[invite.fromUserId]?.firstName || 'Captain' }));
+  const outgoing = pending.filter((invite) => invite.fromUserId === user.id).map((invite) => ({ ...invite, toName: data.users[invite.toUserId]?.firstName || 'Captain' }));
+  const messages = (data.securityMessages || []).filter((item) => item.fromUserId === user.id || item.toUserId === user.id).slice(-80).map((item) => ({ ...item, fromName: data.users[item.fromUserId]?.firstName || 'Captain' }));
+  res.json({ ok: true, circle: { ...progress, members, incoming, outgoing, messages } });
+});
+
+app.post('/api/security-circle/invite', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const progress = securityCircleProgress(data, user);
+  if (progress.linked >= 5) return res.status(409).json({ ok: false, message: 'Your Security Circle already has five members.' });
+  const code = String(req.body?.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  const target = findUserByReferralCode(data, code);
+  if (!target || !target.telegramId || target.id === user.id) return res.status(404).json({ ok: false, message: 'Enter another verified Captain code.' });
+  if (securityCircleProgress(data, target).linked >= 5) return res.status(409).json({ ok: false, message: 'This Captain’s Security Circle is full.' });
+  if ((user.securityCircle || []).includes(target.id)) return res.status(409).json({ ok: false, message: 'This Captain is already in your Security Circle.' });
+  if ((data.securityInvites || []).some((item) => item.status === 'pending' && ((item.fromUserId === user.id && item.toUserId === target.id) || (item.fromUserId === target.id && item.toUserId === user.id)))) return res.status(409).json({ ok: false, message: 'A Security Circle invitation is already pending.' });
+  const invite = { id: crypto.randomUUID(), fromUserId: user.id, toUserId: target.id, message: String(req.body?.message || '').trim().slice(0, 240), status: 'pending', createdAt: now(), expiresAt: now() + 7 * 86400000 };
+  data.securityInvites.push(invite); data.events.push({ type: 'security_circle_invite', userId: user.id, targetId: target.id, at: invite.createdAt }); writeData(data);
+  res.status(201).json({ ok: true, message: 'Security Circle invitation sent. It requires mutual approval.' });
+});
+
+app.post('/api/security-circle/respond', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const invite = (data.securityInvites || []).find((item) => item.id === String(req.body?.inviteId || '') && item.toUserId === user.id && item.status === 'pending');
+  if (!invite) return res.status(404).json({ ok: false, message: 'Security Circle invitation not found.' });
+  const action = String(req.body?.action || '');
+  if (!['accept', 'reject'].includes(action)) return res.status(400).json({ ok: false, message: 'Choose accept or reject.' });
+  const sender = data.users[invite.fromUserId];
+  if (action === 'accept') {
+    if (!sender || securityCircleProgress(data, user).linked >= 5 || securityCircleProgress(data, sender).linked >= 5) return res.status(409).json({ ok: false, message: 'One Security Circle is already full.' });
+    user.securityCircle ||= []; sender.securityCircle ||= [];
+    if (!user.securityCircle.includes(sender.id)) user.securityCircle.push(sender.id);
+    if (!sender.securityCircle.includes(user.id)) sender.securityCircle.push(user.id);
+  }
+  invite.status = action === 'accept' ? 'accepted' : 'rejected'; invite.respondedAt = now();
+  data.events.push({ type: `security_circle_${action}`, userId: user.id, sourceUserId: invite.fromUserId, at: invite.respondedAt }); writeData(data);
+  res.json({ ok: true, message: action === 'accept' ? 'Security Circle connection confirmed.' : 'Security Circle invitation declined.', user: publicUser(data, user) });
+});
+
+app.post('/api/security-circle/message', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const target = data.users[String(req.body?.toUserId || '')]; const text = String(req.body?.message || '').trim().slice(0, 500);
+  if (!target || !text || !(user.securityCircle || []).includes(target.id) || !(target.securityCircle || []).includes(user.id)) return res.status(403).json({ ok: false, message: 'Messages are available only to confirmed Security Circle members.' });
+  const recent = (data.securityMessages || []).filter((item) => item.fromUserId === user.id && item.at > now() - 60000);
+  if (recent.length >= 10) return res.status(429).json({ ok: false, message: 'Please wait before sending more messages.' });
+  const message = { id: crypto.randomUUID(), fromUserId: user.id, toUserId: target.id, message: text, at: now() }; data.securityMessages.push(message); writeData(data);
+  res.status(201).json({ ok: true, message });
 });
 
 app.post('/api/fleet/security-circle', (req, res) => {
