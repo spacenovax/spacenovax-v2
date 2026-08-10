@@ -2586,6 +2586,53 @@ app.post('/api/kyc/submit', (req, res) => {
 });
 
 // V9 Ultimate Wallet API
+function novaWalletSecurity(user) {
+  user.novaWalletSecurity ||= { pinHash: '', pinSalt: '', failedAttempts: 0, lockedUntil: 0, lastUnlockedAt: 0 };
+  return user.novaWalletSecurity;
+}
+function publicWalletSecurity(user) {
+  const security = novaWalletSecurity(user);
+  return { pinConfigured: Boolean(security.pinHash), failedAttempts: Number(security.failedAttempts || 0), lockedUntil: Number(security.lockedUntil || 0), lastUnlockedAt: Number(security.lastUnlockedAt || 0), biometricAvailable: false };
+}
+function validWalletPin(pin) { return /^\d{6}$/.test(String(pin || '')); }
+function walletPinHash(pin, salt) { return crypto.scryptSync(String(pin), salt, 64).toString('hex'); }
+
+app.post('/api/nova-wallet/status', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  res.json({ ok: true, security: publicWalletSecurity(user), kycRequiredForTransfers: true, transfersEnabled: false });
+});
+app.post('/api/nova-wallet/pin/setup', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const pin = String(req.body?.pin || '');
+  if (!validWalletPin(pin)) return res.status(400).json({ ok: false, message: 'Use a 6-digit PIN.' });
+  const security = novaWalletSecurity(user);
+  if (security.pinHash) return res.status(409).json({ ok: false, message: 'Wallet PIN is already configured.' });
+  security.pinSalt = crypto.randomBytes(16).toString('hex');
+  security.pinHash = walletPinHash(pin, security.pinSalt);
+  security.failedAttempts = 0; security.lockedUntil = 0; security.lastUnlockedAt = now();
+  data.events.push({ type: 'nova_wallet_pin_created', userId: user.id, at: now() });
+  writeData(data); res.json({ ok: true, security: publicWalletSecurity(user) });
+});
+app.post('/api/nova-wallet/pin/unlock', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const security = novaWalletSecurity(user); const pin = String(req.body?.pin || '');
+  if (!security.pinHash) return res.status(400).json({ ok: false, message: 'Create a Wallet PIN first.' });
+  if (Number(security.lockedUntil || 0) > now()) return res.status(429).json({ ok: false, message: 'Wallet is temporarily locked after failed PIN attempts.', lockedUntil: security.lockedUntil });
+  const valid = validWalletPin(pin) && crypto.timingSafeEqual(Buffer.from(security.pinHash, 'hex'), Buffer.from(walletPinHash(pin, security.pinSalt), 'hex'));
+  if (!valid) {
+    security.failedAttempts = Number(security.failedAttempts || 0) + 1;
+    if (security.failedAttempts >= 5) { security.lockedUntil = now() + 15 * 60 * 1000; security.failedAttempts = 0; }
+    data.events.push({ type: 'nova_wallet_unlock_failed', userId: user.id, at: now() }); writeData(data);
+    return res.status(401).json({ ok: false, message: 'Wallet PIN is incorrect.', security: publicWalletSecurity(user) });
+  }
+  security.failedAttempts = 0; security.lockedUntil = 0; security.lastUnlockedAt = now();
+  data.events.push({ type: 'nova_wallet_unlocked', userId: user.id, at: now() }); writeData(data);
+  res.json({ ok: true, security: publicWalletSecurity(user) });
+});
+
 app.post('/api/wallet/challenge', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
