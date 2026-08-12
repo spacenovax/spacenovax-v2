@@ -709,7 +709,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="hero-live-light" aria-hidden="true"/>
       <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
       <div className="spnx-command-orbit" aria-hidden="true">
-        {['S', 'P', 'N', 'X'].map((letter, index) => <i key={letter} style={{ '--orbit-index': index }}>{letter}</i>)}
+        <img className="spnx-orbit-token" src="/spnx-orbital-token-v1.webp" alt="" />
       </div>
       <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
