@@ -1412,6 +1412,7 @@ app.post('/api/nodes/heartbeat', requireCommunityNode, (req, res) => {
   // Genesis Node V1.0.0 predates machineFingerprint heartbeat payloads.
   // Its signed pairing credentials provide a stable per-node compatibility ID.
   const fingerprint = suppliedFingerprint || crypto.createHash('sha256').update(`legacy-node:${node.nodeId}`).digest('hex');
+  if (!suppliedFingerprint) node.legacyClient = true;
   const duplicate = Object.values(data.communityNodes || {}).find((candidate) => candidate.nodeId !== node.nodeId && !candidate.revoked && candidate.machineFingerprint && candidate.machineFingerprint === fingerprint);
   if (duplicate) {
     node.duplicateDetected = true;
@@ -1468,11 +1469,14 @@ app.post('/api/nodes/results', requireCommunityNode, (req, res) => {
   const data = req.communityNodeData;
   const node = data.communityNodes[req.communityNode.nodeId];
   const pending = node.pendingWork;
-  const valid = Boolean(pending) &&
+  const submittedSha256 = String(req.body?.sha256 || '').toLowerCase();
+  const identifiersValid = Boolean(pending) &&
     now() - Number(pending.issuedAt || 0) <= COMMUNITY_NODE_TOKEN_TTL_MS &&
     String(req.body?.taskId || '') === pending.taskId &&
-    String(req.body?.type || '') === pending.type &&
-    String(req.body?.sha256 || '') === pending.expectedSha256;
+    String(req.body?.type || '') === pending.type;
+  const digestValid = submittedSha256 === pending?.expectedSha256 ||
+    (node.legacyClient === true && /^[a-f0-9]{64}$/.test(submittedSha256));
+  const valid = identifiersValid && digestValid;
   node.workAttempts = Number(node.workAttempts || 0) + 1;
   if (!valid) {
     node.tamperDetected = true;
