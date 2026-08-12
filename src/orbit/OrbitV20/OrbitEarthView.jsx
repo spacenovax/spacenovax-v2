@@ -31,7 +31,7 @@ function Marker({ marker, projection }) {
   );
 }
 
-export default function OrbitEarthView({ containerRef, current, markerPos, markerTargets = [], textureQuality = '4K', onZoomIn, onZoomOut, onRecenter }) {
+export default function OrbitEarthView({ containerRef, current, markerPos, markerTargets = [], textureQuality = '2K · LOADING', onZoomIn, onZoomOut, onRecenter }) {
   return (
     <div className="ov20-globe-col">
       <div className="ov20-globe-wrap">

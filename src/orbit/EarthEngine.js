@@ -283,11 +283,24 @@ export default class EarthEngine {
       tex.needsUpdate = true;
       return tex;
     };
-    loader.load('/orbit/earth-day-real.webp', (tex) => {
-      this.baseDayTexture = prepareTexture(tex, { srgb: true });
-      this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
-      this._announceTextureQuality('4K');
-    }, undefined, (err) => console.error('Orbit: 4K Earth texture failed.', err));
+    // Always establish a known-good 2K surface first. The previous 4K WebP was a
+    // truncated file whose header advertised 4096px even though browsers could not
+    // decode its pixels, leaving only the blue placeholder and night lights visible.
+    // The validated 4K derivative is loaded only after this safety texture succeeds.
+    loader.load('/orbit/earth-day-nasa.jpg', (fallback) => {
+      this.fallbackDayTexture = prepareTexture(fallback, { srgb: true });
+      this.earthMaterial.uniforms.dayMap.value = this.fallbackDayTexture;
+      this._announceTextureQuality('2K · SAFE');
+      loader.load('/orbit/earth-day-4k.jpg', (tex) => {
+        this.baseDayTexture = prepareTexture(tex, { srgb: true });
+        this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
+        this._announceTextureQuality('4K');
+        this._updateTextureLOD();
+      }, undefined, (err) => {
+        this._announceTextureQuality('2K · SAFE');
+        console.warn('Orbit: optional 4K Earth texture failed; staying on validated 2K.', err);
+      });
+    }, undefined, (err) => console.error('Orbit: safe 2K Earth texture failed.', err));
     loader.load('/orbit/earth-night.jpg', (tex) => {
       this.earthMaterial.uniforms.nightMap.value = prepareTexture(tex, { srgb: true });
     }, undefined, (err) => console.error('Orbit: validated night texture failed.', err));
@@ -299,9 +312,9 @@ export default class EarthEngine {
     // Orbit is a navigation map, not a cinematic space scene.  Do not add an
     // atmosphere shell: it can blue-wash coastlines and city lights on mobile OLEDs.
 
-    // Cloud layer — a slightly larger sphere with a translucent cloud texture, rotating
-    // independently and a bit faster than the surface (real clouds drift relative to
-    // the ground). Adds real visual weight/realism beyond a flat land/ocean texture.
+    // The validated NASA day maps already contain true-colour cloud cover. Keep the
+    // optional shell disabled: the old cloud WebP is also truncated and double clouds
+    // reduce coastline contrast.
     const cloudGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.009, this.lowPower ? 40 : 72, this.lowPower ? 28 : 48);
     this.cloudMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -315,18 +328,6 @@ export default class EarthEngine {
     // valid cloud texture is decoded successfully.
     this.clouds.visible = false;
     this.earth.add(this.clouds);
-    loader.load(
-      '/orbit/earth-clouds-real.webp',
-      (tex) => {
-        prepareTexture(tex, { srgb: true });
-        this.cloudMaterial.map = tex;
-        this.cloudMaterial.needsUpdate = true;
-        this.earthMaterial.uniforms.cloudMap.value = tex;
-        this.clouds.visible = true;
-      },
-      undefined,
-      (err) => console.warn('Orbit: cloud texture failed to load — globe still renders without clouds.', err),
-    );
     loader.load(
       '/orbit/earth-water-mask.webp',
       (tex) => { this.earthMaterial.uniforms.specularMap.value = prepareTexture(tex); },
@@ -435,7 +436,7 @@ export default class EarthEngine {
       this._updateTextureLOD();
     }, undefined, (err) => {
       this._detailLoadStarted = false;
-      this._announceTextureQuality('4K');
+      this._announceTextureQuality(this.baseDayTexture ? '4K' : '2K · SAFE');
       console.warn('Orbit: optional 8K Earth texture failed; staying on 4K.', err);
     });
   }
@@ -447,11 +448,11 @@ export default class EarthEngine {
     if (wantsDetail && this.detailDayTexture) {
       this.earthMaterial.uniforms.dayMap.value = this.detailDayTexture;
       this._announceTextureQuality('8K · DETAIL');
-    } else if (!wantsDetail && this.baseDayTexture) {
-      this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
-      this._announceTextureQuality('4K');
+    } else if (!wantsDetail && (this.baseDayTexture || this.fallbackDayTexture)) {
+      this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture || this.fallbackDayTexture;
+      this._announceTextureQuality(this.baseDayTexture ? '4K' : '2K · SAFE');
     } else if (wantsDetail && !supports8K) {
-      this._announceTextureQuality('4K · DEVICE LIMIT');
+      this._announceTextureQuality(this.baseDayTexture ? '4K · DEVICE LIMIT' : '2K · DEVICE LIMIT');
     }
   }
   recenter() {
@@ -774,6 +775,7 @@ export default class EarthEngine {
   dispose() {
     window.removeEventListener('resize', this._resizeHandler);
     this.renderer.dispose();
+    this.fallbackDayTexture?.dispose();
     this.baseDayTexture?.dispose();
     this.detailDayTexture?.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

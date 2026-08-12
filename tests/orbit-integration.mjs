@@ -15,6 +15,7 @@ const requiredFiles = [
   'src/orbit/OrbitV20/OrbitEvents.jsx',
   'src/orbit/OrbitV20/orbit-v20.css',
   'public/orbit/earth-day-real.webp',
+  'public/orbit/earth-day-4k.jpg',
   'public/orbit/earth-day-8k.jpg',
   'public/orbit/earth-night-real.webp',
   'public/orbit/earth-clouds-real.webp',
@@ -110,11 +111,17 @@ if (!orbitSource.includes('<OrbitHUD')
   throw new Error('Orbit mobile full-globe HUD and detail drawer are missing.');
 }
 
-if (!earthEngineSource.includes("'/orbit/earth-day-real.webp'")
+if (!earthEngineSource.includes("'/orbit/earth-day-nasa.jpg'")
+  || !earthEngineSource.includes("'/orbit/earth-day-4k.jpg'")
   || !earthEngineSource.includes("'/orbit/earth-day-8k.jpg'")
   || !earthEngineSource.includes('maxTextureSize >= 8192')
   || !earthEngineSource.includes('_updateTextureLOD')) {
   throw new Error('Orbit 4K/8K texture LOD integration is missing.');
+}
+
+if (earthEngineSource.includes("loader.load(\n      '/orbit/earth-clouds-real.webp'")
+  || !earthEngineSource.includes("'2K · SAFE'")) {
+  throw new Error('Orbit must use a validated 2K safety surface and avoid truncated cloud assets.');
 }
 
 if (!earthEngineSource.includes('nightAmbient')

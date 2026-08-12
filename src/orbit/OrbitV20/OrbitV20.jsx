@@ -118,7 +118,7 @@ export default function OrbitV20({ language, user }) {
   const perfRef = useRef(null);
   const [voiceState, setVoiceState] = useState('idle');
   const [hudPanel, setHudPanel] = useState(null);
-  const [earthQuality, setEarthQuality] = useState('4K');
+  const [earthQuality, setEarthQuality] = useState('2K · LOADING');
 
   const [tab, setTab] = useState('live');
   const [clock, setClock] = useState(new Date());
