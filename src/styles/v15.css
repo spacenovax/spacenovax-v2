@@ -33,7 +33,7 @@
 @media(max-width:520px){.v15-nav small.nav-full{display:none}.v15-nav small.nav-short{display:block;font-size:7px;letter-spacing:-.03em}.node-module{padding:16px}.node-hero{min-height:0;padding:18px}.node-hero strong{font-size:30px}.node-hero>.v15-icon{display:none}.node-actions,.node-install-grid{grid-template-columns:1fr}.node-install-grid article{min-height:0}.node-back{font-size:8px;padding:8px}.node-security{padding:14px}}
 .header-website{flex:0 0 auto}
 @media(max-width:520px){.header-website{width:36px;min-width:36px;padding:0}.header-website span{display:none}}
-@media(prefers-reduced-motion:reduce){.hero-station,.hero-live-light,.distant-meteor-cloud,.orbital-satellite,.cosmic-dust i,.spnx-token-carrier,.spnx-token-carrier:after,.spnx-orbit-token,.contact-orbit i,.nova-guide-avatar img,.nova-guide-avatar:before,.nova-holo-scan,.nova-eye-light,.nova-core-node,.nova-voice-control{animation:none!important}.nova-guide-avatar,.header-website,.nova-voice-control{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.hero-station,.hero-live-light,.distant-meteor-cloud,.orbital-satellite,.cosmic-dust i,.contact-orbit i,.nova-guide-avatar img,.nova-guide-avatar:before,.nova-holo-scan,.nova-eye-light,.nova-core-node,.nova-voice-control{animation:none!important}.nova-guide-avatar,.header-website,.nova-voice-control{transition:none!important}}
 .live-state.setup{color:#ffc15e;border-color:rgba(255,193,94,.3)}
 .live-state.setup i{background:#ffc15e;box-shadow:0 0 9px #ffc15e}
 .ai-setup-notice{display:flex;align-items:flex-start;gap:11px;margin:12px 22px 0;padding:13px;border:1px solid rgba(255,193,94,.25);border-radius:14px;background:rgba(255,168,51,.07);color:#ffc15e}
