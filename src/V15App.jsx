@@ -1536,7 +1536,7 @@ const NODE_GUIDE_COPY = {
 
 function NodeSetup({ language, setTab }) {
   const n = NODE_GUIDE_COPY[language] || NODE_GUIDE_COPY.en;
-  const download = '/downloads/Genesis_Community_Node_V1_Standalone_2026-08-08.zip';
+  const download = 'https://github.com/spacenovax/spacenovax-v2/releases/download/node-v1.0.0/Genesis_Community_Node_V1_Standalone_2026-08-08.zip';
   const steps=[[n.download,n.downloadText],[n.pair,n.pairText],[n.run,n.runText],[n.verify,n.verifyText],[n.bonus,n.bonusText],[n.alerts,n.alertsText],[n.reset,n.resetText],[n.security,n.securityText]];
   return <main className="v15-page" dir={language === 'ar' ? 'rtl' : 'ltr'}><section className="command-card ops-module node-module node-setup-module">
     <div className="section-heading"><div><small>GENESIS COMMUNITY NODE · V1</small><h2>{n.title}</h2></div><button className="node-back" onClick={() => setTab('nodes')}><Icon name="arrow" size={16}/>{n.hub}</button></div>
@@ -1550,7 +1550,7 @@ function NodeSetup({ language, setTab }) {
 
 function Nodes({ language, setTab, user, setUser }) {
   const ko = language === 'ko';
-  const download = '/downloads/Genesis_Community_Node_V1_Standalone_2026-08-08.zip';
+  const download = 'https://github.com/spacenovax/spacenovax-v2/releases/download/node-v1.0.0/Genesis_Community_Node_V1_Standalone_2026-08-08.zip';
   const [pairing, setPairing] = useState(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
