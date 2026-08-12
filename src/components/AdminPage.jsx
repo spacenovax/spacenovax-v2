@@ -51,6 +51,7 @@ export default function AdminPage() {
   const [nodeProgram, setNodeProgram] = useState(null);
   const [nodes, setNodes] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [messageStats, setMessageStats] = useState(null);
   const [announcementForm, setAnnouncementForm] = useState({ title:'', body:'', priority:'normal' });
   const [conversionRuntime, setConversionRuntime] = useState(null);
   const [notice, setNotice] = useState('Checking admin session...');
@@ -70,7 +71,7 @@ export default function AdminPage() {
 
   async function loadAdmin() {
     try {
-      const [a,b,c,d,e,f,g,h,i,j,k,l,m,n] = await Promise.all([
+      const [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o] = await Promise.all([
         adminFetch('/api/admin/stats'),
         adminFetch('/api/admin/users/search?q=' + encodeURIComponent(search)),
         adminFetch('/api/admin/logs'),
@@ -84,9 +85,10 @@ export default function AdminPage() {
         adminFetch('/api/admin/mining/engine'),
         adminFetch('/api/admin/operations'),
         adminFetch('/api/admin/nodes'),
-        adminFetch('/api/admin/announcements')
+        adminFetch('/api/admin/announcements'),
+        adminFetch('/api/admin/messages/stats')
       ]);
-      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []); setAnnouncements(n.announcements || []);
+      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []); setAnnouncements(n.announcements || []); setMessageStats(o.stats || null);
       setSettingsForm({
         convertEnabled: Boolean(f.settings?.convertEnabled),
         kycEnabled: Boolean(f.settings?.kycEnabled),
@@ -133,6 +135,8 @@ export default function AdminPage() {
     catch(e) { setNotice(e.message); }
   }
 
+  async function deleteAllMemberMessages() { const confirmation=window.prompt('회원 간 쪽지와 첨부 사진을 모두 삭제합니다. 계속하려면 DELETE ALL MEMBER MESSAGES를 입력하세요.'); if(confirmation!=='DELETE ALL MEMBER MESSAGES')return; try{const data=await adminFetch('/api/admin/messages/delete-all',{method:'POST',body:JSON.stringify({confirmation})});setNotice(`${data.deleted} member messages deleted.`);await loadAdmin()}catch(e){setNotice(e.message)} }
+
   async function logout() { try { await adminFetch('/api/admin/logout', { method:'POST', body:'{}' }); } catch {} clearToken(); setAdmin(null); }
 
   useEffect(()=>{ checkSession(); }, []);
@@ -140,7 +144,7 @@ export default function AdminPage() {
 
   if (!admin) return <AdminLogin onLogin={(a)=>{ setAdmin(a); loadAdmin(); }} />;
 
-  const tabs = ['dashboard','announcements','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
+  const tabs = ['dashboard','announcements','messages','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
 
   return <section className="admin-page glass">
     <div className="admin-head"><div><h2>✦ NOVA Command Admin V16.5</h2><p>{notice}</p><small>Logged in: {admin.id} · {admin.role}</small></div><div className="admin-actions"><button onClick={loadAdmin}>Refresh</button><button onClick={logout}>Logout</button></div></div>
@@ -151,6 +155,8 @@ export default function AdminPage() {
     </div><form className="admin-form" onSubmit={givePoints}><h3>Manual Point Control</h3><input placeholder="User ID" value={pointForm.userId} onChange={(e)=>setPointForm({...pointForm,userId:e.target.value})}/><input placeholder="Amount" type="number" value={pointForm.amount} onChange={(e)=>setPointForm({...pointForm,amount:e.target.value})}/><input placeholder="Reason" value={pointForm.reason} onChange={(e)=>setPointForm({...pointForm,reason:e.target.value})}/><button type="submit">Give Points</button></form></>}
 
     {tab==='announcements' && <div className="admin-users"><h3>Global Announcement Center</h3><p className="admin-empty">게시 즉시 전체 사용자 공지함에 저장되며, 앱 상단 NEW 공지는 게시 후 24시간 표시됩니다.</p><form className="admin-announcement-form" onSubmit={publishAnnouncement}><input maxLength="120" required placeholder="공지 제목" value={announcementForm.title} onChange={(e)=>setAnnouncementForm({...announcementForm,title:e.target.value})}/><textarea maxLength="5000" required rows="7" placeholder="전체 사용자에게 알릴 공지 내용을 입력하세요." value={announcementForm.body} onChange={(e)=>setAnnouncementForm({...announcementForm,body:e.target.value})}/><select value={announcementForm.priority} onChange={(e)=>setAnnouncementForm({...announcementForm,priority:e.target.value})}><option value="normal">일반 공지</option><option value="important">중요 공지</option><option value="urgent">긴급 공지</option></select><button type="submit">전체 공지 게시</button></form><div className="admin-node-list">{announcements.map((item)=><article className="admin-user-row admin-user-rich" key={item.id}><div><b>{item.priority.toUpperCase()} · {item.title}</b><small>{new Date(item.publishedAt).toLocaleString()} · {item.createdBy}</small><small>{item.body}</small></div><div className="admin-user-side"><strong>{item.active?'PUBLISHED':'HIDDEN'}</strong><button onClick={()=>toggleAnnouncement(item)}>{item.active?'Hide':'Publish'}</button></div></article>)}</div></div>}
+
+    {tab==='messages' && <div className="admin-users"><h3>Private Message Control</h3><p className="admin-empty">관리자는 정상적인 비공개 대화 내용을 열람하지 않습니다. 저장량 확인과 회원 간 쪽지 전체 삭제만 수행하며 노드·시스템 알림은 보존됩니다.</p><div className="admin-stats"><div><small>Member Messages</small><b>{messageStats?.memberMessages || 0}</b></div><div><small>Photo Messages</small><b>{messageStats?.withPhotos || 0}</b></div><div><small>System Notices</small><b>{messageStats?.systemMessages || 0}</b></div></div><div className="admin-command-panel"><p>전체 삭제는 회원 간 쪽지와 첨부 사진만 영구 삭제합니다. 복구할 수 없습니다.</p><button onClick={deleteAllMemberMessages}>DELETE ALL MEMBER MESSAGES</button></div></div>}
 
     {tab==='nova' && <div className="admin-users">
       <h3>✦ NOVA AI Control</h3>
