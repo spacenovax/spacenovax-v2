@@ -595,14 +595,24 @@ function Header({ user, language, setLanguage, t, onPreview, onMessages, onAnnou
 }
 
 function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
+  const [speedOpen, setSpeedOpen] = useState(false);
   const m = user.mining || fallbackUser.mining;
   const pct = Math.max(0, Math.min(100, Math.round(Number(m.progress || 0) * 100)));
   const claimable = Boolean(m.claimable);
   const active = Boolean(m.active);
+  const ko = document.documentElement.lang === 'ko';
+  const baseSpeed = Number(m.baseSpeedPerHour || (m.baseReward || 30) / 24);
+  const fleetBonus = Number(m.fleetBonus || user.fleetBonus || 0);
+  const securityBonus = Number(m.securityBonus || user.securityCircleBonus || 0);
+  const missionBonus = Number(m.missionBonus || user.missionBonus || 0);
+  const nodeBonus = m.nodeOnline ? Number(m.nodeBonus || 0) : 0;
+  const eventMultiplier = Number(m.eventMultiplier || 1);
+  const subtotalSpeed = baseSpeed * (1 + (fleetBonus + securityBonus + missionBonus) / 100) * eventMultiplier;
+  const currentSpeed = Number(m.speedPerHour || subtotalSpeed * (1 + nodeBonus / 100));
   return <section className={`command-card mining-core ${detailed ? 'detailed' : ''}`}>
     <div className="section-heading">
       <div><small>SPNX DISTRIBUTION ENGINE</small><h2>{t.mining}</h2></div>
-      <span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span>
+      <div className="mining-head-actions"><button className="nova-pulse-speed" onClick={() => setSpeedOpen(true)} aria-label={ko?'현재 채굴 속도 보기':'View current mining speed'}><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg><span><small>NOVA PULSE · {ko?'현재 속도':'LIVE SPEED'}</small><b>{format(currentSpeed,5)} SPNX/h</b></span></button><span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span></div>
     </div>
     <MiningReactor
       active={active}
@@ -618,7 +628,7 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
       <div className="cycle-data">
         <span><small>{t.remaining}</small><b>{claimable ? '00:00:00' : clock(m.remainingMs || 86400000)}</b></span>
         <span><small>{t.reward}</small><b>{format(m.reward || 30)} SPNX</b></span>
-        <span><small>{t.rate}</small><b>{format(m.speedPerHour || (m.reward || 30) / 24, 3)} SPNX/h</b></span>
+        <span><small>{t.rate}</small><b>{format(currentSpeed, 5)} SPNX/h</b></span>
       </div>
     </div>
     <div className="mining-track"><i style={{ width: `${pct}%` }} /><span className="track-node n1"/><span className="track-node n2"/><span className="track-node n3"/></div>
@@ -638,6 +648,7 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
       <div className="pool-bar"><i style={{ width: '0.001%' }}/></div>
       <small>Server-authoritative · 24h UTC cycle · Anti-automation protection active</small>
     </div>}
+    {speedOpen && <div className="speed-modal-backdrop" role="presentation" onClick={() => setSpeedOpen(false)}><section className="speed-command-panel" role="dialog" aria-modal="true" aria-label={ko?'현재 채굴 속도':'Current mining speed'} onClick={(event)=>event.stopPropagation()}><header><div className="speed-symbol"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg></div><div><small>NOVA PULSE · LIVE RATE</small><h3>{ko?'현재 채굴 속도':'Current Mining Speed'}</h3></div><button onClick={()=>setSpeedOpen(false)} aria-label="Close">×</button></header><div className="speed-total"><small>{ko?'시간당 실시간 적립 속도':'REAL-TIME EARNING RATE'}</small><strong>{format(currentSpeed,5)}</strong><b>SPNX POINT / HOUR</b><span>{active?(ko?'24시간 채굴 세션 가동 중':'24H MINING SESSION ACTIVE'):(ko?'채굴 시작 대기 중':'READY TO START MINING')}</span></div><div className="speed-formula"><article><span>01</span><div><small>{ko?'기본 채굴 속도':'BASE RATE'}</small><b>{format(baseSpeed,5)} SPNX/h</b></div></article><article><span>02</span><div><small>{ko?'함대 보너스':'FLEET BONUS'}</small><b>+{fleetBonus}%</b></div></article><article><span>03</span><div><small>{ko?'보안 서클':'SECURITY CIRCLE'}</small><b>+{securityBonus}%</b></div></article><article><span>04</span><div><small>{ko?'5대 미션 패스포트':'MISSION PASSPORT'}</small><b>+{missionBonus}%</b></div></article><article><span>05</span><div><small>{ko?'커뮤니티 노드':'COMMUNITY NODE'}</small><b>{m.nodeOnline?`+${nodeBonus}%`:(ko?'오프라인 · +0%':'OFFLINE · +0%')}</b></div></article></div><div className="speed-equation"><small>{ko?'현재 계산식':'CURRENT FORMULA'}</small><p>{format(baseSpeed,5)} × (100% + {fleetBonus + securityBonus + missionBonus}%) × {format(eventMultiplier,2)} × (100% + {nodeBonus}%)</p><strong>= {format(currentSpeed,5)} SPNX/h</strong></div><p className="speed-note"><Icon name="shield" size={15}/>{ko?'표시값은 서버 원장의 실시간 계산값이며 함대·미션·보안 서클·노드 상태가 바뀌면 자동으로 갱신됩니다.':'This server-calculated live rate updates automatically when fleet, mission, Security Circle, or node status changes.'}</p></section></div>}
   </section>;
 }
 
