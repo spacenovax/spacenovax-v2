@@ -353,3 +353,13 @@
 .v15-header .comms-control,.v15-header .header-website{width:32px;height:32px;min-width:32px;border-radius:10px}.v15-header .comms-symbol,.v15-header .comms-symbol svg{width:19px;height:19px}.v15-header .header-website svg{width:15px;height:15px}
 .v15-header .comms-count{right:-3px;top:-5px;min-width:15px;height:15px;padding:0 3px;font-size:6px}
 }
+
+/* Final mobile header proportion tuning. */
+@media(max-width:520px){
+.v15-header .brand{gap:7px;transform:translateX(-5px)}
+.v15-header .brand img{width:41px;height:41px;flex-basis:41px}
+.v15-header .brand b{font-size:16px}
+.v15-header .brand small{max-width:108px;font-size:7.2px}
+.v15-header .header-actions{gap:6px}
+.v15-header .message-bell .comms-count{right:-4px;top:-6px}
+}
