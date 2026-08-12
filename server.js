@@ -1408,8 +1408,10 @@ app.post('/api/nodes/heartbeat', requireCommunityNode, (req, res) => {
   const node = data.communityNodes[req.communityNode.nodeId];
   const timestamp = now();
   const safeTelemetry = { cpuPercent: Math.max(0, Math.min(100, Number(req.body?.cpuPercent) || 0)), memoryPercent: Math.max(0, Math.min(100, Number(req.body?.memoryPercent) || 0)), diskPercent: Math.max(0, Math.min(100, Number(req.body?.diskPercent) || 0)), uptimeSeconds: Math.max(0, Number(req.body?.uptimeSeconds) || 0), apiLatencyMs: Math.max(0, Number(req.body?.apiLatencyMs) || 0), serviceStatus: String(req.body?.serviceStatus || 'online').slice(0, 24) };
-  const fingerprint = String(req.body?.machineFingerprint || '').replace(/[^a-f0-9]/gi, '').slice(0, 128);
-  if (!fingerprint) return res.status(400).json({ ok: false, message: 'A signed node machine fingerprint is required.' });
+  const suppliedFingerprint = String(req.body?.machineFingerprint || '').replace(/[^a-f0-9]/gi, '').slice(0, 128);
+  // Genesis Node V1.0.0 predates machineFingerprint heartbeat payloads.
+  // Its signed pairing credentials provide a stable per-node compatibility ID.
+  const fingerprint = suppliedFingerprint || crypto.createHash('sha256').update(`legacy-node:${node.nodeId}`).digest('hex');
   const duplicate = Object.values(data.communityNodes || {}).find((candidate) => candidate.nodeId !== node.nodeId && !candidate.revoked && candidate.machineFingerprint && candidate.machineFingerprint === fingerprint);
   if (duplicate) {
     node.duplicateDetected = true;
