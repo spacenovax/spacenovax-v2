@@ -84,7 +84,7 @@ const COMMUNITY_NODE_WORK_TYPES = new Set(['public-ranking-cache', 'public-missi
 const DEFAULT_MISSIONS = [
   { id: 'website', title: 'Visit SpaceNovaX Website', icon: '🌐', reward: 100, type: 'one_time', url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
   { id: 'telegram', title: 'Join SpaceNovaX Telegram Channel', icon: '✈️', reward: 300, type: 'one_time', url: 'https://t.me/spacenovaxteam', action: 'JOIN CHANNEL', enabled: true },
-  { id: 'discord', title: 'Join Discord', icon: '💬', reward: 300, type: 'one_time', url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
+  { id: 'discord', title: 'Join Discord', icon: '💬', reward: 300, type: 'one_time', url: 'https://discord.gg/pChzTUcm2t', action: 'JOIN', enabled: true },
   { id: 'x', title: 'Follow X', icon: '𝕏', reward: 300, type: 'one_time', url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
   { id: 'youtube_subscribe', title: 'Subscribe YouTube', icon: '📺', reward: 300, type: 'one_time', url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true }
 ];
@@ -160,8 +160,12 @@ function normalizeData(data) {
   data.missions = DEFAULT_MISSIONS.map((defaults) => ({
     ...defaults,
     ...(existingMissions[defaults.id] || {}),
-    reward: Number(existingMissions[defaults.id]?.reward ?? defaults.reward),
-    enabled: existingMissions[defaults.id]?.enabled ?? defaults.enabled,
+    reward: defaults.reward,
+    type: defaults.type,
+    enabled: true,
+    url: defaults.id === 'discord' && existingMissions[defaults.id]?.url === 'https://discord.gg/rxVNWMC8e8'
+      ? defaults.url
+      : (existingMissions[defaults.id]?.url || defaults.url),
   }));
 
   data.settings.miningSandboxEnabled ??= false;
@@ -716,6 +720,27 @@ function calculateMining(data, user) {
   const claimableReward = Number(Math.max(0, Math.min(baseCycleReward + nodeReward, remaining)).toFixed(8));
   const minedSoFar = Number(Math.max(0, Math.min(speed.rateWithoutNode * (elapsedMs / (60 * 60 * 1000)) + nodeReward, claimableReward)).toFixed(8));
   return { active: remainingMs > 0, calculatedAt, startedAt, endsAt, remainingMs, progress, minedSoFar, reward: projectedReward, claimableReward, baseReward: miningPhase(data).reward, speedPerHour: speed.finalPerHour, baseSpeedPerHour: speed.basePerHour, fleetBonus: speed.fleetBonus, securityBonus: speed.securityBonus, securityCircleCount: speed.securityCircleCount, missionBonus: speed.missionBonus, missionPassportComplete: speed.missionPassportComplete, activeFleet: speed.activeFleet, phase: speed.phase, eventMultiplier: speed.eventMultiplier, nodeBonus: speed.nodeBonus, nodeOnline: speed.nodeOnline, nodeStatus: speed.nodeStatus, nodeBonusQualifiedMs, durationMs: duration, claimable: remainingMs <= 0, sandbox: Boolean(data.settings?.miningSandboxEnabled), engineVersion: data.settings?.miningEngineVersion || '1.0.0' };
+}
+
+function settleClaimableMiningCycle(data, user, status = calculateMining(data, user)) {
+  if (!status.claimable || !user.mining?.startedAt) return null;
+  const amount = Number(status.claimableReward || 0);
+  const cycleStartedAt = Number(user.mining.startedAt);
+  const idempotencyKey = `mining:${user.id}:${cycleStartedAt}`;
+  const wasAlreadyCredited = Boolean(data.ledgerKeys?.[idempotencyKey]);
+  const ledgerEntry = appendLedger(data, user, {
+    type: 'mining_reward', amount, idempotencyKey,
+    reference: `cycle-${cycleStartedAt}`,
+    metadata: { phase: status.phase, fleetBonus: status.fleetBonus, securityBonus: status.securityBonus, missionBonus: status.missionBonus, nodeBonus: status.nodeBonus, nodeBonusQualifiedMs: status.nodeBonusQualifiedMs }
+  });
+  if (!wasAlreadyCredited) {
+    user.totalMined = Number(user.totalMined || 0) + amount;
+    data.events.push({ type: 'mining_claim', userId: user.id, amount, ledgerId: ledgerEntry?.id, phase: status.phase, fleetBonus: status.fleetBonus, nodeBonus: status.nodeBonus, engineVersion: status.engineVersion, sandbox: status.sandbox, automatic: true, at: now() });
+  }
+  user.mining = null;
+  user.lastMiningAt = now();
+  user.updatedAt = now();
+  return { amount, ledgerEntry, newlyCredited: !wasAlreadyCredited };
 }
 
 function publicUser(data, user) {
@@ -1687,16 +1712,19 @@ app.post('/api/mining/start', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   if (!requireVerifiedCaptain(user, res)) return;
-  const status = calculateMining(data, user);
+  let status = calculateMining(data, user);
 
   if (status.active) return res.json({ ok: true, message: 'Mining already active.', user: publicUser(data, user) });
+
+  const settlement = settleClaimableMiningCycle(data, user, status);
+  if (settlement) status = calculateMining(data, user);
 
   user.mining = { active: true, startedAt: now(), nodeBonusQualifiedMs: 0, engineVersion: data.settings?.miningEngineVersion || '1.0.0', sandbox: Boolean(data.settings?.miningSandboxEnabled) };
   user.lastMiningAt = now();
   data.events.push({ type: 'mining_start', userId: user.id, at: now() });
   writeData(data);
 
-  res.json({ ok: true, message: 'Mining started.', user: publicUser(data, user) });
+  res.json({ ok: true, message: settlement ? `Claimed ${settlement.amount} SPNX Point and started the next cycle.` : 'Mining started.', claimed: settlement?.amount || 0, user: publicUser(data, user) });
 });
 
 app.post('/api/mining/claim', (req, res) => {
@@ -1711,31 +1739,10 @@ app.post('/api/mining/claim', (req, res) => {
     return res.status(400).json({ ok: false, message: 'Mining is not ready to claim yet.' });
   }
 
-  const amount = Number(status.claimableReward || 0);
-  const cycleStartedAt = Number(user.mining?.startedAt || 0);
-  const ledgerEntry = appendLedger(data, user, {
-    type: 'mining_reward',
-    amount,
-    idempotencyKey: `mining:${user.id}:${cycleStartedAt}`,
-    reference: `cycle-${cycleStartedAt}`,
-    metadata: {
-      phase: status.phase,
-      fleetBonus: status.fleetBonus,
-      securityBonus: status.securityBonus,
-      missionBonus: status.missionBonus,
-      nodeBonus: status.nodeBonus,
-      nodeBonusQualifiedMs: status.nodeBonusQualifiedMs
-    }
-  });
-  user.totalMined = Number(user.totalMined || 0) + amount;
-  user.mining = null;
-  user.lastMiningAt = now();
-  user.updatedAt = now();
-
-  data.events.push({ type: 'mining_claim', userId: user.id, amount, ledgerId: ledgerEntry?.id, phase: status.phase, fleetBonus: status.fleetBonus, nodeBonus: status.nodeBonus, engineVersion: status.engineVersion, sandbox: status.sandbox, at: now() });
+  const settlement = settleClaimableMiningCycle(data, user, status);
   writeData(data);
 
-  res.json({ ok: true, message: `Claimed ${amount} SPNX Point.`, user: publicUser(data, user) });
+  res.json({ ok: true, message: `Claimed ${settlement.amount} SPNX Point.`, user: publicUser(data, user) });
 });
 
 app.get('/api/legacy/missions', (req, res) => {
@@ -2285,9 +2292,15 @@ app.post('/api/admin/mission/update', requireAdmin, (req, res) => {
   if (req.body?.reward !== undefined) {
     const reward = Number(req.body.reward);
     if (!Number.isFinite(reward) || reward < 0 || reward > 100000) return res.status(400).json({ ok: false, message: 'Mission reward is invalid.' });
+    if (OFFICIAL_MISSION_IDS.includes(mission.id) && reward !== DEFAULT_MISSIONS.find((item) => item.id === mission.id)?.reward) {
+      return res.status(409).json({ ok: false, message: 'Official five-channel mission rewards are locked to the 1,300 SPNX campaign total.' });
+    }
     mission.reward = reward;
   }
-  if (req.body?.enabled !== undefined) mission.enabled = Boolean(req.body.enabled);
+  if (req.body?.enabled !== undefined) {
+    if (OFFICIAL_MISSION_IDS.includes(mission.id) && !req.body.enabled) return res.status(409).json({ ok: false, message: 'Official five-channel missions cannot be disabled during the 1,300 SPNX campaign.' });
+    mission.enabled = Boolean(req.body.enabled);
+  }
   if (req.body?.title !== undefined) {
     const title = String(req.body.title).trim().slice(0, 100);
     if (!title) return res.status(400).json({ ok: false, message: 'Mission title is required.' });
@@ -2396,7 +2409,7 @@ function v8EnsureMissions(data) {
     { id: 'website', icon: '🌐', title: 'Website', type: 'one_time', reward: 100, url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
     { id: 'telegram', icon: '📢', title: 'Join SpaceNovaX Telegram Channel', type: 'one_time', reward: 300, url: 'https://t.me/spacenovaxteam', action: 'JOIN CHANNEL', enabled: true },
     { id: 'x', icon: '𝕏', title: 'X Twitter', type: 'one_time', reward: 300, url: 'https://x.com/spacenovaxteam', action: 'FOLLOW', enabled: true },
-    { id: 'discord', icon: '💬', title: 'Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/rxVNWMC8e8', action: 'JOIN', enabled: true },
+    { id: 'discord', icon: '💬', title: 'Discord', type: 'one_time', reward: 300, url: 'https://discord.gg/pChzTUcm2t', action: 'JOIN', enabled: true },
     { id: 'youtube_subscribe', icon: '▶️', title: 'YouTube Subscribe', type: 'one_time', reward: 300, url: 'https://youtube.com/@spacenovaxteam', action: 'SUBSCRIBE', enabled: true }
   ];
 }

@@ -5,7 +5,7 @@ const OFFICIAL_LINKS = {
   website: 'https://spacenovax.com',
   telegram: 'https://t.me/spacenovaxteam',
   x: 'https://x.com/spacenovaxteam',
-  discord: 'https://discord.gg/rxVNWMC8e8',
+  discord: 'https://discord.gg/pChzTUcm2t',
   youtube: 'https://youtube.com/@spacenovaxteam',
 };
 

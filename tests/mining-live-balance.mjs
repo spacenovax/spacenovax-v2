@@ -37,6 +37,12 @@ try {
   user.mining.startedAt = Date.now() - (60 * 60 * 1000);
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
   const after = await request('/api/session');
+  const completedData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+  completedData.users[started.user.id].mining.startedAt = Date.now() - (25 * 60 * 60 * 1000);
+  fs.writeFileSync(dataFile, JSON.stringify(completedData, null, 2));
+  const restarted = await request('/api/mining/start');
+  const persisted = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+  const miningCredits = persisted.ledger.filter((entry) => entry.userId === started.user.id && entry.type === 'mining_reward');
   const result = {
     initialSettledBalance: Number(before.user.balance) === 0,
     activeMining: after.user.mining?.active === true,
@@ -44,6 +50,9 @@ try {
     inProgressAmount: Number(after.user.mining?.minedSoFar) > 0,
     displayBalanceIncludesMining: Number(after.user.displayBalance) > Number(after.user.balance),
     ledgerBalanceUnchangedUntilClaim: Number(after.user.balance) === 0,
+    completedCycleCreditedBeforeRestart: Number(restarted.claimed || 0) > 0 && Number(restarted.user.balance || 0) > 0,
+    nextCycleStarted: restarted.user.mining?.active === true,
+    singleCompletedCycleCredit: miningCredits.length === 1,
   };
   if (Object.values(result).some((value) => value !== true)) throw new Error(JSON.stringify(result));
   console.log(JSON.stringify(result));

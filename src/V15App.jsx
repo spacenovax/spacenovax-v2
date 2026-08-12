@@ -567,7 +567,6 @@ function Splash({ done }) {
   }, [done]);
   return <div className={`v15-splash ${launching ? 'launching' : ''} ${exit ? 'exit' : ''}`}>
     <div className="splash-nebula" /><div className="splash-stars-v15" />
-    {launching && <><div key="meteor-trail" className="splash-comet-trail"/><div key="arrival-flash" className="splash-arrival-flash"/></>}
     <div key={launching ? 'symbol-arrival' : 'symbol-ready'} className="v15-mark"><img src="/brand/spacenovax-symbol.jpg" alt="SpaceNovaX" /></div>
     <div className="v15-splash-copy"><small>NOVA NETWORK PRESENTS</small><h1>SPACENOVA<span>X</span></h1><p>EXPLORE · MINE · EVOLVE</p></div>
     <div className="boot-line"><i /><span>NOVA CORE INITIALIZING</span></div>
@@ -1086,7 +1085,7 @@ function More({ t, setTab, language }) {
       <a className="official-channel website-channel" href="https://spacenovax.com" target="_blank" rel="noreferrer"><Icon name="globe" size={15}/><span>WEBSITE</span></a>
       <a className="official-channel telegram-channel" href="https://t.me/spacenovaxteam" target="_blank" rel="noreferrer"><Icon name="telegram" size={15}/><span>TELEGRAM</span></a>
       <a className="official-channel x-channel" href="https://x.com/spacenovaxteam" target="_blank" rel="noreferrer"><Icon name="xbrand" size={14}/><span>X</span></a>
-      <a className="official-channel discord-channel" href="https://discord.gg/rxVNWMC8e8" target="_blank" rel="noreferrer"><Icon name="discord" size={16}/><span>DISCORD</span></a>
+      <a className="official-channel discord-channel" href="https://discord.gg/pChzTUcm2t" target="_blank" rel="noreferrer"><Icon name="discord" size={16}/><span>DISCORD</span></a>
       <a className="official-channel youtube-channel" href="https://youtube.com/@spacenovaxteam" target="_blank" rel="noreferrer"><Icon name="youtube" size={17}/><span>YOUTUBE</span></a>
     </div>
     <section className="collaboration-contact">
