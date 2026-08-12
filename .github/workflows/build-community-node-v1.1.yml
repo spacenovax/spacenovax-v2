@@ -1,0 +1,37 @@
+name: Build Genesis Community Node V1.1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - community-node/agent.mjs
+      - community-node/RESET_NODE_PAIRING.cmd
+      - .github/workflows/build-community-node-v1.1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-node:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Compile Windows standalone node
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force node-release | Out-Null
+          bun build community-node/agent.mjs --compile --target=bun-windows-x64 --outfile node-release/SpaceNovaX_Node.exe
+          Copy-Item community-node/RESET_NODE_PAIRING.cmd node-release/
+          Copy-Item community-node/README_KR.md node-release/
+          Copy-Item community-node/INSTALL_GUIDE_KR.md node-release/
+          Set-Content node-release/VERSION.txt "SpaceNovaX Genesis Community Node V1.1.0"
+          Compress-Archive -Path node-release/* -DestinationPath Genesis_Community_Node_V1.1_Windows_x64.zip -Force
+          Get-FileHash Genesis_Community_Node_V1.1_Windows_x64.zip -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Genesis_Community_Node_V1.1_Windows_x64
+          path: Genesis_Community_Node_V1.1_Windows_x64.zip
+          if-no-files-found: error
