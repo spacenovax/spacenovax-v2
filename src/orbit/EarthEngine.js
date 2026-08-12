@@ -223,9 +223,12 @@ void main() {
 }`;
 
 export default class EarthEngine {
-  constructor(container, { lowPower = false } = {}) {
+  constructor(container, { lowPower = false, onTextureQualityChange } = {}) {
     this.container = container;
     this.lowPower = lowPower;
+    this.onTextureQualityChange = onTextureQualityChange;
+    this.textureQuality = '4K';
+    this._detailLoadStarted = false;
     this.markerLayers = new Map();
     this._labelTargets = new Map(); // id -> { lat, lon, onUpdate }
     this._buildScene();
@@ -280,9 +283,11 @@ export default class EarthEngine {
       tex.needsUpdate = true;
       return tex;
     };
-    loader.load('/orbit/earth-day-nasa.jpg', (tex) => {
-      this.earthMaterial.uniforms.dayMap.value = prepareTexture(tex, { srgb: true });
-    }, undefined, (err) => console.error('Orbit: NASA Earth texture failed.', err));
+    loader.load('/orbit/earth-day-real.webp', (tex) => {
+      this.baseDayTexture = prepareTexture(tex, { srgb: true });
+      this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
+      this._announceTextureQuality('4K');
+    }, undefined, (err) => console.error('Orbit: 4K Earth texture failed.', err));
     loader.load('/orbit/earth-night.jpg', (tex) => {
       this.earthMaterial.uniforms.nightMap.value = prepareTexture(tex, { srgb: true });
     }, undefined, (err) => console.error('Orbit: validated night texture failed.', err));
@@ -405,7 +410,50 @@ export default class EarthEngine {
     window.addEventListener('resize', this._resizeHandler);
   }
 
-  zoomBy(delta) { this.camera.position.z = Math.max(2.9, Math.min(9, this.camera.position.z + delta)); }
+  zoomBy(delta) {
+    this.camera.position.z = Math.max(2.9, Math.min(9, this.camera.position.z + delta));
+    this._updateTextureLOD();
+  }
+  _announceTextureQuality(value) {
+    this.textureQuality = value;
+    this.onTextureQualityChange?.(value);
+  }
+  _loadDetailTexture() {
+    if (this._detailLoadStarted || this.detailDayTexture) return;
+    this._detailLoadStarted = true;
+    this._announceTextureQuality('8K · LOADING');
+    new THREE.TextureLoader().load('/orbit/earth-day-8k.jpg', (tex) => {
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      this.detailDayTexture = tex;
+      this._detailLoadStarted = false;
+      this._updateTextureLOD();
+    }, undefined, (err) => {
+      this._detailLoadStarted = false;
+      this._announceTextureQuality('4K');
+      console.warn('Orbit: optional 8K Earth texture failed; staying on 4K.', err);
+    });
+  }
+  _updateTextureLOD() {
+    if (!this.earthMaterial || !this.renderer) return;
+    const wantsDetail = this.camera.position.z <= 4.6;
+    const supports8K = this.renderer.capabilities.maxTextureSize >= 8192;
+    if (wantsDetail && supports8K && !this.detailDayTexture) this._loadDetailTexture();
+    if (wantsDetail && this.detailDayTexture) {
+      this.earthMaterial.uniforms.dayMap.value = this.detailDayTexture;
+      this._announceTextureQuality('8K · DETAIL');
+    } else if (!wantsDetail && this.baseDayTexture) {
+      this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
+      this._announceTextureQuality('4K');
+    } else if (wantsDetail && !supports8K) {
+      this._announceTextureQuality('4K · DEVICE LIMIT');
+    }
+  }
   recenter() {
     this.autoRotate = false;
     const from = { lon: this.rotation.lon, lat: this.rotation.lat };
@@ -413,6 +461,7 @@ export default class EarthEngine {
     let deltaLon = ((target.lon - from.lon + 540) % 360) - 180;
     this._flight = { t0: performance.now(), duration: 900, from, deltaLon, deltaLat: target.lat - from.lat };
     this.camera.position.z = 8.3;
+    this._updateTextureLOD();
   }
   setAutoRotate(value) { this.autoRotate = value; }
   toggleAutoRotate() { this.autoRotate = !this.autoRotate; return this.autoRotate; }
@@ -725,6 +774,8 @@ export default class EarthEngine {
   dispose() {
     window.removeEventListener('resize', this._resizeHandler);
     this.renderer.dispose();
+    this.baseDayTexture?.dispose();
+    this.detailDayTexture?.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
   }
 }

@@ -31,7 +31,7 @@ function Marker({ marker, projection }) {
   );
 }
 
-export default function OrbitEarthView({ containerRef, current, markerPos, markerTargets = [], onZoomIn, onZoomOut, onRecenter }) {
+export default function OrbitEarthView({ containerRef, current, markerPos, markerTargets = [], textureQuality = '4K', onZoomIn, onZoomOut, onRecenter }) {
   return (
     <div className="ov20-globe-col">
       <div className="ov20-globe-wrap">
@@ -42,6 +42,7 @@ export default function OrbitEarthView({ containerRef, current, markerPos, marke
           </div>
         )}
         <div className="ov20-crosshair" />
+        <div className={`ov20-texture-quality ${textureQuality.startsWith('8K') ? 'detail' : ''}`}>{textureQuality}</div>
         {markerTargets.map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} />)}
         <div className="ov20-globe-controls">
           <button className="ov20-zoom-btn" onClick={onZoomIn}>−</button>

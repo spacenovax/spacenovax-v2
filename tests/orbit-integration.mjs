@@ -15,6 +15,7 @@ const requiredFiles = [
   'src/orbit/OrbitV20/OrbitEvents.jsx',
   'src/orbit/OrbitV20/orbit-v20.css',
   'public/orbit/earth-day-real.webp',
+  'public/orbit/earth-day-8k.jpg',
   'public/orbit/earth-night-real.webp',
   'public/orbit/earth-clouds-real.webp',
 ];
@@ -101,6 +102,19 @@ if (!earthEngineSource.includes('zoomProgress')
   || !earthEngineSource.includes('expanded: zoomProgress')
   || !orbitSource.includes('markerUpdateAt')) {
   throw new Error('Orbit responsive marker projection or render throttling is missing.');
+}
+
+if (!orbitSource.includes('<OrbitHUD')
+  || !orbitSource.includes('ov20-mobile-drawer')
+  || !orbitSource.includes('ov20-desktop-panels')) {
+  throw new Error('Orbit mobile full-globe HUD and detail drawer are missing.');
+}
+
+if (!earthEngineSource.includes("'/orbit/earth-day-real.webp'")
+  || !earthEngineSource.includes("'/orbit/earth-day-8k.jpg'")
+  || !earthEngineSource.includes('maxTextureSize >= 8192')
+  || !earthEngineSource.includes('_updateTextureLOD')) {
+  throw new Error('Orbit 4K/8K texture LOD integration is missing.');
 }
 
 if (!earthEngineSource.includes('nightAmbient')
