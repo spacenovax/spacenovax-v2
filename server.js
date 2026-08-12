@@ -389,8 +389,14 @@ function securityCircleProgress(data, user) {
 }
 
 function communityPostPermission(data, user) {
-  const circleCount = securityCircleCount(data, user);
-  return { allowed: circleCount >= 5 && !user.banned, circleCount, required: 5 };
+  const completedMissionIds = OFFICIAL_MISSION_IDS.filter((id) => Boolean(user.missionClaims?.[id]));
+  return {
+    allowed: completedMissionIds.length === OFFICIAL_MISSION_IDS.length && !user.banned,
+    completed: completedMissionIds.length,
+    required: OFFICIAL_MISSION_IDS.length,
+    missionIds: OFFICIAL_MISSION_IDS,
+    missionPassportComplete: completedMissionIds.length === OFFICIAL_MISSION_IDS.length,
+  };
 }
 
 function publicCommunityPost(data, post, viewerId = '') {
@@ -405,7 +411,13 @@ function publicCommunityPost(data, post, viewerId = '') {
     author: { id: post.authorId, firstName: author?.firstName || post.authorName || 'Captain', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
     likes: (post.likes || []).length,
     liked: (post.likes || []).includes(viewerId),
-    comments: (post.comments || []).slice(-30),
+    commentCount: (post.comments || []).length,
+    comments: (post.comments || []).slice(-30).map((comment) => ({
+      id: comment.id,
+      authorName: comment.authorName || 'Captain',
+      body: comment.body,
+      createdAt: comment.createdAt,
+    })),
     status: post.status || 'published'
   };
 }
@@ -1695,9 +1707,15 @@ app.post('/api/community/feed', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   const category = String(req.body?.category || 'all').toLowerCase();
+  const sort = String(req.body?.sort || 'latest').toLowerCase();
   const posts = (data.communityPosts || [])
     .filter((post) => post.status === 'published' && (category === 'all' || post.category === category))
-    .sort((a, b) => b.createdAt - a.createdAt)
+    .sort((a, b) => {
+      if (sort !== 'popular') return b.createdAt - a.createdAt;
+      const scoreA = (a.likes || []).length + ((a.comments || []).length * 2);
+      const scoreB = (b.likes || []).length + ((b.comments || []).length * 2);
+      return scoreB - scoreA || b.createdAt - a.createdAt;
+    })
     .slice(0, 100)
     .map((post) => publicCommunityPost(data, post, user.id));
   res.json({ ok: true, posts, permission: communityPostPermission(data, user) });
@@ -1739,7 +1757,7 @@ app.post('/api/community/post', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   const permission = communityPostPermission(data, user);
-  if (!permission.allowed) return res.status(403).json({ ok: false, message: `Posting requires five KYC-approved Security Circle members (${permission.circleCount}/5).` });
+  if (!permission.allowed) return res.status(403).json({ ok: false, message: `Complete all five official channel missions before publishing (${permission.completed}/${permission.required}).` });
   const title = String(req.body?.title || '').trim().slice(0, 120);
   const body = String(req.body?.body || '').trim().slice(0, 5000);
   const categories = new Set(['nova-ai', 'game', 'mining', 'guide', 'community']);
@@ -1776,6 +1794,24 @@ app.post('/api/community/like', (req, res) => {
   post.likes = post.likes.includes(user.id) ? post.likes.filter((id) => id !== user.id) : [...post.likes, user.id];
   writeData(data);
   res.json({ ok: true, liked: post.likes.includes(user.id), likes: post.likes.length });
+});
+
+app.post('/api/community/comment', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || '') && item.status === 'published');
+  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
+  const body = String(req.body?.body || '').trim().slice(0, 500);
+  if (body.length < 2) return res.status(400).json({ ok: false, message: 'Comment must contain at least two characters.' });
+  post.comments ||= [];
+  const recent = post.comments.filter((comment) => comment.authorId === user.id && comment.createdAt > now() - 60000);
+  if (recent.length >= 5) return res.status(429).json({ ok: false, message: 'Please wait before adding more comments.' });
+  const comment = { id: crypto.randomUUID(), authorId: user.id, authorName: user.firstName || 'Captain', body, createdAt: now() };
+  post.comments.push(comment);
+  if (post.comments.length > 200) post.comments = post.comments.slice(-200);
+  data.events.push({ type: 'community_comment', userId: user.id, postId: post.id, commentId: comment.id, at: comment.createdAt });
+  writeData(data);
+  res.json({ ok: true, comment: { id: comment.id, authorName: comment.authorName, body: comment.body, createdAt: comment.createdAt } });
 });
 
 app.post('/api/community/report', (req, res) => {
