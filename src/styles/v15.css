@@ -343,3 +343,13 @@
 .v15-header .comms-symbol,.v15-header .comms-symbol svg{width:22px;height:22px}.v15-header .comms-symbol svg{filter:drop-shadow(0 0 3px currentColor)}
 .v15-header .comms-count{right:-4px;top:-5px;min-width:16px;height:16px;border-width:2px;font-size:7px;box-shadow:0 0 8px currentColor}
 }
+
+/* Compact single-row mobile header refinement. */
+@media(max-width:520px){
+.v15-header{height:68px;display:flex;align-items:center;justify-content:space-between;padding:0}
+.v15-header .brand{position:static;z-index:auto;max-width:none;min-width:0;gap:6px;transform:translateX(-5px)}.v15-header .brand img{width:38px;height:38px;flex:0 0 38px}.v15-header .brand span{min-width:0}.v15-header .brand b{font-size:15px;line-height:1;white-space:nowrap}.v15-header .brand small{max-width:105px;margin-top:3px;font-size:7px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v15-header .header-actions{position:static;z-index:auto;inset:auto;display:flex;flex:0 0 auto;align-items:center;gap:4px}.v15-header .announcement-bell,.v15-header .message-bell,.v15-header .header-website{grid-column:auto;grid-row:auto}
+.v15-header .language-button{position:static;right:auto;top:auto;width:43px;min-width:43px;height:34px;padding:0 6px;gap:4px}.v15-header .language-button svg{width:15px;height:15px}.v15-header .language-button span{font-size:9px}
+.v15-header .comms-control,.v15-header .header-website{width:32px;height:32px;min-width:32px;border-radius:10px}.v15-header .comms-symbol,.v15-header .comms-symbol svg{width:19px;height:19px}.v15-header .header-website svg{width:15px;height:15px}
+.v15-header .comms-count{right:-3px;top:-5px;min-width:15px;height:15px;padding:0 3px;font-size:6px}
+}
