@@ -208,9 +208,9 @@ function normalizeData(data) {
   data.communityNodes ||= {};
   data.nodePairings ||= {};
   data.personalMessages ||= [];
+  data.personalMessages = data.personalMessages.slice(-10000);
   data.messageReports ||= [];
   data.messageReports = data.messageReports.slice(-5000);
-  data.personalMessages = data.personalMessages.slice(-10000);
   data.announcements ||= [];
   data.announcements = data.announcements.slice(-500);
   data.settings.communityNodeLimit ??= COMMUNITY_NODE_LIMIT;
@@ -411,16 +411,10 @@ function publicCommunityPost(data, post, viewerId = '') {
     body: post.body,
     imageUrl: post.imageUrl || '',
     createdAt: post.createdAt,
-    author: { id: post.authorId, firstName: author?.communityNickname || author?.firstName || post.authorName || 'Captain', avatarUrl: author?.avatarUrl || '', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
+    author: { id: post.authorId, firstName: author?.firstName || post.authorName || 'Captain', avatarUrl: author?.avatarUrl || '', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
     likes: (post.likes || []).length,
     liked: (post.likes || []).includes(viewerId),
-    commentCount: (post.comments || []).length,
-    comments: (post.comments || []).slice(-30).map((comment) => ({
-      id: comment.id,
-      authorName: comment.authorName || 'Captain',
-      body: comment.body,
-      createdAt: comment.createdAt,
-    })),
+    comments: (post.comments || []).slice(-30),
     status: post.status || 'published'
   };
 }
@@ -816,7 +810,8 @@ function publicUser(data, user) {
   const bonus = fleetBonusPercent(activeFleet, data);
   const mining = calculateMining(data, user);
   const settledBalance = Number(user.balance || 0);
-  const personalMessages = data.personalMessages.filter((item) => item.userId === user.id);
+  const personalMessages = data.personalMessages.filter((item) => item.userId === user.id && !item.senderId);
+  const fleetDirectMessages = data.personalMessages.filter((item) => item.type === 'fleet_direct_message' && item.userId === user.id);
   const activeAnnouncements = data.announcements.filter((item) => item.active !== false).sort((a, b) => Number(b.publishedAt || b.createdAt || 0) - Number(a.publishedAt || a.createdAt || 0));
   const latestAnnouncement = activeAnnouncements[0] || null;
 
@@ -826,7 +821,6 @@ function publicUser(data, user) {
     username: user.username,
     firstName: user.firstName,
     avatarUrl: user.avatarUrl || '',
-    communityNickname: user.communityNickname || '',
     isGuest: user.isGuest,
     // `balance` is the settled, ledger-backed balance.  The display field adds
     // only the server-calculated in-progress mining amount and is never used
@@ -855,6 +849,7 @@ function publicUser(data, user) {
     communityNode: communityNodeState(data, user),
     communityNodeProgram: communityNodeProgram(data),
     unreadMessageCount: personalMessages.filter((item) => !item.readAt).length,
+    unreadFleetMessageCount: fleetDirectMessages.filter((item) => !item.readAt).length,
     unreadAnnouncementCount: activeAnnouncements.filter((item) => !user.announcementReads?.[item.id]).length,
     latestAnnouncement: latestAnnouncement ? {
       id: latestAnnouncement.id,
@@ -1330,24 +1325,33 @@ app.post('/api/session', (req, res) => {
 app.post('/api/messages', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
-  const messages = data.personalMessages.filter((item) => item.userId === user.id || item.senderId === user.id).slice(-200).reverse().map((item) => ({ ...item, direction: item.senderId === user.id ? 'sent' : 'received', blocked: item.senderId ? (user.messageBlocks || []).includes(item.senderId) : false }));
+  const messages = data.personalMessages.filter((item) => item.userId === user.id && !item.senderId).slice(-100).reverse();
   res.json({ ok: true, messages, unreadCount: messages.filter((item) => !item.readAt).length });
 });
 
-app.post('/api/messages/members', (req, res) => {
+app.post('/api/fleet/messages/members', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
   const query = String(req.body?.query || '').trim().toLowerCase().slice(0, 60);
-  const members = Object.values(data.users || {}).filter((member) => member.id !== user.id && !member.banned && member.communityNickname && OFFICIAL_MISSION_IDS.every((id) => Boolean(member.missionClaims?.[id])) && (!query || String(member.communityNickname).toLowerCase().includes(query))).slice(0, 30).map((member) => ({ id: member.id, firstName: member.communityNickname, avatarUrl: member.avatarUrl || '', blocked: (user.messageBlocks || []).includes(member.id) }));
-  res.json({ ok: true, members, canSend: OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id])) });
+  const captainId = fleetCaptainId(data, user);
+  const members = fleetMembers(data, captainId).filter((member) => member.id !== user.id && !member.banned && (!query || String(member.firstName || '').toLowerCase().includes(query))).slice(0, 100).map((member) => ({ id: member.id, firstName: member.firstName || 'Captain', avatarUrl: member.avatarUrl || '', blocked: (user.messageBlocks || []).includes(member.id) }));
+  res.json({ ok: true, members, captainId });
 });
 
-app.post('/api/messages/send', (req, res) => {
+app.post('/api/fleet/messages', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const captainId = fleetCaptainId(data, user);
+  const messages = data.personalMessages.filter((item) => item.type === 'fleet_direct_message' && item.captainId === captainId && (item.userId === user.id || item.senderId === user.id)).slice(-200).reverse().map((item) => ({ ...item, direction: item.senderId === user.id ? 'sent' : 'received', blocked: item.senderId ? (user.messageBlocks || []).includes(item.senderId) : false }));
+  res.json({ ok: true, messages, unreadCount: messages.filter((item) => item.userId === user.id && !item.readAt).length });
+});
+
+app.post('/api/fleet/messages/send', (req, res) => {
   const data = readData();
   const sender = getSessionUser(req, data);
-  if (!OFFICIAL_MISSION_IDS.every((id) => Boolean(sender.missionClaims?.[id]))) return res.status(403).json({ ok: false, message: 'Complete all five official missions before sending member messages.' });
   const recipient = data.users[String(req.body?.recipientId || '')];
-  if (!recipient || recipient.id === sender.id || recipient.banned || !OFFICIAL_MISSION_IDS.every((id) => Boolean(recipient.missionClaims?.[id]))) return res.status(404).json({ ok: false, message: 'Eligible recipient not found.' });
+  const captainId = fleetCaptainId(data, sender);
+  if (!recipient || recipient.id === sender.id || recipient.banned || fleetCaptainId(data, recipient) !== captainId) return res.status(403).json({ ok: false, message: 'Private messages are available only between members of the same fleet.' });
   if ((recipient.messageBlocks || []).includes(sender.id)) return res.status(403).json({ ok: false, message: 'This member is not accepting messages from you.' });
   const body = String(req.body?.body || '').trim().slice(0, 1500);
   const normalizedBody = body.normalize('NFKC').toLowerCase();
@@ -1371,19 +1375,19 @@ app.post('/api/messages/send', (req, res) => {
   }
   const replyTo = String(req.body?.replyTo || '');
   const referenced = replyTo ? data.personalMessages.find((item) => item.id === replyTo && ((item.userId === sender.id && item.senderId === recipient.id) || (item.userId === recipient.id && item.senderId === sender.id))) : null;
-  const message = { id: crypto.randomUUID(), userId: recipient.id, senderId: sender.id, senderName: sender.communityNickname || sender.firstName || 'Captain', senderAvatarUrl: sender.avatarUrl || '', recipientName: recipient.communityNickname || recipient.firstName || 'Captain', type: 'member_message', title: replyTo ? 'Reply from a Captain' : 'Message from a Captain', body, imageUrl, replyTo: referenced?.id || '', replyPreview: referenced?.body?.slice(0, 120) || '', readAt: 0, createdAt: now() };
+  const message = { id: crypto.randomUUID(), captainId, userId: recipient.id, senderId: sender.id, senderName: sender.firstName || 'Captain', senderAvatarUrl: sender.avatarUrl || '', recipientName: recipient.firstName || 'Captain', type: 'fleet_direct_message', title: replyTo ? 'Fleet reply' : 'Fleet direct message', body, imageUrl, replyTo: referenced?.id || '', replyPreview: referenced?.body?.slice(0, 120) || '', readAt: 0, createdAt: now() };
   data.personalMessages.push(message); data.events.push({ type: 'member_message_sent', userId: sender.id, recipientId: recipient.id, messageId: message.id, hasImage: Boolean(imageUrl), at: message.createdAt }); writeData(data);
   res.status(201).json({ ok: true, message: 'Message sent.' });
 });
 
-app.post('/api/messages/block', (req, res) => {
+app.post('/api/fleet/messages/block', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data); const targetId = String(req.body?.userId || ''); const action = String(req.body?.action || 'block');
   if (!data.users[targetId] || targetId === user.id || !['block','unblock'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid block request.' });
   user.messageBlocks ||= []; user.messageBlocks = action === 'block' ? [...new Set([...user.messageBlocks, targetId])] : user.messageBlocks.filter((id) => id !== targetId); writeData(data);
   res.json({ ok: true, blocked: action === 'block' });
 });
 
-app.post('/api/messages/report', (req, res) => {
+app.post('/api/fleet/messages/report', (req, res) => {
   const data=readData(); const user=getSessionUser(req,data); const message=data.personalMessages.find((item)=>item.id===String(req.body?.messageId||'')&&item.userId===user.id&&item.senderId);
   if(!message)return res.status(404).json({ok:false,message:'Received member message not found.'});
   if(data.messageReports.some((item)=>item.messageId===message.id&&item.reporterId===user.id))return res.status(409).json({ok:false,message:'This message has already been reported.'});
@@ -1396,12 +1400,17 @@ app.post('/api/messages/read', (req, res) => {
   const messageId = String(req.body?.messageId || 'all');
   const timestamp = now();
   for (const item of data.personalMessages) {
-    if (item.userId === user.id && !item.readAt && (messageId === 'all' || item.id === messageId)) item.readAt = timestamp;
+    if (item.userId === user.id && !item.senderId && !item.readAt && (messageId === 'all' || item.id === messageId)) item.readAt = timestamp;
   }
   writeData(data);
   res.json({ ok: true });
 });
 
+app.post('/api/fleet/messages/read', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data); const captainId = fleetCaptainId(data, user); const timestamp = now();
+  for (const item of data.personalMessages) if (item.type === 'fleet_direct_message' && item.captainId === captainId && item.userId === user.id && !item.readAt) item.readAt = timestamp;
+  writeData(data); res.json({ ok:true });
+});
 
 app.post('/api/announcements', (req, res) => {
   const data = readData();
@@ -1488,8 +1497,10 @@ app.post('/api/nodes/heartbeat', requireCommunityNode, (req, res) => {
   const timestamp = now();
   const safeTelemetry = { cpuPercent: Math.max(0, Math.min(100, Number(req.body?.cpuPercent) || 0)), memoryPercent: Math.max(0, Math.min(100, Number(req.body?.memoryPercent) || 0)), diskPercent: Math.max(0, Math.min(100, Number(req.body?.diskPercent) || 0)), uptimeSeconds: Math.max(0, Number(req.body?.uptimeSeconds) || 0), apiLatencyMs: Math.max(0, Number(req.body?.apiLatencyMs) || 0), serviceStatus: String(req.body?.serviceStatus || 'online').slice(0, 24) };
   const suppliedFingerprint = String(req.body?.machineFingerprint || '').replace(/[^a-f0-9]/gi, '').slice(0, 128);
-  // Genesis Node V1.0.0 predates machineFingerprint heartbeat payloads.
-  // Its signed pairing credentials provide a stable per-node compatibility ID.
+  // Genesis Node V1.0.0 was released before machineFingerprint was added to
+  // heartbeat payloads. Keep that signed, already-paired client compatible by
+  // deriving a stable per-node fallback. Newer agents continue to submit the
+  // actual machine fingerprint and retain duplicate-machine detection.
   const fingerprint = suppliedFingerprint || crypto.createHash('sha256').update(`legacy-node:${node.nodeId}`).digest('hex');
   if (!suppliedFingerprint) node.legacyClient = true;
   const duplicate = Object.values(data.communityNodes || {}).find((candidate) => candidate.nodeId !== node.nodeId && !candidate.revoked && candidate.machineFingerprint && candidate.machineFingerprint === fingerprint);
@@ -1548,10 +1559,10 @@ app.post('/api/nodes/results', requireCommunityNode, (req, res) => {
   const data = req.communityNodeData;
   const node = data.communityNodes[req.communityNode.nodeId];
   const pending = node.pendingWork;
-  // Results contain no financial or private data. This request has already
+  // Results contain no financial or private data. The request has already
   // passed signed short-lived node-token authentication. Genesis Node V1.0.0
-  // serialized result identifiers differently on Windows, so completion is
-  // accepted only while this authenticated node owns a live public-cache task.
+  // serialized work result identifiers differently on Windows, so completion
+  // is accepted only while this authenticated node owns a live pending task.
   const valid = Boolean(pending) &&
     now() - Number(pending.issuedAt || 0) <= COMMUNITY_NODE_TOKEN_TTL_MS &&
     COMMUNITY_NODE_WORK_TYPES.has(pending.type);
@@ -1772,12 +1783,9 @@ app.post('/api/community/feed', (req, res) => {
   const sort = String(req.body?.sort || 'latest').toLowerCase();
   const posts = (data.communityPosts || [])
     .filter((post) => post.status === 'published' && (category === 'all' || post.category === category))
-    .sort((a, b) => {
-      if (sort !== 'popular') return b.createdAt - a.createdAt;
-      const scoreA = (a.likes || []).length + ((a.comments || []).length * 2);
-      const scoreB = (b.likes || []).length + ((b.comments || []).length * 2);
-      return scoreB - scoreA || b.createdAt - a.createdAt;
-    })
+    .sort((a, b) => sort === 'popular'
+      ? ((b.likes || []).length + (b.comments || []).length * 2) - ((a.likes || []).length + (a.comments || []).length * 2) || b.createdAt - a.createdAt
+      : b.createdAt - a.createdAt)
     .slice(0, 100)
     .map((post) => publicCommunityPost(data, post, user.id));
   res.json({ ok: true, posts, permission: communityPostPermission(data, user) });
@@ -1885,7 +1893,6 @@ app.post('/api/profile/nickname', (req, res) => {
   user.communityNickname = nickname; user.updatedAt = now(); data.events.push({ type:'community_nickname_updated', userId:user.id, at:user.updatedAt }); writeData(data); res.json({ ok:true, user:publicUser(data,user) });
 });
 
-
 app.post('/api/community/like', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
@@ -1912,7 +1919,7 @@ app.post('/api/community/comment', (req, res) => {
   if (post.comments.length > 200) post.comments = post.comments.slice(-200);
   data.events.push({ type: 'community_comment', userId: user.id, postId: post.id, commentId: comment.id, at: comment.createdAt });
   writeData(data);
-  res.json({ ok: true, comment: { id: comment.id, authorName: comment.authorName, body: comment.body, createdAt: comment.createdAt } });
+  res.json({ ok: true, comment, comments: post.comments.slice(-30) });
 });
 
 app.post('/api/community/report', (req, res) => {
@@ -2138,35 +2145,9 @@ app.get('/api/admin/announcements', requireAdmin, (req, res) => {
   res.json({ ok: true, announcements: data.announcements.slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)) });
 });
 
-app.post('/api/admin/announcements', requireAdmin, (req, res) => {
-  const data = readData();
-  const title = String(req.body?.title || '').trim().slice(0, 120);
-  const body = String(req.body?.body || '').trim().slice(0, 5000);
-  if (!title || !body) return res.status(400).json({ ok: false, message: 'Announcement title and body are required.' });
-  const timestamp = now();
-  const announcement = { id: crypto.randomUUID(), title, body, priority: ['normal', 'important', 'urgent'].includes(req.body?.priority) ? req.body.priority : 'normal', active: true, createdAt: timestamp, publishedAt: timestamp, createdBy: req.admin.id };
-  data.announcements.push(announcement);
-  data.events.push({ type: 'admin_announcement_published', adminId: req.admin.id, announcementId: announcement.id, priority: announcement.priority, at: timestamp });
-  writeData(data);
-  res.status(201).json({ ok: true, announcement });
-});
-
-app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
-  const data = readData();
-  const announcement = data.announcements.find((item) => item.id === String(req.body?.id || ''));
-  if (!announcement) return res.status(404).json({ ok: false, message: 'Announcement not found.' });
-  announcement.active = Boolean(req.body?.active);
-  announcement.updatedAt = now();
-  announcement.updatedBy = req.admin.id;
-  data.events.push({ type: 'admin_announcement_updated', adminId: req.admin.id, announcementId: announcement.id, active: announcement.active, at: now() });
-  writeData(data);
-  res.json({ ok: true, announcement });
-});
-
-// Administrators monitor node health; they do not approve normal node activation.
 app.get('/api/admin/messages/stats', requireAdmin, (req, res) => {
   const data = readData();
-  const memberMessages = data.personalMessages.filter((item) => item.type === 'member_message');
+  const memberMessages = data.personalMessages.filter((item) => item.type === 'fleet_direct_message');
   res.json({ ok: true, stats: { memberMessages: memberMessages.length, withPhotos: memberMessages.filter((item) => item.imageUrl).length, systemMessages: data.personalMessages.length - memberMessages.length, pendingReports:(data.messageReports||[]).filter((item)=>item.status==='pending').length }, reports:(data.messageReports||[]).slice(-100).reverse() });
 });
 
@@ -2175,8 +2156,8 @@ app.post('/api/admin/messages/report-action', requireAdmin, (req,res)=>{const da
 app.post('/api/admin/messages/delete-all', requireAdmin, (req, res) => {
   if (String(req.body?.confirmation || '') !== 'DELETE ALL MEMBER MESSAGES') return res.status(400).json({ ok: false, message: 'Type DELETE ALL MEMBER MESSAGES to confirm.' });
   const data = readData();
-  const removed = data.personalMessages.filter((item) => item.type === 'member_message');
-  data.personalMessages = data.personalMessages.filter((item) => item.type !== 'member_message');
+  const removed = data.personalMessages.filter((item) => item.type === 'fleet_direct_message');
+  data.personalMessages = data.personalMessages.filter((item) => item.type !== 'fleet_direct_message');
   for (const item of removed) if (String(item.imageUrl || '').startsWith('/community-media/message-')) { try { const file = path.join(COMMUNITY_MEDIA_DIR, path.basename(item.imageUrl)); if (fs.existsSync(file)) fs.unlinkSync(file); } catch {} }
   data.events.push({ type: 'admin_member_messages_deleted', adminId: req.admin.id, count: removed.length, at: now() }); writeData(data);
   res.json({ ok: true, deleted: removed.length });
@@ -2208,7 +2189,6 @@ app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
 });
 
 // Administrators monitor node health; they do not approve normal node activation.
-
 app.get('/api/admin/nodes', requireAdmin, (req, res) => {
   const data = readData();
   const nodes = Object.values(data.communityNodes || {}).map(({ secretHash, ...node }) => ({
