@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/v15.css';
 import { NovaAIRouter } from './nova/index.js';
+import { WALLET_UI_COPY } from './i18n/wallet.js';
 
 const OrbitV20 = lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'));
 
@@ -1411,6 +1412,7 @@ function Ranking({ user, t }) {
 
 function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const w = WALLET_COPY[language] || WALLET_COPY.en;
+  const wu = WALLET_UI_COPY[language] || WALLET_UI_COPY.en;
   const liveMining = useLiveMiningView(user);
   const livePointsBalance = liveMining.displayBalance;
   const [wallet, setWallet] = useState(user.solanaWallet || '');
@@ -1536,34 +1538,34 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
     }
   }
   if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-onboarding">
-    <div className="wallet-security-scan"/><div className="section-heading"><div><small>NOVA WALLET · GENESIS ACCESS</small><h2>{walletSecurity?.pinConfigured ? 'Unlock NOVA Wallet' : 'Initialize NOVA Wallet'}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>SECURE LOCK</span></div>
-    <p className="wallet-onboard-lead">{walletSecurity?.pinConfigured ? 'Enter your six-digit PIN to open your protected command deck.' : walletPinStep === 'confirm' ? 'Re-enter the same six-digit PIN. Your Wallet activates only after both entries match.' : 'Create a six-digit PIN to activate your personal SpaceNovaX command deck.'}</p>
+    <div className="wallet-security-scan"/><div className="section-heading"><div><small>{wu.genesis}</small><h2>{walletSecurity?.pinConfigured ? wu.unlock : wu.initialize}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>{wu.secure}</span></div>
+    <p className="wallet-onboard-lead">{walletSecurity?.pinConfigured ? wu.enterPin : walletPinStep === 'confirm' ? wu.reenterPin : wu.createPin}</p>
     <div className="wallet-onboard-grid">
-      <div className="wallet-pin-console"><small>{walletSecurity?.pinConfigured ? '01 · SECURITY KEY' : walletPinStep === 'confirm' ? '02 · CONFIRM SECURITY KEY' : '01 · CREATE SECURITY KEY'}</small><label>{walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : walletPinStep === 'confirm' ? 'CONFIRM 6-DIGIT NOVA PIN' : 'CREATE 6-DIGIT NOVA PIN'}</label><input inputMode="numeric" type="password" maxLength="6" value={activePin} onChange={(e) => setActivePin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/>
+      <div className="wallet-pin-console"><small>{walletSecurity?.pinConfigured ? wu.securityKey : walletPinStep === 'confirm' ? wu.confirmKey : wu.createKey}</small><label>{walletSecurity?.pinConfigured ? wu.unlockLabel : walletPinStep === 'confirm' ? wu.confirmLabel : wu.createLabel}</label><input inputMode="numeric" type="password" maxLength="6" value={activePin} onChange={(e) => setActivePin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••"/>
         <div className="wallet-pin-slots">{Array.from({ length: 6 }, (_, index) => <i key={index} className={activePin[index] ? 'filled' : ''}>{activePin[index] ? '•' : ''}</i>)}</div>
-        {isPinSetup && <div className="wallet-pin-stage"><i className={walletPinStep === 'create' ? 'active' : ''}>1</i><span/><i className={walletPinStep === 'confirm' ? 'active' : ''}>2</i><b>{walletPinStep === 'confirm' ? 'CONFIRM PIN' : 'CREATE PIN'}</b></div>}
-        <div className="wallet-pin-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','⌫'].map((key) => <button key={key} type="button" className={key === 'CLEAR' ? 'clear' : key === '⌫' ? 'back' : ''} onClick={() => pressWalletPin(key)}>{key}</button>)}</div>
-        <button className="wallet-primary-launch" disabled={walletBusy || activePin.length !== 6} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? 'VERIFYING SECURE ACCESS…' : walletSecurity?.pinConfigured ? 'UNLOCK NOVA WALLET' : walletPinStep === 'confirm' ? 'CONFIRM & ACTIVATE WALLET' : 'CONTINUE TO CONFIRM PIN'}</button>
-        {walletSecurity?.biometricAvailable && <button className="wallet-biometric-launch" disabled={biometricBusy} onClick={unlockWalletWithBiometric}><Icon name="shield"/>{biometricBusy ? 'VERIFYING DEVICE…' : 'USE FACE ID / FINGERPRINT'}</button>}
+        {isPinSetup && <div className="wallet-pin-stage"><i className={walletPinStep === 'create' ? 'active' : ''}>1</i><span/><i className={walletPinStep === 'confirm' ? 'active' : ''}>2</i><b>{walletPinStep === 'confirm' ? wu.confirmStage : wu.createStage}</b></div>}
+        <div className="wallet-pin-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','⌫'].map((key) => <button key={key} type="button" className={key === 'CLEAR' ? 'clear' : key === '⌫' ? 'back' : ''} onClick={() => pressWalletPin(key)}>{key === 'CLEAR' ? wu.clear : key}</button>)}</div>
+        <button className="wallet-primary-launch" disabled={walletBusy || activePin.length !== 6} onClick={unlockNOVAWallet}><Icon name="shield"/>{walletBusy ? wu.verifying : walletSecurity?.pinConfigured ? wu.unlockLabel : walletPinStep === 'confirm' ? wu.activate : wu.continue}</button>
+        {walletSecurity?.biometricAvailable && <button className="wallet-biometric-launch" disabled={biometricBusy} onClick={unlockWalletWithBiometric}><Icon name="shield"/>{biometricBusy ? wu.verifying : wu.biometric}</button>}
       </div>
-      <aside className="wallet-genesis-preview"><small>WALLET ECOSYSTEM</small><div><Icon name="wallet" size={28}/><b>SPNX Points</b><span>ACTIVE LEDGER</span></div><div><Icon name="mission" size={28}/><b>NOVA NFT Vault</b><span>COMING SOON</span></div><p>KYC is required only for transfers, withdrawals, Marketplace payments and live assets. Wallet access and PIN setup are available to every Captain.</p></aside>
+      <aside className="wallet-genesis-preview"><small>{wu.walletEcosystem}</small><div><Icon name="wallet" size={28}/><b>SPNX Points</b><span>{wu.activeLedger}</span></div><div><Icon name="mission" size={28}/><b>NOVA NFT Vault</b><span>{wu.coming}</span></div><p>{wu.kycInfo}</p></aside>
     </div>
-    <div className="wallet-recovery-row"><div><Icon name="shield"/><span><b>Keep your PIN safe.</b><small>A recovered Wallet uses a new security profile. Your SpaceNovaX Points ledger remains attached to your Captain account.</small></span></div><button className="wallet-recovery-link" onClick={requestWalletRecovery}>FORGOT PIN? CREATE NEW SECURITY PROFILE</button></div>{notice && <p className="module-notice">{notice}</p>}
+    <div className="wallet-recovery-row"><div><Icon name="shield"/><span><b>{wu.keepPin}</b><small>{wu.recoveryInfo}</small></span></div><button className="wallet-recovery-link" onClick={requestWalletRecovery}>{wu.forgot}</button></div>{notice && <p className="module-notice">{notice}</p>}
   </section></main>;
   return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-shell">
-    <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>LOCKED SESSION</button></div>
+    <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>{wu.lockedSession}</button></div>
     <div className="nova-wallet-hero"><div><small>{w.portfolio.toUpperCase()} · LIVE SPNX POINTS LEDGER</small><strong>{format(livePointsBalance)} <em>SPNX POINTS</em></strong><p>Live mining, mission and verified game credits settle here through your Captain ledger. KYC is required only when official SPNX conversion launches.</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
     <div className="nova-asset-grid">
       {[['SPNX','0.000000',w.coming],['USDT','0.00',w.coming]].map(([name,value,status]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span className={'asset-emblem ' + (name === 'SPNX' ? 'spnx' : 'usdt')}>{name === 'SPNX' ? <img src="/brand/spacenovax-symbol.jpg" alt="SPNX" /> : '₮'}</span><small>{name}</small><b>{value}</b><i>{status}</i></button>)}
       <button className="nova-asset-card spnx-convert-card" onClick={() => setWalletPanel('convert')}><span className="asset-emblem points">✦</span><small>SPNX POINTS</small><b>LIVE LEDGER</b><i className="active">{format(livePointsBalance)} LIVE</i><strong>POINTS → SPNX <Icon name="arrow" size={14}/></strong></button>
     </div>
     <div className="nova-wallet-actions">
-      <button className={walletPanel === 'receive' ? 'selected' : ''} onClick={() => setWalletPanel('receive')}><Icon name="arrow-down"/>RECEIVE <small>REWARDS ONLY</small></button>
-      <button className={walletPanel === 'send' ? 'selected' : ''} onClick={() => setWalletPanel('send')}><Icon name="arrow-up"/>SEND <small>KYC GATED</small></button>
-      <button className={walletPanel === 'history' ? 'selected' : ''} onClick={() => setWalletPanel('history')}><Icon name="chart"/>HISTORY <small>SERVER LEDGER</small></button>
-      <button className={walletPanel === 'swap' ? 'selected swap-command' : 'swap-command'} onClick={() => setWalletPanel('swap')}><Icon name="bolt"/>SWAP <small>KYC GATED</small></button>
-      <button className={walletPanel === 'nft' ? 'selected nft-command' : 'nft-command'} onClick={() => setWalletPanel('nft')}><Icon name="mission"/>NFT VAULT <small>INSIDE WALLET</small></button>
-      <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>SECURITY <small>PIN PROTECTED</small></button>
+      <button className={walletPanel === 'receive' ? 'selected' : ''} onClick={() => setWalletPanel('receive')}><Icon name="arrow-down"/>{wu.receive} <small>{wu.rewardsOnly}</small></button>
+      <button className={walletPanel === 'send' ? 'selected' : ''} onClick={() => setWalletPanel('send')}><Icon name="arrow-up"/>{wu.send} <small>{wu.kycGated}</small></button>
+      <button className={walletPanel === 'history' ? 'selected' : ''} onClick={() => setWalletPanel('history')}><Icon name="chart"/>{wu.history} <small>{wu.serverLedger}</small></button>
+      <button className={walletPanel === 'swap' ? 'selected swap-command' : 'swap-command'} onClick={() => setWalletPanel('swap')}><Icon name="bolt"/>{wu.swap} <small>{wu.kycGated}</small></button>
+      <button className={walletPanel === 'nft' ? 'selected nft-command' : 'nft-command'} onClick={() => setWalletPanel('nft')}><Icon name="mission"/>{wu.nft} <small>{wu.insideWallet}</small></button>
+      <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>{wu.security} <small>{wu.pinProtected}</small></button>
     </div>
     <section className="nova-wallet-operation">
       {walletPanel === 'overview' && <><small>WALLET COMMAND DECK</small><b>Choose an action to manage your NOVA Wallet.</b><p>Every asset, transfer request and security action is recorded through the server-authoritative SpaceNovaX ledger.</p></>}
