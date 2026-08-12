@@ -733,7 +733,8 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
   const live = useLiveMiningView(user);
   const liveUser = { ...user, mining: live.mining };
   const [balanceInteger, balanceFraction = ''] = format(live.displayBalance, 5).split('.');
-  const heroSpeed = Number(live.mining.speedPerHour || (live.mining.reward || 30) / 24);
+  const miningIsLive = Boolean(live.mining.active) && !Boolean(live.mining.claimable);
+  const heroSpeed = miningIsLive ? Number(live.mining.speedPerHour || (live.mining.reward || 30) / 24) : 0;
   return <main className="v15-page">
     <section className="hero-command">
       <div className="hero-space"/>
@@ -746,7 +747,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="hero-live-light" aria-hidden="true"/>
       <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
       <div className="spnx-token-flight" aria-hidden="true"><span><img src="/spnx-orbital-token-v1.webp" alt="" /></span></div>
-      <button className="hero-nova-pulse" onClick={() => window.dispatchEvent(new Event('spnx-open-speed'))} aria-label="Open NOVA Pulse mining speed details"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg><span><small>NOVA PULSE · {document.documentElement.lang==='ko'?'현재 채굴 속도':'LIVE MINING SPEED'}</small><b>{format(heroSpeed,5)} SPNX/h</b><em>{document.documentElement.lang==='ko'?'터치하여 상세 보기':'TOUCH FOR DETAILS'}</em></span></button>
+      <button className={`hero-nova-pulse ${miningIsLive ? 'mining-live' : 'mining-offline'}`} onClick={() => window.dispatchEvent(new Event('spnx-open-speed'))} aria-label="Open NOVA Pulse mining speed details"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg><span><small>NOVA PULSE · {document.documentElement.lang==='ko'?(miningIsLive?'현재 채굴 속도':'채굴 정지'):(miningIsLive?'LIVE MINING SPEED':'MINING OFFLINE')}</small><b>{format(heroSpeed,5)} SPNX/h</b><em>{document.documentElement.lang==='ko'?'터치하여 상세 보기':'TOUCH FOR DETAILS'}</em></span></button>
       <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
