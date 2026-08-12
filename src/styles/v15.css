@@ -363,3 +363,10 @@
 .v15-header .header-actions{gap:6px}
 .v15-header .message-bell .comms-count{right:-4px;top:-6px}
 }
+
+/* Brand emphasis and calm notification behavior. */
+.broadcast-symbol svg{animation:none}
+.comms-count{animation:notificationBreath 2.8s ease-in-out infinite}
+@keyframes notificationBreath{0%,100%{filter:brightness(.92);transform:scale(.96);opacity:.88}50%{filter:brightness(1.12);transform:scale(1.04);opacity:1}}
+@media(max-width:520px){.v15-header .brand{gap:6px}.v15-header .brand img{width:45px;height:45px;flex-basis:45px}.v15-header .header-actions{transform:translateX(-4px)}}
+@media(prefers-reduced-motion:reduce){.comms-count{animation:none!important}}
