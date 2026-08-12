@@ -615,10 +615,11 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
   const baseBeforeReduction = Number(m.baseBeforeReductionPerHour || baseSpeed / Math.max(reductionMultiplier, .000001));
   const grossSpeedBeforeReduction = baseBeforeReduction * (1 + (fleetBonus + securityBonus + missionBonus) / 100) * eventMultiplier * (1 + nodeBonus / 100);
   const reductionAmountPerHour = Math.max(0, grossSpeedBeforeReduction - currentSpeed);
+  useEffect(() => { const open=()=>setSpeedOpen(true); window.addEventListener('spnx-open-speed',open); return()=>window.removeEventListener('spnx-open-speed',open); }, []);
   return <section className={`command-card mining-core ${detailed ? 'detailed' : ''}`}>
     <div className="section-heading">
       <div><small>SPNX DISTRIBUTION ENGINE</small><h2>{t.mining}</h2></div>
-      <div className="mining-head-actions"><button className="nova-pulse-speed" onClick={() => setSpeedOpen(true)} aria-label={ko?'현재 채굴 속도 보기':'View current mining speed'}><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg><span><small>NOVA PULSE · {ko?'현재 속도':'LIVE SPEED'}</small><b>{format(currentSpeed,5)} SPNX/h</b></span></button><span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span></div>
+      <span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span>
     </div>
     <MiningReactor
       active={active}
@@ -716,6 +717,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
   const live = useLiveMiningView(user);
   const liveUser = { ...user, mining: live.mining };
   const [balanceInteger, balanceFraction = ''] = format(live.displayBalance, 5).split('.');
+  const heroSpeed = Number(live.mining.speedPerHour || (live.mining.reward || 30) / 24);
   return <main className="v15-page">
     <section className="hero-command">
       <div className="hero-space"/>
@@ -728,6 +730,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="hero-live-light" aria-hidden="true"/>
       <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
       <div className="spnx-token-flight" aria-hidden="true"><span><img src="/spnx-orbital-token-v1.webp" alt="" /></span></div>
+      <button className="hero-nova-pulse" onClick={() => window.dispatchEvent(new Event('spnx-open-speed'))} aria-label="Open NOVA Pulse mining speed details"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg><span><small>NOVA PULSE · {document.documentElement.lang==='ko'?'현재 채굴 속도':'LIVE MINING SPEED'}</small><b>{format(heroSpeed,5)} SPNX/h</b><em>{document.documentElement.lang==='ko'?'터치하여 상세 보기':'TOUCH FOR DETAILS'}</em></span></button>
       <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
