@@ -31,9 +31,13 @@ const GAME_ALLOWED_ORIGINS = new Set([
   'https://nova-x1-genesis-defense.kit372002.chatgpt.site',
   'https://game.spacenovax.com',
 ]);
+const PUBLIC_WEB_ORIGINS = new Set([
+  'https://spacenovax.com',
+  'https://www.spacenovax.com',
+]);
 app.use((req, res, next) => {
   const origin = String(req.headers.origin || '');
-  if (GAME_ALLOWED_ORIGINS.has(origin)) {
+  if (GAME_ALLOWED_ORIGINS.has(origin) || (PUBLIC_WEB_ORIGINS.has(origin) && req.path === '/api/ecosystem-stats')) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -1311,6 +1315,40 @@ app.get('/api/health', async (req, res) => {
     console.error('Health check failed', error);
     res.status(503).json({ ok: false, storage: 'postgresql', persistent: false });
   }
+});
+
+// Privacy-safe public aggregate shared by the Telegram Mini App and the
+// spacenovax.com ecosystem snapshot. No user identity, balance, wallet
+// address, location or individual activity is exposed.
+app.get('/api/ecosystem-stats', (req, res) => {
+  const data = readData();
+  const users = Object.values(data.users || {}).filter((user) => !user.isGuest && !user.banned);
+  const events = data.events || [];
+  const timestamp = now();
+  const tenMinutesAgo = timestamp - 10 * 60 * 1000;
+  const dayAgo = timestamp - 24 * 60 * 60 * 1000;
+  const activeUserIds = new Set(events.filter((event) => event.type === 'session' && Number(event.at || 0) >= tenMinutesAgo).map((event) => event.userId));
+  const newUsers24h = users.filter((user) => Number(user.createdAt || 0) >= dayAgo).length;
+  const priorUsers = Math.max(0, users.length - newUsers24h);
+  const communityGrowth = priorUsers ? Number((newUsers24h / priorUsers * 100).toFixed(2)) : (newUsers24h ? 100 : 0);
+  const completedMissions = users.reduce((total, user) => total + OFFICIAL_MISSION_IDS.filter((id) => Boolean(user.missionClaims?.[id])).length, 0);
+  const nodeProgram = communityNodeProgram(data);
+  res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+  res.json({ ok: true, generatedAt: timestamp, stats: {
+    activeUsers: activeUserIds.size,
+    totalUsers: users.length,
+    onlineNodes: nodeProgram.online,
+    registeredNodes: nodeProgram.registered,
+    miningSessions: users.filter((user) => calculateMining(data, user).active).length,
+    walletsConnected: users.filter((user) => Boolean(user.solanaWallet)).length,
+    walletsVerified: users.filter((user) => Boolean(user.walletVerifiedAt && user.verifiedSolanaWallet === user.solanaWallet)).length,
+    completedMissions,
+    missionPassports: users.filter((user) => OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id]))).length,
+    countries: null,
+    languages: 12,
+    communityGrowth,
+    communityGrowthPeriod: '24h',
+  }});
 });
 
 
