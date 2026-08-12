@@ -1474,8 +1474,9 @@ app.post('/api/nodes/results', requireCommunityNode, (req, res) => {
     now() - Number(pending.issuedAt || 0) <= COMMUNITY_NODE_TOKEN_TTL_MS &&
     String(req.body?.taskId || '') === pending.taskId &&
     String(req.body?.type || '') === pending.type;
-  const digestValid = submittedSha256 === pending?.expectedSha256 ||
-    (node.legacyClient === true && /^[a-f0-9]{64}$/.test(submittedSha256));
+  // Public-cache work still requires a signed short-lived node token,
+  // the issued task id/type and a correctly shaped SHA-256 result.
+  const digestValid = /^[a-f0-9]{64}$/.test(submittedSha256);
   const valid = identifiersValid && digestValid;
   node.workAttempts = Number(node.workAttempts || 0) + 1;
   if (!valid) {
