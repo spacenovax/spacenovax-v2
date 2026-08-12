@@ -52,6 +52,7 @@ export default function AdminPage() {
   const [nodes, setNodes] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [messageStats, setMessageStats] = useState(null);
+  const [messageReports, setMessageReports] = useState([]);
   const [announcementForm, setAnnouncementForm] = useState({ title:'', body:'', priority:'normal' });
   const [conversionRuntime, setConversionRuntime] = useState(null);
   const [notice, setNotice] = useState('Checking admin session...');
@@ -88,7 +89,7 @@ export default function AdminPage() {
         adminFetch('/api/admin/announcements'),
         adminFetch('/api/admin/messages/stats')
       ]);
-      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []); setAnnouncements(n.announcements || []); setMessageStats(o.stats || null);
+      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []); setAnnouncements(n.announcements || []); setMessageStats(o.stats || null); setMessageReports(o.reports || []);
       setSettingsForm({
         convertEnabled: Boolean(f.settings?.convertEnabled),
         kycEnabled: Boolean(f.settings?.kycEnabled),
@@ -137,6 +138,8 @@ export default function AdminPage() {
 
   async function deleteAllMemberMessages() { const confirmation=window.prompt('회원 간 쪽지와 첨부 사진을 모두 삭제합니다. 계속하려면 DELETE ALL MEMBER MESSAGES를 입력하세요.'); if(confirmation!=='DELETE ALL MEMBER MESSAGES')return; try{const data=await adminFetch('/api/admin/messages/delete-all',{method:'POST',body:JSON.stringify({confirmation})});setNotice(`${data.deleted} member messages deleted.`);await loadAdmin()}catch(e){setNotice(e.message)} }
 
+  async function reviewMessageReport(report, action) { if(action==='permanent_ban'&&!window.confirm(`${report.evidence?.senderName||report.reportedUserId} 계정을 사기·사칭 사유로 영구정지합니까?`))return; try{await adminFetch('/api/admin/messages/report-action',{method:'POST',body:JSON.stringify({reportId:report.id,action})});setNotice(action==='permanent_ban'?'Account permanently suspended.':'Report dismissed.');await loadAdmin()}catch(e){setNotice(e.message)} }
+
   async function logout() { try { await adminFetch('/api/admin/logout', { method:'POST', body:'{}' }); } catch {} clearToken(); setAdmin(null); }
 
   useEffect(()=>{ checkSession(); }, []);
@@ -156,7 +159,7 @@ export default function AdminPage() {
 
     {tab==='announcements' && <div className="admin-users"><h3>Global Announcement Center</h3><p className="admin-empty">게시 즉시 전체 사용자 공지함에 저장되며, 앱 상단 NEW 공지는 게시 후 24시간 표시됩니다.</p><form className="admin-announcement-form" onSubmit={publishAnnouncement}><input maxLength="120" required placeholder="공지 제목" value={announcementForm.title} onChange={(e)=>setAnnouncementForm({...announcementForm,title:e.target.value})}/><textarea maxLength="5000" required rows="7" placeholder="전체 사용자에게 알릴 공지 내용을 입력하세요." value={announcementForm.body} onChange={(e)=>setAnnouncementForm({...announcementForm,body:e.target.value})}/><select value={announcementForm.priority} onChange={(e)=>setAnnouncementForm({...announcementForm,priority:e.target.value})}><option value="normal">일반 공지</option><option value="important">중요 공지</option><option value="urgent">긴급 공지</option></select><button type="submit">전체 공지 게시</button></form><div className="admin-node-list">{announcements.map((item)=><article className="admin-user-row admin-user-rich" key={item.id}><div><b>{item.priority.toUpperCase()} · {item.title}</b><small>{new Date(item.publishedAt).toLocaleString()} · {item.createdBy}</small><small>{item.body}</small></div><div className="admin-user-side"><strong>{item.active?'PUBLISHED':'HIDDEN'}</strong><button onClick={()=>toggleAnnouncement(item)}>{item.active?'Hide':'Publish'}</button></div></article>)}</div></div>}
 
-    {tab==='messages' && <div className="admin-users"><h3>Private Message Control</h3><p className="admin-empty">관리자는 정상적인 비공개 대화 내용을 열람하지 않습니다. 저장량 확인과 회원 간 쪽지 전체 삭제만 수행하며 노드·시스템 알림은 보존됩니다.</p><div className="admin-stats"><div><small>Member Messages</small><b>{messageStats?.memberMessages || 0}</b></div><div><small>Photo Messages</small><b>{messageStats?.withPhotos || 0}</b></div><div><small>System Notices</small><b>{messageStats?.systemMessages || 0}</b></div></div><div className="admin-command-panel"><p>전체 삭제는 회원 간 쪽지와 첨부 사진만 영구 삭제합니다. 복구할 수 없습니다.</p><button onClick={deleteAllMemberMessages}>DELETE ALL MEMBER MESSAGES</button></div></div>}
+        {tab==='messages' && <div className="admin-users"><h3>Private Message Security Control</h3><p className="admin-empty">정상적인 비공개 대화는 열람하지 않습니다. 회원이 사기·사칭으로 신고한 쪽지만 증거 확인 후 영구정지 또는 기각 처리합니다.</p><div className="admin-stats"><div><small>Member Messages</small><b>{messageStats?.memberMessages || 0}</b></div><div><small>Photo Messages</small><b>{messageStats?.withPhotos || 0}</b></div><div><small>Pending Reports</small><b>{messageStats?.pendingReports || 0}</b></div><div><small>System Notices</small><b>{messageStats?.systemMessages || 0}</b></div></div><div className="admin-node-list">{messageReports.map((report)=><article className="admin-user-row admin-user-rich" key={report.id}><div><b>{report.status.toUpperCase()} · {report.evidence?.senderName || report.reportedUserId}</b><small>Reporter: {report.reporterId} · Reported: {report.reportedUserId}</small><small>{report.evidence?.body || 'PHOTO MESSAGE / NO TEXT'}</small>{report.evidence?.imageUrl&&<a href={report.evidence.imageUrl} target="_blank" rel="noreferrer">OPEN ATTACHED EVIDENCE</a>}<small>{new Date(report.createdAt).toLocaleString()}</small></div><div className="admin-user-side"><button disabled={report.status!=='pending'} onClick={()=>reviewMessageReport(report,'permanent_ban')}>PERMANENT BAN</button><button disabled={report.status!=='pending'} onClick={()=>reviewMessageReport(report,'dismiss')}>DISMISS</button></div></article>)}</div><div className="admin-command-panel"><p>전체 삭제는 회원 간 쪽지와 첨부 사진만 영구 삭제합니다. 노드·시스템 알림은 보존됩니다.</p><button onClick={deleteAllMemberMessages}>DELETE ALL MEMBER MESSAGES</button></div></div>}
 
     {tab==='nova' && <div className="admin-users">
       <h3>✦ NOVA AI Control</h3>
