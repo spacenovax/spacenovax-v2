@@ -17,6 +17,12 @@ import OrbitTopBar from './OrbitTopBar.jsx';
 import OrbitEarthView from './OrbitEarthView.jsx';
 import OrbitLeftPanel from './OrbitLeftPanel.jsx';
 import OrbitRightPanel from './OrbitRightPanel.jsx';
+import OrbitHUD from './OrbitHUD.jsx';
+import OrbitCurrentPosition from './OrbitCurrentPosition.jsx';
+import OrbitSatellite from './OrbitSatellite.jsx';
+import OrbitDestination from './OrbitDestination.jsx';
+import OrbitWeather from './OrbitWeather.jsx';
+import OrbitEvents from './OrbitEvents.jsx';
 import OrbitRouteTelemetry from './OrbitRouteTelemetry.jsx';
 import OrbitDrivingView from './OrbitDrivingView.jsx';
 import OrbitFloatingNova from './OrbitFloatingNova.jsx';
@@ -111,6 +117,8 @@ export default function OrbitV20({ language, user }) {
   const engineRef = useRef(null);
   const perfRef = useRef(null);
   const [voiceState, setVoiceState] = useState('idle');
+  const [hudPanel, setHudPanel] = useState(null);
+  const [earthQuality, setEarthQuality] = useState('2K · LOADING');
 
   const [tab, setTab] = useState('live');
   const [clock, setClock] = useState(new Date());
@@ -155,7 +163,7 @@ export default function OrbitV20({ language, user }) {
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
-    const engine = new EarthEngine(containerRef.current, {});
+    const engine = new EarthEngine(containerRef.current, { onTextureQualityChange: setEarthQuality });
     engineRef.current = engine;
     perfRef.current = new PerformanceManager({ onModeChange: (low) => MasterRenderLoop.setFrameSkip(low ? 2 : 1) });
     MasterRenderLoop.add('orbit-earth', (time) => engine.renderFrame(time));
@@ -537,16 +545,38 @@ export default function OrbitV20({ language, user }) {
           current={current}
           markerPos={markerPos}
           markerTargets={markerTargets}
+          textureQuality={earthQuality}
           onZoomIn={() => engineRef.current?.zoomBy(0.5)}
           onZoomOut={() => engineRef.current?.zoomBy(-0.5)}
           onRecenter={() => engineRef.current?.recenter()}
         />
-        <div className="ov20-col left">
+        <div className="ov20-col left ov20-desktop-panels">
           <OrbitLeftPanel {...panelProps} />
         </div>
-        <div className="ov20-col right">
+        <div className="ov20-col right ov20-desktop-panels">
           <OrbitRightPanel {...panelProps} />
         </div>
+        <OrbitHUD
+          t={t}
+          current={current}
+          currentPlace={currentPlace}
+          weather={weather}
+          satelliteCount={issTracked + otherTracked}
+          destination={destination}
+          distanceKm={distanceKm}
+          activePanel={hudPanel}
+          onOpen={setHudPanel}
+        />
+        {hudPanel && (
+          <section className="ov20-mobile-drawer" aria-label={t.ko ? '네비게이션 상세 정보' : 'Navigation details'}>
+            <button className="ov20-drawer-close" onClick={() => setHudPanel(null)} aria-label={t.close}>×</button>
+            {hudPanel === 'position' && <OrbitCurrentPosition {...panelProps} />}
+            {hudPanel === 'satellite' && <OrbitSatellite {...panelProps} />}
+            {hudPanel === 'destination' && <OrbitDestination {...panelProps} />}
+            {hudPanel === 'weather' && <OrbitWeather {...panelProps} />}
+            {hudPanel === 'events' && <OrbitEvents {...panelProps} />}
+          </section>
+        )}
         <OrbitRouteTelemetry
           t={t}
           current={current}
