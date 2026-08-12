@@ -9,7 +9,7 @@ on:
       - .github/workflows/build-community-node-v1.1.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-node:
@@ -35,3 +35,25 @@ jobs:
           name: Genesis_Community_Node_V1.1_Windows_x64
           path: Genesis_Community_Node_V1.1_Windows_x64.zip
           if-no-files-found: error
+      - name: Publish V1.1 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          # SpaceNovaX Genesis Community Node V1.1
+
+          Windows 10/11 standalone community node supporting public service work for Navigation, NOVA AI, NOVA-X and the SPNX network.
+
+          ## Public node work
+          - Navigation satellite, weather and route-gateway monitoring
+          - NOVA AI public help cache and service-health monitoring
+          - NOVA-X gateway, public ranking and asset-integrity verification
+          - SPNX public missions, ranking and 12-language cache
+          - Heartbeat, uptime, latency and SHA-256 console output
+          - Automatic reconnection and +25% mining-speed status
+
+          The node cannot access balances, wallets, mining ledgers, KYC, private conversations, precise location history or administrator data.
+          "@
+          gh release delete node-v1.1.0 --yes --cleanup-tag 2>$null
+          gh release create node-v1.1.0 Genesis_Community_Node_V1.1_Windows_x64.zip --title "SpaceNovaX Genesis Community Node V1.1" --notes $notes --target main --latest
