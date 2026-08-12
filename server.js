@@ -79,7 +79,12 @@ const COMMUNITY_NODE_MINIMUM_AVAILABILITY = 0.90;
 const COMMUNITY_NODE_MINIMUM_WORK_SUCCESS_RATE = 0.98;
 const COMMUNITY_NODE_MINIMUM_HEARTBEAT_SUCCESS_RATE = 0.95;
 const COMMUNITY_NODE_MAX_AVERAGE_LATENCY_MS = 1500;
-const COMMUNITY_NODE_WORK_TYPES = new Set(['public-ranking-cache', 'public-missions-cache', 'i18n-cache', 'static-asset-cache', 'status-monitor']);
+const COMMUNITY_NODE_WORK_TYPES = new Set([
+  'spnx-public-ranking-cache', 'spnx-public-missions-cache', 'spnx-i18n-cache',
+  'navigation-satellite-cache', 'navigation-weather-status', 'navigation-route-gateway-status',
+  'nova-ai-public-help-cache', 'nova-ai-service-health',
+  'nova-x-game-gateway-status', 'nova-x-public-ranking-cache', 'nova-x-asset-integrity',
+]);
 
 const DEFAULT_MISSIONS = [
   { id: 'website', title: 'Visit SpaceNovaX Website', icon: '🌐', reward: 100, type: 'one_time', url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
@@ -1458,7 +1463,7 @@ app.get('/api/nodes/work', requireCommunityNode, (req, res) => {
   // A short-lived nonce prevents replaying an earlier valid hash as a new contribution.
   const type = types[crypto.randomInt(types.length)];
   const taskId = `public-${crypto.randomUUID()}`;
-  const body = JSON.stringify({ type, public: true, revision: 1, taskId });
+  const body = JSON.stringify({ type, public: true, revision: 2, taskId, issuedAt: now() });
   const expectedSha256 = crypto.createHash('sha256').update(body).digest('hex');
   node.pendingWork = { taskId, type, expectedSha256, issuedAt: now() };
   writeData(data);
