@@ -408,7 +408,7 @@ function publicCommunityPost(data, post, viewerId = '') {
     body: post.body,
     imageUrl: post.imageUrl || '',
     createdAt: post.createdAt,
-    author: { id: post.authorId, firstName: author?.firstName || post.authorName || 'Captain', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
+    author: { id: post.authorId, firstName: author?.firstName || post.authorName || 'Captain', avatarUrl: author?.avatarUrl || '', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
     likes: (post.likes || []).length,
     liked: (post.likes || []).includes(viewerId),
     commentCount: (post.comments || []).length,
@@ -822,6 +822,7 @@ function publicUser(data, user) {
     telegramId: user.telegramId,
     username: user.username,
     firstName: user.firstName,
+    avatarUrl: user.avatarUrl || '',
     isGuest: user.isGuest,
     // `balance` is the settled, ledger-backed balance.  The display field adds
     // only the server-calculated in-progress mining amount and is never used
@@ -1783,6 +1784,30 @@ app.post('/api/community/post', (req, res) => {
   data.events.push({ type: 'community_post', userId: user.id, postId: post.id, hasImage: Boolean(imageUrl), at: now() });
   writeData(data);
   res.json({ ok: true, post: publicCommunityPost(data, post, user.id) });
+});
+
+app.post('/api/profile/avatar', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const imageData = String(req.body?.imageData || '');
+  const match = imageData.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return res.status(400).json({ ok: false, message: 'Choose a JPEG, PNG, or WebP profile image.' });
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length || buffer.length > 600_000) return res.status(413).json({ ok: false, message: 'Profile image must be 600 KB or smaller after optimization.' });
+  fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
+  const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const filename = `avatar-${crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 16)}-${Date.now()}.${extension}`;
+  fs.writeFileSync(path.join(COMMUNITY_MEDIA_DIR, filename), buffer);
+  const previous = String(user.avatarUrl || '');
+  user.avatarUrl = `/community-media/${filename}`;
+  user.updatedAt = now();
+  data.events.push({ type: 'profile_avatar_updated', userId: user.id, at: user.updatedAt });
+  writeData(data);
+  if (previous.startsWith('/community-media/avatar-')) {
+    const previousPath = path.join(COMMUNITY_MEDIA_DIR, path.basename(previous));
+    try { if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath); } catch {}
+  }
+  res.json({ ok: true, avatarUrl: user.avatarUrl, user: publicUser(data, user) });
 });
 
 app.post('/api/community/like', (req, res) => {
