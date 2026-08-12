@@ -705,14 +705,13 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="hero-copy">
         <span className="eyebrow"><i />{t.verified}</span>
         <small>{t.balance} · {live.mining.active ? 'LIVE SESSION' : 'SETTLED LEDGER'}</small><strong className="hero-balance" aria-label={`${balanceInteger}${balanceFraction ? `.${balanceFraction}` : ''} SPNX POINTS`}><span className="hero-balance-int">{balanceInteger}</span>{balanceFraction && <span className="hero-balance-fraction">.{balanceFraction}</span>}</strong><h1>SPNX POINTS</h1>
-        <p>NOVA-X / AI CONTROLLED GENESIS FLAGSHIP</p>
+        <p>SPACENOVAX / EARTH ORBITAL COMMAND NETWORK</p>
       </div>
-      <img className="hero-station" src="/spacenovax-orbital-hq-live-v16.webp" alt="SpaceNovaX Orbital Headquarters above Earth" />
+      <img className="hero-station" src="/spacenovax-orbital-command-v17.webp" alt="SpaceNovaX 궤도 관제기지" />
       <div className="hero-live-light" aria-hidden="true"/>
-      <div className="distant-meteor-cloud" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <i key={index}/>)}</div>
       <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
-      <div className="orbital-satellite" aria-hidden="true"><i/><b/><span/></div>
-      <div className="station-brand"><span>ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · HQ-01</small></div>
+      <div className="spnx-token-flight" aria-hidden="true"><span><img src="/spnx-orbital-token-v1.webp" alt="" /></span></div>
+      <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
     <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} busy={busy}/>
