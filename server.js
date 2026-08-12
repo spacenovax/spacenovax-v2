@@ -208,6 +208,8 @@ function normalizeData(data) {
   data.communityNodes ||= {};
   data.nodePairings ||= {};
   data.personalMessages ||= [];
+  data.messageReports ||= [];
+  data.messageReports = data.messageReports.slice(-5000);
   data.personalMessages = data.personalMessages.slice(-10000);
   data.announcements ||= [];
   data.announcements = data.announcements.slice(-500);
@@ -1348,6 +1350,9 @@ app.post('/api/messages/send', (req, res) => {
   if (!recipient || recipient.id === sender.id || recipient.banned || !OFFICIAL_MISSION_IDS.every((id) => Boolean(recipient.missionClaims?.[id]))) return res.status(404).json({ ok: false, message: 'Eligible recipient not found.' });
   if ((recipient.messageBlocks || []).includes(sender.id)) return res.status(403).json({ ok: false, message: 'This member is not accepting messages from you.' });
   const body = String(req.body?.body || '').trim().slice(0, 1500);
+  const normalizedBody = body.normalize('NFKC').toLowerCase();
+  const prohibitedPatterns = [/(seed phrase|recovery phrase|private key|wallet password|시드\s*문구|복구\s*문구|개인\s*키|지갑\s*비밀번호)/i, /(send|transfer|deposit|송금|입금).{0,30}(usdt|sol|spnx|coin|token|코인|토큰)/i, /(admin|administrator|operator|support|운영자|관리자|고객센터).{0,20}(입니다|공식|official|payment|송금)/i, /https?:\/\/(?!([a-z0-9-]+\.)?(spacenovax\.com|t\.me|discord\.gg|youtube\.com|x\.com)(\/|$))[^\s]+/i];
+  if (prohibitedPatterns.some((pattern) => pattern.test(normalizedBody))) { data.events.push({ type:'member_message_blocked_security', userId:sender.id, recipientId:recipient.id, at:now() }); writeData(data); return res.status(403).json({ ok:false, message:'Message blocked by SpaceNovaX security. Fraud, impersonation, wallet-secret requests, payment requests, and unapproved links are prohibited.' }); }
   let imageUrl = '';
   const imageData = String(req.body?.imageData || '');
   if (!body && !imageData) return res.status(400).json({ ok: false, message: 'Write a message or attach a photo.' });
@@ -1376,6 +1381,13 @@ app.post('/api/messages/block', (req, res) => {
   if (!data.users[targetId] || targetId === user.id || !['block','unblock'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid block request.' });
   user.messageBlocks ||= []; user.messageBlocks = action === 'block' ? [...new Set([...user.messageBlocks, targetId])] : user.messageBlocks.filter((id) => id !== targetId); writeData(data);
   res.json({ ok: true, blocked: action === 'block' });
+});
+
+app.post('/api/messages/report', (req, res) => {
+  const data=readData(); const user=getSessionUser(req,data); const message=data.personalMessages.find((item)=>item.id===String(req.body?.messageId||'')&&item.userId===user.id&&item.senderId);
+  if(!message)return res.status(404).json({ok:false,message:'Received member message not found.'});
+  if(data.messageReports.some((item)=>item.messageId===message.id&&item.reporterId===user.id))return res.status(409).json({ok:false,message:'This message has already been reported.'});
+  const report={id:crypto.randomUUID(),messageId:message.id,reporterId:user.id,reportedUserId:message.senderId,reason:String(req.body?.reason||'fraud_or_impersonation').slice(0,200),evidence:{senderName:message.senderName,body:message.body,imageUrl:message.imageUrl||'',createdAt:message.createdAt},status:'pending',createdAt:now()}; data.messageReports.push(report); user.messageBlocks=[...new Set([...(user.messageBlocks||[]),message.senderId])]; data.events.push({type:'member_message_reported',userId:user.id,reportedUserId:message.senderId,reportId:report.id,at:report.createdAt}); writeData(data); res.json({ok:true,message:'Report submitted. The sender has been blocked while administrators review the evidence.'});
 });
 
 app.post('/api/messages/read', (req, res) => {
@@ -2155,8 +2167,10 @@ app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
 app.get('/api/admin/messages/stats', requireAdmin, (req, res) => {
   const data = readData();
   const memberMessages = data.personalMessages.filter((item) => item.type === 'member_message');
-  res.json({ ok: true, stats: { memberMessages: memberMessages.length, withPhotos: memberMessages.filter((item) => item.imageUrl).length, systemMessages: data.personalMessages.length - memberMessages.length } });
+  res.json({ ok: true, stats: { memberMessages: memberMessages.length, withPhotos: memberMessages.filter((item) => item.imageUrl).length, systemMessages: data.personalMessages.length - memberMessages.length, pendingReports:(data.messageReports||[]).filter((item)=>item.status==='pending').length }, reports:(data.messageReports||[]).slice(-100).reverse() });
 });
+
+app.post('/api/admin/messages/report-action', requireAdmin, (req,res)=>{const data=readData();const report=(data.messageReports||[]).find((item)=>item.id===String(req.body?.reportId||''));const action=String(req.body?.action||'');if(!report||!['dismiss','permanent_ban'].includes(action))return res.status(400).json({ok:false,message:'Invalid report action.'});const target=data.users[report.reportedUserId];if(action==='permanent_ban'&&target){target.banned=true;target.permanentBan=true;target.banReason='Fraudulent messaging, administrator impersonation, or phishing';target.bannedAt=now();target.bannedBy=req.admin.id;}report.status=action==='permanent_ban'?'confirmed_permanent_ban':'dismissed';report.reviewedAt=now();report.reviewedBy=req.admin.id;data.events.push({type:'admin_message_report_action',adminId:req.admin.id,reportId:report.id,action,reportedUserId:report.reportedUserId,at:report.reviewedAt});writeData(data);res.json({ok:true,status:report.status});});
 
 app.post('/api/admin/messages/delete-all', requireAdmin, (req, res) => {
   if (String(req.body?.confirmation || '') !== 'DELETE ALL MEMBER MESSAGES') return res.status(400).json({ ok: false, message: 'Type DELETE ALL MEMBER MESSAGES to confirm.' });
