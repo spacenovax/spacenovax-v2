@@ -1,0 +1,12 @@
+.admin-announcement-form {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 10px;
+  margin: 16px 0 22px;
+}
+.admin-announcement-form textarea { grid-column: 1 / -1; resize: vertical; }
+.admin-announcement-form button { min-height: 42px; }
+@media (max-width: 780px) {
+  .admin-announcement-form { grid-template-columns: 1fr; }
+  .admin-announcement-form textarea { grid-column: auto; }
+}

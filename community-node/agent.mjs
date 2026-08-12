@@ -7,11 +7,23 @@
 import os from 'node:os';
 import process from 'node:process';
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createInterface } from 'node:readline/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const baseUrl = (process.env.COMMUNITY_NODE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
-const pairingCode = String(process.env.COMMUNITY_NODE_PAIRING_CODE || '').trim();
-let nodeId = process.env.COMMUNITY_NODE_ID;
-let nodeSecret = process.env.COMMUNITY_NODE_SECRET;
+const runtimeDir = process.versions.bun && process.platform === 'win32'
+  ? dirname(process.execPath)
+  : dirname(fileURLToPath(import.meta.url));
+const configPath = resolve(runtimeDir, 'node-config.json');
+let localConfig = {};
+if (existsSync(configPath)) {
+  try { localConfig = JSON.parse(readFileSync(configPath, 'utf8')); } catch { localConfig = {}; }
+}
+const baseUrl = (process.env.COMMUNITY_NODE_URL || localConfig.baseUrl || 'https://app.spacenovax.com').replace(/\/$/, '');
+let pairingCode = String(process.env.COMMUNITY_NODE_PAIRING_CODE || '').trim();
+let nodeId = process.env.COMMUNITY_NODE_ID || localConfig.nodeId;
+let nodeSecret = process.env.COMMUNITY_NODE_SECRET || localConfig.nodeSecret;
 const label = String(process.env.COMMUNITY_NODE_LABEL || `${os.hostname()} community node`).slice(0, 80);
 const intervalMs = Math.max(30_000, Number(process.env.COMMUNITY_NODE_INTERVAL_MS || 60_000));
 const machineFingerprint = createHash('sha256').update(`${os.hostname()}|${os.platform()}|${os.arch()}|${os.cpus().length}`).digest('hex');
@@ -27,13 +39,22 @@ const request = async (path, options = {}) => {
   return { data, latency: Date.now() - started };
 };
 
-if (pairingCode && (!nodeId || !nodeSecret)) {
+console.log('======================================================');
+console.log('  SPACENOVAX GENESIS COMMUNITY NODE');
+console.log('  Public cache · Heartbeat · SHA-256 verification');
+console.log('======================================================\n');
+
+if (!nodeId || !nodeSecret) {
+  if (!pairingCode) {
+    const prompt = createInterface({ input: process.stdin, output: process.stdout });
+    pairingCode = String(await prompt.question('앱에서 발급한 1회용 페어링 코드를 입력하세요: ')).trim();
+    prompt.close();
+  }
   const { data } = await request('/api/nodes/pair', { method: 'POST', body: JSON.stringify({ pairingCode, label }) });
   nodeId = data.nodeId;
   nodeSecret = data.nodeSecret;
-  console.log('\nPairing complete. Store these once-only values in your local environment, then remove COMMUNITY_NODE_PAIRING_CODE:');
-  console.log(`COMMUNITY_NODE_ID=${nodeId}`);
-  console.log(`COMMUNITY_NODE_SECRET=${nodeSecret}\n`);
+  writeFileSync(configPath, JSON.stringify({ baseUrl, nodeId, nodeSecret }, null, 2), { mode: 0o600 });
+  console.log('\n페어링 완료 · 이 PC에 노드 인증정보가 안전하게 저장되었습니다.\n');
 }
 
 if (!nodeId || !nodeSecret) throw new Error('Set COMMUNITY_NODE_PAIRING_CODE once, or set COMMUNITY_NODE_ID and COMMUNITY_NODE_SECRET.');
@@ -52,7 +73,7 @@ async function cycle() {
   const task = workResponse.task;
   const sha256 = createHash('sha256').update(task.body).digest('hex');
   const { data: result } = await request('/api/nodes/results', { method: 'POST', headers: auth, body: JSON.stringify({ taskId: task.id, type: task.type, sha256 }) });
-  console.log(JSON.stringify({ at: new Date().toISOString(), nodeId, status: heartbeat.status, task: task.type, verified: result.ok }, null, 2));
+  console.log(`[${new Date().toLocaleString()}] NODE ${String(heartbeat.status || 'online').toUpperCase()} | HEARTBEAT VERIFIED | ${task.type} | SHA-256 ${result.ok ? 'VERIFIED' : 'FAILED'} | +${heartbeat.bonusPercent || 0}%`);
 }
 
 async function run() {
