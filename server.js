@@ -217,6 +217,7 @@ function normalizeData(data) {
     if (!pairing || Number(pairing.expiresAt || 0) < now() || pairing.usedAt) delete data.nodePairings[pairingHash];
   }
   for (const user of Object.values(data.users || {})) {
+    user.messageBlocks ||= [];
     user.referralCode ||= makeReferralCode(user.id);
     user.referrals ||= [];
     user.securityCircle ||= [];
@@ -408,7 +409,7 @@ function publicCommunityPost(data, post, viewerId = '') {
     body: post.body,
     imageUrl: post.imageUrl || '',
     createdAt: post.createdAt,
-    author: { id: post.authorId, firstName: author?.firstName || post.authorName || 'Captain', avatarUrl: author?.avatarUrl || '', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
+    author: { id: post.authorId, firstName: author?.communityNickname || author?.firstName || post.authorName || 'Captain', avatarUrl: author?.avatarUrl || '', fleetGrade: fleetGrade(getActiveFleetCount(data, post.authorId)) },
     likes: (post.likes || []).length,
     liked: (post.likes || []).includes(viewerId),
     commentCount: (post.comments || []).length,
@@ -823,6 +824,7 @@ function publicUser(data, user) {
     username: user.username,
     firstName: user.firstName,
     avatarUrl: user.avatarUrl || '',
+    communityNickname: user.communityNickname || '',
     isGuest: user.isGuest,
     // `balance` is the settled, ledger-backed balance.  The display field adds
     // only the server-calculated in-progress mining amount and is never used
@@ -1326,8 +1328,54 @@ app.post('/api/session', (req, res) => {
 app.post('/api/messages', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
-  const messages = data.personalMessages.filter((item) => item.userId === user.id).slice(-100).reverse();
+  const messages = data.personalMessages.filter((item) => item.userId === user.id || item.senderId === user.id).slice(-200).reverse().map((item) => ({ ...item, direction: item.senderId === user.id ? 'sent' : 'received', blocked: item.senderId ? (user.messageBlocks || []).includes(item.senderId) : false }));
   res.json({ ok: true, messages, unreadCount: messages.filter((item) => !item.readAt).length });
+});
+
+app.post('/api/messages/members', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const query = String(req.body?.query || '').trim().toLowerCase().slice(0, 60);
+  const members = Object.values(data.users || {}).filter((member) => member.id !== user.id && !member.banned && member.communityNickname && OFFICIAL_MISSION_IDS.every((id) => Boolean(member.missionClaims?.[id])) && (!query || String(member.communityNickname).toLowerCase().includes(query))).slice(0, 30).map((member) => ({ id: member.id, firstName: member.communityNickname, avatarUrl: member.avatarUrl || '', blocked: (user.messageBlocks || []).includes(member.id) }));
+  res.json({ ok: true, members, canSend: OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id])) });
+});
+
+app.post('/api/messages/send', (req, res) => {
+  const data = readData();
+  const sender = getSessionUser(req, data);
+  if (!OFFICIAL_MISSION_IDS.every((id) => Boolean(sender.missionClaims?.[id]))) return res.status(403).json({ ok: false, message: 'Complete all five official missions before sending member messages.' });
+  const recipient = data.users[String(req.body?.recipientId || '')];
+  if (!recipient || recipient.id === sender.id || recipient.banned || !OFFICIAL_MISSION_IDS.every((id) => Boolean(recipient.missionClaims?.[id]))) return res.status(404).json({ ok: false, message: 'Eligible recipient not found.' });
+  if ((recipient.messageBlocks || []).includes(sender.id)) return res.status(403).json({ ok: false, message: 'This member is not accepting messages from you.' });
+  const body = String(req.body?.body || '').trim().slice(0, 1500);
+  let imageUrl = '';
+  const imageData = String(req.body?.imageData || '');
+  if (!body && !imageData) return res.status(400).json({ ok: false, message: 'Write a message or attach a photo.' });
+  const recent = data.personalMessages.filter((item) => item.senderId === sender.id && Number(item.createdAt || 0) > now() - 60000);
+  if (recent.length >= 10) return res.status(429).json({ ok: false, message: 'Message rate limit reached. Please wait.' });
+  if (imageData) {
+    const match = imageData.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return res.status(400).json({ ok: false, message: 'Only JPEG, PNG, and WebP photos are supported.' });
+    const buffer = Buffer.from(match[2], 'base64');
+    if (!buffer.length || buffer.length > 1_000_000) return res.status(413).json({ ok: false, message: 'Message photo must be 1 MB or smaller.' });
+    fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
+    const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
+    const filename = `message-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${extension}`;
+    fs.writeFileSync(path.join(COMMUNITY_MEDIA_DIR, filename), buffer);
+    imageUrl = `/community-media/${filename}`;
+  }
+  const replyTo = String(req.body?.replyTo || '');
+  const referenced = replyTo ? data.personalMessages.find((item) => item.id === replyTo && ((item.userId === sender.id && item.senderId === recipient.id) || (item.userId === recipient.id && item.senderId === sender.id))) : null;
+  const message = { id: crypto.randomUUID(), userId: recipient.id, senderId: sender.id, senderName: sender.communityNickname || sender.firstName || 'Captain', senderAvatarUrl: sender.avatarUrl || '', recipientName: recipient.communityNickname || recipient.firstName || 'Captain', type: 'member_message', title: replyTo ? 'Reply from a Captain' : 'Message from a Captain', body, imageUrl, replyTo: referenced?.id || '', replyPreview: referenced?.body?.slice(0, 120) || '', readAt: 0, createdAt: now() };
+  data.personalMessages.push(message); data.events.push({ type: 'member_message_sent', userId: sender.id, recipientId: recipient.id, messageId: message.id, hasImage: Boolean(imageUrl), at: message.createdAt }); writeData(data);
+  res.status(201).json({ ok: true, message: 'Message sent.' });
+});
+
+app.post('/api/messages/block', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data); const targetId = String(req.body?.userId || ''); const action = String(req.body?.action || 'block');
+  if (!data.users[targetId] || targetId === user.id || !['block','unblock'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid block request.' });
+  user.messageBlocks ||= []; user.messageBlocks = action === 'block' ? [...new Set([...user.messageBlocks, targetId])] : user.messageBlocks.filter((id) => id !== targetId); writeData(data);
+  res.json({ ok: true, blocked: action === 'block' });
 });
 
 app.post('/api/messages/read', (req, res) => {
@@ -1341,6 +1389,7 @@ app.post('/api/messages/read', (req, res) => {
   writeData(data);
   res.json({ ok: true });
 });
+
 
 app.post('/api/announcements', (req, res) => {
   const data = readData();
@@ -1810,6 +1859,21 @@ app.post('/api/profile/avatar', (req, res) => {
   res.json({ ok: true, avatarUrl: user.avatarUrl, user: publicUser(data, user) });
 });
 
+app.post('/api/profile/nickname/check', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data); const nickname = String(req.body?.nickname || '').trim().replace(/\s+/g, ' ').slice(0, 20); const normalized = nickname.normalize('NFKC').toLocaleLowerCase();
+  const valid = nickname.length >= 2 && /^[\p{L}\p{N}_ .-]+$/u.test(nickname);
+  const available = valid && !Object.values(data.users || {}).some((member) => member.id !== user.id && String(member.communityNickname || '').normalize('NFKC').toLocaleLowerCase() === normalized);
+  res.json({ ok:true, valid, available });
+});
+
+app.post('/api/profile/nickname', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data); const nickname = String(req.body?.nickname || '').trim().replace(/\s+/g, ' ').slice(0, 20); const normalized = nickname.normalize('NFKC').toLocaleLowerCase();
+  if (nickname.length < 2 || !/^[\p{L}\p{N}_ .-]+$/u.test(nickname)) return res.status(400).json({ ok:false, message:'Nickname must be 2–20 characters and use letters, numbers, spaces, _, . or -.' });
+  if (Object.values(data.users || {}).some((member) => member.id !== user.id && String(member.communityNickname || '').normalize('NFKC').toLocaleLowerCase() === normalized)) return res.status(409).json({ ok:false, message:'This nickname is already in use.' });
+  user.communityNickname = nickname; user.updatedAt = now(); data.events.push({ type:'community_nickname_updated', userId:user.id, at:user.updatedAt }); writeData(data); res.json({ ok:true, user:publicUser(data,user) });
+});
+
+
 app.post('/api/community/like', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
@@ -2088,6 +2152,49 @@ app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
 });
 
 // Administrators monitor node health; they do not approve normal node activation.
+app.get('/api/admin/messages/stats', requireAdmin, (req, res) => {
+  const data = readData();
+  const memberMessages = data.personalMessages.filter((item) => item.type === 'member_message');
+  res.json({ ok: true, stats: { memberMessages: memberMessages.length, withPhotos: memberMessages.filter((item) => item.imageUrl).length, systemMessages: data.personalMessages.length - memberMessages.length } });
+});
+
+app.post('/api/admin/messages/delete-all', requireAdmin, (req, res) => {
+  if (String(req.body?.confirmation || '') !== 'DELETE ALL MEMBER MESSAGES') return res.status(400).json({ ok: false, message: 'Type DELETE ALL MEMBER MESSAGES to confirm.' });
+  const data = readData();
+  const removed = data.personalMessages.filter((item) => item.type === 'member_message');
+  data.personalMessages = data.personalMessages.filter((item) => item.type !== 'member_message');
+  for (const item of removed) if (String(item.imageUrl || '').startsWith('/community-media/message-')) { try { const file = path.join(COMMUNITY_MEDIA_DIR, path.basename(item.imageUrl)); if (fs.existsSync(file)) fs.unlinkSync(file); } catch {} }
+  data.events.push({ type: 'admin_member_messages_deleted', adminId: req.admin.id, count: removed.length, at: now() }); writeData(data);
+  res.json({ ok: true, deleted: removed.length });
+});
+
+app.post('/api/admin/announcements', requireAdmin, (req, res) => {
+  const data = readData();
+  const title = String(req.body?.title || '').trim().slice(0, 120);
+  const body = String(req.body?.body || '').trim().slice(0, 5000);
+  if (!title || !body) return res.status(400).json({ ok: false, message: 'Announcement title and body are required.' });
+  const timestamp = now();
+  const announcement = { id: crypto.randomUUID(), title, body, priority: ['normal', 'important', 'urgent'].includes(req.body?.priority) ? req.body.priority : 'normal', active: true, createdAt: timestamp, publishedAt: timestamp, createdBy: req.admin.id };
+  data.announcements.push(announcement);
+  data.events.push({ type: 'admin_announcement_published', adminId: req.admin.id, announcementId: announcement.id, priority: announcement.priority, at: timestamp });
+  writeData(data);
+  res.status(201).json({ ok: true, announcement });
+});
+
+app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
+  const data = readData();
+  const announcement = data.announcements.find((item) => item.id === String(req.body?.id || ''));
+  if (!announcement) return res.status(404).json({ ok: false, message: 'Announcement not found.' });
+  announcement.active = Boolean(req.body?.active);
+  announcement.updatedAt = now();
+  announcement.updatedBy = req.admin.id;
+  data.events.push({ type: 'admin_announcement_updated', adminId: req.admin.id, announcementId: announcement.id, active: announcement.active, at: now() });
+  writeData(data);
+  res.json({ ok: true, announcement });
+});
+
+// Administrators monitor node health; they do not approve normal node activation.
+
 app.get('/api/admin/nodes', requireAdmin, (req, res) => {
   const data = readData();
   const nodes = Object.values(data.communityNodes || {}).map(({ secretHash, ...node }) => ({
