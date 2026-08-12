@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import '../styles/admin-announcements.css';
 
 function fmt(v) { return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 const getToken = () => localStorage.getItem('spnx_admin_token') || '';
@@ -49,6 +50,8 @@ export default function AdminPage() {
   const [operations, setOperations] = useState(null);
   const [nodeProgram, setNodeProgram] = useState(null);
   const [nodes, setNodes] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementForm, setAnnouncementForm] = useState({ title:'', body:'', priority:'normal' });
   const [conversionRuntime, setConversionRuntime] = useState(null);
   const [notice, setNotice] = useState('Checking admin session...');
   const [search, setSearch] = useState('');
@@ -67,7 +70,7 @@ export default function AdminPage() {
 
   async function loadAdmin() {
     try {
-      const [a,b,c,d,e,f,g,h,i,j,k,l,m] = await Promise.all([
+      const [a,b,c,d,e,f,g,h,i,j,k,l,m,n] = await Promise.all([
         adminFetch('/api/admin/stats'),
         adminFetch('/api/admin/users/search?q=' + encodeURIComponent(search)),
         adminFetch('/api/admin/logs'),
@@ -80,9 +83,10 @@ export default function AdminPage() {
         adminFetch('/api/admin/missions'),
         adminFetch('/api/admin/mining/engine'),
         adminFetch('/api/admin/operations'),
-        adminFetch('/api/admin/nodes')
+        adminFetch('/api/admin/nodes'),
+        adminFetch('/api/admin/announcements')
       ]);
-      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []);
+      setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []); setAnnouncements(n.announcements || []);
       setSettingsForm({
         convertEnabled: Boolean(f.settings?.convertEnabled),
         kycEnabled: Boolean(f.settings?.kycEnabled),
@@ -118,6 +122,17 @@ export default function AdminPage() {
     } catch(e) { setNotice(e.message); }
   }
 
+  async function publishAnnouncement(event) {
+    event.preventDefault();
+    try { await adminFetch('/api/admin/announcements', { method:'POST', body:JSON.stringify(announcementForm) }); setAnnouncementForm({ title:'', body:'', priority:'normal' }); setNotice('Global announcement published. NEW banner is active for 24 hours.'); await loadAdmin(); }
+    catch(e) { setNotice(e.message); }
+  }
+
+  async function toggleAnnouncement(item) {
+    try { await adminFetch('/api/admin/announcements/update', { method:'POST', body:JSON.stringify({ id:item.id, active:!item.active }) }); await loadAdmin(); }
+    catch(e) { setNotice(e.message); }
+  }
+
   async function logout() { try { await adminFetch('/api/admin/logout', { method:'POST', body:'{}' }); } catch {} clearToken(); setAdmin(null); }
 
   useEffect(()=>{ checkSession(); }, []);
@@ -125,7 +140,7 @@ export default function AdminPage() {
 
   if (!admin) return <AdminLogin onLogin={(a)=>{ setAdmin(a); loadAdmin(); }} />;
 
-  const tabs = ['dashboard','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
+  const tabs = ['dashboard','announcements','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
 
   return <section className="admin-page glass">
     <div className="admin-head"><div><h2>✦ NOVA Command Admin V16.5</h2><p>{notice}</p><small>Logged in: {admin.id} · {admin.role}</small></div><div className="admin-actions"><button onClick={loadAdmin}>Refresh</button><button onClick={logout}>Logout</button></div></div>
@@ -134,6 +149,8 @@ export default function AdminPage() {
     {tab==='dashboard' && <><div className="admin-stats">
       <div><small>Total Users</small><b>{stats?.totalUsers ?? '-'}</b></div><div><small>Online 10m</small><b>{monitor?.onlineUsers ?? '-'}</b></div><div><small>Active Mining</small><b>{stats?.activeMining ?? '-'}</b></div><div><small>Total Points</small><b>{fmt(stats?.totalBalance)} SPNX</b></div><div><small>New Users 24h</small><b>{monitor?.todayNewUsers ?? '-'}</b></div><div><small>Mission Claims</small><b>{stats?.todayMissions ?? '-'}</b></div><div><small>High Risk</small><b>{monitor?.highRisk ?? '-'}</b></div><div><small>Review</small><b>{monitor?.review ?? '-'}</b></div><div><small>Trusted</small><b>{monitor?.trusted ?? '-'}</b></div><div><small>Mining Phase</small><b>Phase {stats?.phase ?? '-'}</b></div><div><small>Pool Used</small><b>{((stats?.miningPoolRatio || 0)*100).toFixed(4)}%</b></div><div><small>Ledger Chain</small><b>{operations?.system?.ledgerIntegrity?.valid ? `VALID · ${operations.system.ledgerIntegrity.count}` : 'CHECK REQUIRED'}</b></div><div><small>Community Nodes</small><b>{nodeProgram?.registered ?? 0} / {nodeProgram?.limit ?? '-'}</b></div><div><small>Nodes Online</small><b>{nodeProgram?.online ?? 0}</b></div>
     </div><form className="admin-form" onSubmit={givePoints}><h3>Manual Point Control</h3><input placeholder="User ID" value={pointForm.userId} onChange={(e)=>setPointForm({...pointForm,userId:e.target.value})}/><input placeholder="Amount" type="number" value={pointForm.amount} onChange={(e)=>setPointForm({...pointForm,amount:e.target.value})}/><input placeholder="Reason" value={pointForm.reason} onChange={(e)=>setPointForm({...pointForm,reason:e.target.value})}/><button type="submit">Give Points</button></form></>}
+
+    {tab==='announcements' && <div className="admin-users"><h3>Global Announcement Center</h3><p className="admin-empty">게시 즉시 전체 사용자 공지함에 저장되며, 앱 상단 NEW 공지는 게시 후 24시간 표시됩니다.</p><form className="admin-announcement-form" onSubmit={publishAnnouncement}><input maxLength="120" required placeholder="공지 제목" value={announcementForm.title} onChange={(e)=>setAnnouncementForm({...announcementForm,title:e.target.value})}/><textarea maxLength="5000" required rows="7" placeholder="전체 사용자에게 알릴 공지 내용을 입력하세요." value={announcementForm.body} onChange={(e)=>setAnnouncementForm({...announcementForm,body:e.target.value})}/><select value={announcementForm.priority} onChange={(e)=>setAnnouncementForm({...announcementForm,priority:e.target.value})}><option value="normal">일반 공지</option><option value="important">중요 공지</option><option value="urgent">긴급 공지</option></select><button type="submit">전체 공지 게시</button></form><div className="admin-node-list">{announcements.map((item)=><article className="admin-user-row admin-user-rich" key={item.id}><div><b>{item.priority.toUpperCase()} · {item.title}</b><small>{new Date(item.publishedAt).toLocaleString()} · {item.createdBy}</small><small>{item.body}</small></div><div className="admin-user-side"><strong>{item.active?'PUBLISHED':'HIDDEN'}</strong><button onClick={()=>toggleAnnouncement(item)}>{item.active?'Hide':'Publish'}</button></div></article>)}</div></div>}
 
     {tab==='nova' && <div className="admin-users">
       <h3>✦ NOVA AI Control</h3>

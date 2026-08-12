@@ -124,6 +124,8 @@ function createInitialData() {
       communityReports: [],
       communityNodes: {},
       nodePairings: {},
+      personalMessages: [],
+      announcements: [],
       missions: DEFAULT_MISSIONS,
       settings: {
         convertEnabled: false,
@@ -200,6 +202,10 @@ function normalizeData(data) {
   data.communityReports ||= [];
   data.communityNodes ||= {};
   data.nodePairings ||= {};
+  data.personalMessages ||= [];
+  data.personalMessages = data.personalMessages.slice(-10000);
+  data.announcements ||= [];
+  data.announcements = data.announcements.slice(-500);
   data.settings.communityNodeLimit ??= COMMUNITY_NODE_LIMIT;
   data.settings.communityNodeBonusPercent ??= COMMUNITY_NODE_BONUS_PERCENT;
   for (const [pairingHash, pairing] of Object.entries(data.nodePairings)) {
@@ -212,6 +218,7 @@ function normalizeData(data) {
     user.missionOpens ||= {};
     user.kyc ||= { status: 'not_available', available: false };
     user.communityNodeId ||= '';
+    user.announcementReads ||= {};
   }
   if (!data.settings.v15SeedBalanceMigrated) {
     for (const user of Object.values(data.users || {})) {
@@ -616,6 +623,47 @@ function isCommunityNodeOnline(node) {
   return Boolean(node && !node.revoked && Number(node.lastHeartbeatAt || 0) > 0 && now() - Number(node.lastHeartbeatAt) <= COMMUNITY_NODE_HEARTBEAT_GRACE_MS);
 }
 
+function createPersonalMessage(data, user, { type = 'system', title, body, dedupeKey = '' }) {
+  if (!user) return null;
+  if (dedupeKey && data.personalMessages.some((item) => item.userId === user.id && item.dedupeKey === dedupeKey)) return null;
+  const message = { id: crypto.randomUUID(), userId: user.id, type, title: String(title).slice(0, 100), body: String(body).slice(0, 500), readAt: 0, createdAt: now(), dedupeKey };
+  data.personalMessages.push(message);
+  return message;
+}
+
+function sendTelegramNotice(user, text) {
+  if (!process.env.TELEGRAM_BOT_TOKEN || !user?.telegramId) return;
+  void fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: user.telegramId, text }),
+  }).catch((error) => console.error('Telegram node notice failed', error.message));
+}
+
+function notifyNodeState(data, node, state, timestamp = now()) {
+  const owner = data.users?.[node.ownerId];
+  if (!owner || node.lastNotifiedState === state) return false;
+  node.lastNotifiedState = state;
+  node.lastStateNoticeAt = timestamp;
+  const copy = state === 'online'
+    ? { title: '커뮤니티 노드 구동 중', body: 'SpaceNovaX 커뮤니티 노드가 정상 구동 중입니다. 채굴 속도 +25%가 즉시 활성화되었습니다.', telegram: '🟢 SpaceNovaX 커뮤니티 노드가 구동 중입니다. 채굴 속도 +25%가 활성화되었습니다.' }
+    : { title: '커뮤니티 노드 연결 중단', body: '노드 Heartbeat가 중단되었습니다. 채굴 속도 +25% 보너스가 일시 중지되었습니다.', telegram: '🔴 SpaceNovaX 커뮤니티 노드 연결이 중단되었습니다. 채굴 속도 +25%가 일시 중지되었습니다.' };
+  createPersonalMessage(data, owner, { type: `node_${state}`, title: copy.title, body: copy.body, dedupeKey: `${node.nodeId}:${state}:${timestamp}` });
+  sendTelegramNotice(owner, copy.telegram);
+  return true;
+}
+
+function monitorCommunityNodeOfflineStates() {
+  const data = readData();
+  let changed = false;
+  for (const node of Object.values(data.communityNodes || {})) {
+    if (node.revoked || !node.lastHeartbeatAt || node.lastNotifiedState !== 'online' || isCommunityNodeOnline(node)) continue;
+    node.status = 'offline';
+    changed = notifyNodeState(data, node, 'offline') || changed;
+    data.events.push({ type: 'community_node_offline', userId: node.ownerId, nodeId: node.nodeId, at: now() });
+  }
+  if (changed) writeData(data);
+}
+
 function communityNodeVerification(node) {
   if (!node || node.revoked) return { qualified: false, reason: 'not_registered', availability: 0, heartbeatSuccessRate: 0, workSuccessRate: 0 };
   const timestamp = now();
@@ -659,9 +707,9 @@ function communityNodeState(data, user) {
     online,
     nodeId: node?.nodeId || '',
     label: node?.label || '',
-    status: !node ? 'not_registered' : node.revoked ? 'revoked' : online ? (verification.qualified ? 'qualified' : 'verifying') : 'awaiting_heartbeat',
+    status: !node ? 'not_registered' : node.revoked ? 'revoked' : online ? (verification.qualified ? 'qualified' : 'online') : (node?.lastHeartbeatAt ? 'offline' : 'awaiting_heartbeat'),
     lastHeartbeatAt: Number(node?.lastHeartbeatAt || 0),
-    bonusPercent: verification.qualified ? Number(data.settings?.communityNodeBonusPercent || COMMUNITY_NODE_BONUS_PERCENT) : 0,
+    bonusPercent: online ? Number(data.settings?.communityNodeBonusPercent || COMMUNITY_NODE_BONUS_PERCENT) : 0,
     configuredBonusPercent: Number(data.settings?.communityNodeBonusPercent || COMMUNITY_NODE_BONUS_PERCENT),
     verification,
   };
@@ -748,6 +796,9 @@ function publicUser(data, user) {
   const bonus = fleetBonusPercent(activeFleet, data);
   const mining = calculateMining(data, user);
   const settledBalance = Number(user.balance || 0);
+  const personalMessages = data.personalMessages.filter((item) => item.userId === user.id);
+  const activeAnnouncements = data.announcements.filter((item) => item.active !== false).sort((a, b) => Number(b.publishedAt || b.createdAt || 0) - Number(a.publishedAt || a.createdAt || 0));
+  const latestAnnouncement = activeAnnouncements[0] || null;
 
   return {
     id: user.id,
@@ -781,6 +832,17 @@ function publicUser(data, user) {
     fleetBonusPerMember: Number(data.settings?.fleetBonusPerActiveReferral || 5),
     communityNode: communityNodeState(data, user),
     communityNodeProgram: communityNodeProgram(data),
+    unreadMessageCount: personalMessages.filter((item) => !item.readAt).length,
+    unreadAnnouncementCount: activeAnnouncements.filter((item) => !user.announcementReads?.[item.id]).length,
+    latestAnnouncement: latestAnnouncement ? {
+      id: latestAnnouncement.id,
+      title: latestAnnouncement.title,
+      body: latestAnnouncement.body,
+      priority: latestAnnouncement.priority,
+      publishedAt: latestAnnouncement.publishedAt,
+      showBanner: now() - Number(latestAnnouncement.publishedAt || 0) < 24 * 60 * 60 * 1000,
+      read: Boolean(user.announcementReads?.[latestAnnouncement.id]),
+    } : null,
     mining,
     gameReward: user.gameReward || { date: gameRewardWindowKey(), earnedToday: 0, bestScore: 0, breakdown: {} },
     solanaWallet: user.solanaWallet || '',
@@ -1243,6 +1305,45 @@ app.post('/api/session', (req, res) => {
   res.json({ ok: true, user: publicUser(data, user) });
 });
 
+app.post('/api/messages', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const messages = data.personalMessages.filter((item) => item.userId === user.id).slice(-100).reverse();
+  res.json({ ok: true, messages, unreadCount: messages.filter((item) => !item.readAt).length });
+});
+
+app.post('/api/messages/read', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const messageId = String(req.body?.messageId || 'all');
+  const timestamp = now();
+  for (const item of data.personalMessages) {
+    if (item.userId === user.id && !item.readAt && (messageId === 'all' || item.id === messageId)) item.readAt = timestamp;
+  }
+  writeData(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/announcements', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const announcements = data.announcements.filter((item) => item.active !== false).sort((a, b) => Number(b.publishedAt || 0) - Number(a.publishedAt || 0)).slice(0, 100);
+  res.json({ ok: true, announcements: announcements.map((item) => ({ ...item, read: Boolean(user.announcementReads?.[item.id]), showBanner: now() - Number(item.publishedAt || 0) < 24 * 60 * 60 * 1000 })) });
+});
+
+app.post('/api/announcements/read', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const announcementId = String(req.body?.announcementId || 'all');
+  user.announcementReads ||= {};
+  const timestamp = now();
+  for (const item of data.announcements) {
+    if (item.active !== false && (announcementId === 'all' || item.id === announcementId)) user.announcementReads[item.id] = timestamp;
+  }
+  writeData(data);
+  res.json({ ok: true });
+});
+
 // Community nodes are paired by a Captain once, then become active automatically
 // after their first valid heartbeat. They never receive financial or identity data.
 app.post('/api/nodes/pairing', (req, res) => {
@@ -1318,8 +1419,8 @@ app.post('/api/nodes/heartbeat', requireCommunityNode, (req, res) => {
     return res.status(409).json({ ok: false, message: 'A community node is already registered from this machine.' });
   }
   const owner = data.users?.[node.ownerId];
-  const wasQualified = communityNodeVerification(node).qualified;
-  if (owner?.mining?.active && wasQualified) {
+  const wasOnline = isCommunityNodeOnline(node);
+  if (owner?.mining?.active && wasOnline) {
     const cycleStart = Number(owner.mining.startedAt || timestamp);
     const cycleEnd = cycleStart + getMiningDuration(data);
     const previous = Number(node.lastHeartbeatAt || timestamp);
@@ -1338,11 +1439,12 @@ app.post('/api/nodes/heartbeat', requireCommunityNode, (req, res) => {
   node.lastHeartbeatAt = timestamp;
   node.telemetry = safeTelemetry;
   node.status = 'online';
+  notifyNodeState(data, node, 'online', timestamp);
   data.events.push({ type: 'community_node_heartbeat', userId: node.ownerId, nodeId: node.nodeId, at: timestamp });
   const verification = communityNodeVerification(node);
   if (verification.qualified && !node.qualifiedAt) node.qualifiedAt = timestamp;
   writeData(data);
-  res.json({ ok: true, status: verification.qualified ? 'qualified' : 'verifying', verification, bonusPercent: verification.qualified ? Number(data.settings?.communityNodeBonusPercent || COMMUNITY_NODE_BONUS_PERCENT) : 0 });
+  res.json({ ok: true, status: verification.qualified ? 'qualified' : 'online', verification, bonusPercent: Number(data.settings?.communityNodeBonusPercent || COMMUNITY_NODE_BONUS_PERCENT) });
 });
 
 app.get('/api/nodes/work', requireCommunityNode, (req, res) => {
@@ -1882,6 +1984,36 @@ app.post('/api/admin/login', (req, res) => {
 
 app.get('/api/admin/me', requireAdmin, (req, res) => {
   res.json({ ok: true, admin: req.admin });
+});
+
+app.get('/api/admin/announcements', requireAdmin, (req, res) => {
+  const data = readData();
+  res.json({ ok: true, announcements: data.announcements.slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)) });
+});
+
+app.post('/api/admin/announcements', requireAdmin, (req, res) => {
+  const data = readData();
+  const title = String(req.body?.title || '').trim().slice(0, 120);
+  const body = String(req.body?.body || '').trim().slice(0, 5000);
+  if (!title || !body) return res.status(400).json({ ok: false, message: 'Announcement title and body are required.' });
+  const timestamp = now();
+  const announcement = { id: crypto.randomUUID(), title, body, priority: ['normal', 'important', 'urgent'].includes(req.body?.priority) ? req.body.priority : 'normal', active: true, createdAt: timestamp, publishedAt: timestamp, createdBy: req.admin.id };
+  data.announcements.push(announcement);
+  data.events.push({ type: 'admin_announcement_published', adminId: req.admin.id, announcementId: announcement.id, priority: announcement.priority, at: timestamp });
+  writeData(data);
+  res.status(201).json({ ok: true, announcement });
+});
+
+app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
+  const data = readData();
+  const announcement = data.announcements.find((item) => item.id === String(req.body?.id || ''));
+  if (!announcement) return res.status(404).json({ ok: false, message: 'Announcement not found.' });
+  announcement.active = Boolean(req.body?.active);
+  announcement.updatedAt = now();
+  announcement.updatedBy = req.admin.id;
+  data.events.push({ type: 'admin_announcement_updated', adminId: req.admin.id, announcementId: announcement.id, active: announcement.active, at: now() });
+  writeData(data);
+  res.json({ ok: true, announcement });
 });
 
 // Administrators monitor node health; they do not approve normal node activation.
@@ -3236,6 +3368,8 @@ const server = app.listen(PORT, () => {
   const payoutTimer = setInterval(runAutomaticPayoutWorker, 30_000);
   payoutTimer.unref();
   setTimeout(runAutomaticPayoutWorker, 5_000).unref();
+  const nodeMonitorTimer = setInterval(monitorCommunityNodeOfflineStates, 30_000);
+  nodeMonitorTimer.unref();
 });
 
 async function shutdown(signal) {
