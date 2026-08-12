@@ -567,7 +567,7 @@ function Splash({ done }) {
   }, [done]);
   return <div className={`v15-splash ${launching ? 'launching' : ''} ${exit ? 'exit' : ''}`}>
     <div className="splash-nebula" /><div className="splash-stars-v15" />
-    <div key={launching ? 'symbol-arrival' : 'symbol-ready'} className="v15-mark"><img src="/spnx-splash-symbol-v2.webp" alt="SpaceNovaX" /></div>
+    <div key={launching ? 'symbol-arrival' : 'symbol-ready'} className="v15-mark"><img src="/spnx-splash-symbol-v3.webp" alt="SpaceNovaX" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/brand/spacenovax-symbol.jpg'; }} /></div>
     <div className="v15-splash-copy"><small>NOVA NETWORK PRESENTS</small><h1>SPACENOVA<span>X</span></h1><p>EXPLORE · MINE · EVOLVE</p></div>
     <div className="boot-line"><i /><span>NOVA CORE INITIALIZING</span></div>
   </div>;
