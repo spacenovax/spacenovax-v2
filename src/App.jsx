@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/global.css';
+import { buildReferralInvitation, copyReferralText, shareReferralInvitation } from './referralInvite.js';
 
 const OFFICIAL_LINKS = {
   website: 'https://spacenovax.com',
@@ -268,10 +269,16 @@ function MissionsPage({ setUser }) {
 function FriendsPage({ user }) {
   const code = refCode(user);
   const link = `https://t.me/SpaceNovaXAdminBot?start=${code}`;
-  async function copy() { try { await navigator.clipboard.writeText(link); alert('Invite link copied'); } catch { alert(link); } }
-  function share() {
-    const text = `🚀 Join SpaceNovaX\nMine SPNX Points every day.\n${link}`;
-    if (navigator.share) navigator.share({ title: 'SpaceNovaX', text, url: link }); else copy();
+  const invitation = buildReferralInvitation({ code, link });
+  async function copy() {
+    const copied = await copyReferralText(invitation.text);
+    alert(copied ? invitation.notices.copied : invitation.notices.failed);
+  }
+  async function share() {
+    try {
+      const outcome = await shareReferralInvitation(invitation);
+      if (outcome !== 'shared') alert(outcome === 'copied' ? invitation.notices.copied : invitation.notices.failed);
+    } catch {}
   }
   return (
     <section className="page premium-card content-card">

@@ -12,6 +12,8 @@ const server = spawn(process.execPath, ['server.js'], {
     ...process.env,
     PORT: port,
     DATA_FILE: dataFile,
+    NODE_ENV: 'test',
+    RENDER: '',
     ADMIN_ID: 'admin',
     ADMIN_PASSWORD: 'test-admin-password',
     SESSION_SECRET: 'test-session-secret',
@@ -45,6 +47,16 @@ async function request(path, options = {}) {
 }
 
 const session = await request('/api/session', { method: 'POST', headers, body: '{}' });
+const referralDashboard = await request('/api/community/dashboard', { method: 'POST', headers, body: '{}' });
+const referredHeaders = {
+  'content-type': 'application/json',
+  'x-spnx-client-id': 'referral-' + Date.now(),
+};
+const referredSession = await request('/api/session', {
+  method: 'POST',
+  headers: referredHeaders,
+  body: JSON.stringify({ ref: session.user.referralCode }),
+});
 const walletPin = await request('/api/nova-wallet/pin/setup', {
   method: 'POST',
   headers,
@@ -137,6 +149,10 @@ const gate = await gateResponse.json();
 
 const result = {
   freshSession: Boolean(session.user?.id),
+  personalReferralAttribution:
+    referralDashboard.dashboard?.referralLink === 'https://t.me/SpaceNovaXAdminBot?start=' + encodeURIComponent(session.user.referralCode)
+    && referredSession.user?.referredBy === session.user.id
+    && referredSession.user?.referralCode !== session.user.referralCode,
   walletPinSecured: Boolean(walletPin.security?.pinConfigured),
   biometricOptionsSecured: Boolean(biometricOptions.challengeId && biometricOptions.options?.challenge && biometricOptions.options?.authenticatorSelection?.userVerification === 'required'),
   biometricFailureRejected: rejectedBiometric.status === 400 && /not changed/i.test(rejectedBiometricBody.message || ''),

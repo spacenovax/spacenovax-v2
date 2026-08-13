@@ -3,6 +3,7 @@ import './styles/v15.css';
 import './styles/node-status.css';
 import { NovaAIRouter } from './nova/index.js';
 import { WALLET_UI_COPY } from './i18n/wallet.js';
+import { buildReferralInvitation, copyReferralText, shareReferralInvitation } from './referralInvite.js';
 
 const OrbitV20 = lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'));
 
@@ -1207,34 +1208,30 @@ function Community({ user, setUser, language, setTab }) {
   const [publishing, setPublishing] = useState(false);
   const { voiceState, play: playCommunityVoice } = useNovaVoiceFeedback('community-briefing');
   const ko = language === 'ko';
+  const referralCode = dashboard?.referralCode || user.referralCode || '';
+  const referralLink = dashboard?.telegramReferralLink || dashboard?.referralLink || '';
+  const invitation = useMemo(() => buildReferralInvitation({ language, code: referralCode, link: referralLink }), [language, referralCode, referralLink]);
   const load = useCallback(() => api('/api/community/feed', { method: 'POST', body: { category, sort: feedSort } }).then((data) => { setPosts(data.posts || []); setPermission(data.permission || permission); }).catch((error) => setNotice(error.message)), [category, feedSort]);
   useEffect(() => {
     load();
     api('/api/community/dashboard', { method: 'POST', body: {} }).then((data) => setDashboard(data.dashboard || null)).catch((error) => setNotice(error.message));
   }, [load]);
-  function copyInvite() {
-    navigator.clipboard?.writeText(dashboard?.referralLink || '');
-    setNotice(ko ? '함대 초대 링크를 복사했습니다.' : 'Fleet invitation link copied.');
+  async function copyInvite() {
+    if (!invitation.text) return setNotice(invitation.notices.unavailable);
+    try {
+      const copied = await copyReferralText(invitation.text);
+      setNotice(copied ? invitation.notices.copied : invitation.notices.failed);
+    } catch {
+      setNotice(invitation.notices.failed);
+    }
   }
   async function shareInvite() {
-    const url = dashboard?.referralLink || '';
-    if (!url) return;
-    const active = Number(dashboard?.activeFleet || 0);
-    const limit = Number(dashboard?.referralLimit || user.fleetMaxMembers || 1000);
-    const bonus = Number(dashboard?.fleetBonus || user.fleetBonus || 0);
-    const text = ko
-      ? `나의 SpaceNovaX 함대에 합류하세요. 활성 추천인 ${active}/${limit}, 현재 채굴 속도 +${bonus}%`
-      : `Join my SpaceNovaX Fleet. Active referrals ${active}/${limit}; current mining speed bonus +${bonus}%.`;
+    if (!invitation.text) return setNotice(invitation.notices.unavailable);
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'SpaceNovaX · Explore · Earn · Beyond', text, url });
-        setNotice(ko ? '공유 카드 링크를 전송했습니다. 신규 캡틴이 공식 앱을 열면 추천이 자동 연결됩니다.' : 'Share card link sent. A new Captain is linked automatically after opening the official app.');
-      } else {
-        await navigator.clipboard?.writeText(url);
-        setNotice(ko ? '공유 카드 링크를 복사했습니다.' : 'Share card link copied.');
-      }
+      const outcome = await shareReferralInvitation(invitation);
+      setNotice(outcome === 'shared' ? invitation.notices.shared : outcome === 'copied' ? invitation.notices.copied : invitation.notices.failed);
     } catch (error) {
-      if (error?.name !== 'AbortError') setNotice(ko ? '공유를 완료하지 못했습니다. 링크를 복사해 다시 시도하세요.' : 'Could not complete sharing. Copy the link and try again.');
+      if (error?.name !== 'AbortError') setNotice(invitation.notices.failed);
     }
   }
   function explainCommunityFleet() {
@@ -1301,7 +1298,7 @@ function Community({ user, setUser, language, setTab }) {
     <div className="community-publish-notice"><Icon name="mission" size={20}/><div><strong>{ko ? '커뮤니티 게시 권한 안내' : 'COMMUNITY PUBLISHING NOTICE'}</strong><p>{ko ? '공식 웹사이트 방문 · 텔레그램 가입 · 디스코드 가입 · X 팔로우 · 유튜브 구독, 5대 미션을 모두 통과한 회원만 글과 사진을 올릴 수 있습니다. 모든 회원은 게시물을 자유롭게 열람할 수 있습니다.' : 'Only members who complete all five missions—Official Website, Telegram, Discord, X, and YouTube—can publish text and photos. Every member may view community posts.'}</p></div><b>{permission.completed || 0}/{permission.required || 5}</b></div>
     <section className="community-fleet-command">
       <div className="community-fleet-head"><div><small>COMMUNITY GROWTH COMMAND</small><h3>{ko ? '나의 초대 코드와 함대 현황' : 'My Invite Code & Fleet Status'}</h3><p>{ko ? '초대 링크를 공유해 검증된 캡틴 함대를 성장시키고 주간 함대·게임 순위를 확인하세요.' : 'Share your invitation, grow a verified Captain fleet, and track weekly fleet and game rankings.'}</p></div><div className="community-fleet-actions"><button className={`nova-voice-control voice-${voiceState}`} onClick={explainCommunityFleet} aria-live="polite"><Icon name="speaker" size={16}/>{voiceLabel(voiceState, language, 'NOVA 설명', 'NOVA BRIEF')}</button><button onClick={() => setTab('fleet')}>{ko ? '함대 전체 관리' : 'OPEN FLEET'}<Icon name="arrow" size={16}/></button></div></div>
-      <div className="community-referral-code"><div><small>YOUR FLEET CODE</small><strong>{dashboard?.referralCode || user.referralCode || 'SYNCING'}</strong></div><input readOnly value={dashboard?.referralLink || 'Synchronizing invitation link…'}/><button onClick={copyInvite}><Icon name="copy" size={16}/>{ko ? '복사' : 'COPY'}</button><button onClick={shareInvite}><Icon name="external" size={16}/>{ko ? '공유' : 'SHARE'}</button></div>
+      <div className="community-referral-code"><div><small>YOUR FLEET CODE</small><strong>{invitation.code || 'SYNCING'}</strong></div><input readOnly value={invitation.link || 'Synchronizing invitation link…'}/><button onClick={copyInvite}><Icon name="copy" size={16}/>{ko ? '복사' : 'COPY'}</button><button onClick={shareInvite}><Icon name="external" size={16}/>{ko ? '공유' : 'SHARE'}</button></div>
       <div className="community-fleet-stats"><span><small>{ko ? '총 초대' : 'TOTAL INVITES'}</small><b>{dashboard?.totalInvites ?? user.referrals?.length ?? 0}</b></span><span><small>{ko ? '활성 함대' : 'ACTIVE FLEET'}</small><b>{dashboard?.activeFleet ?? user.activeFleet ?? 0}</b></span><span><small>{ko ? '채굴 보너스' : 'MINING BONUS'}</small><b>+{dashboard?.fleetBonus ?? user.fleetBonus ?? 0}%</b></span><span><small>{ko ? '주간 함대 순위' : 'FLEET RANK'}</small><b>{dashboard?.fleetRank ? `#${dashboard.fleetRank}` : '—'}</b></span><span><small>{ko ? '게임 순위' : 'GAME RANK'}</small><b>{dashboard?.gameRank ? `#${dashboard.gameRank}` : '—'}</b></span><span><small>{ko ? '최고 게임 점수' : 'BEST GAME SCORE'}</small><b>{Number(dashboard?.gameScore || 0).toLocaleString()}</b></span></div>
       <div className="community-rank-panels">
         <article><header><div><small>WEEKLY FLEET LEAGUE</small><b>{ko ? '함대 종합 순위' : 'Fleet Ranking'}</b></div><button onClick={() => setTab('rank')}>{ko ? '전체 보기' : 'VIEW ALL'}</button></header>{(dashboard?.fleetTop || []).length ? dashboard.fleetTop.slice(0,3).map((row) => <p key={row.rank}><em>#{row.rank}</em><span>{row.captainName}<small>{row.members} MEMBERS</small></span><strong>{Number(row.score || 0).toLocaleString()}</strong></p>) : <div className="community-rank-empty">{ko ? '첫 함대를 모집하고 순위에 도전하세요.' : 'Recruit your first fleet and enter the league.'}</div>}</article>
@@ -1378,15 +1375,32 @@ function Fleet({ user, setUser, t, language }) {
   const [securityTarget, setSecurityTarget] = useState('');
   const [notice, setNotice] = useState('');
   const [view, setView] = useState('overview');
-  const code = fleet?.code || user.referralCode || 'SYNCING';
-  const link = fleet?.link || `https://t.me/SpaceNovaXAdminBot?start=${code}`;
+  const referralCode = fleet?.code || user.referralCode || '';
+  const referralLink = fleet?.link || '';
+  const invitation = useMemo(() => buildReferralInvitation({ language, code: referralCode, link: referralLink }), [language, referralCode, referralLink]);
+  const code = invitation.code || 'SYNCING';
+  const link = invitation.link || 'Synchronizing invitation link…';
   const load = useCallback(() => Promise.all([api('/api/fleet/dashboard', { method: 'POST', body: {} }), api('/api/security-circle/dashboard', { method: 'POST', body: {} }), api('/api/fleet/messages', { method:'POST', body:{} })]).then(([data, securityData, directData]) => { setFleet(data.fleet); setSecurity(securityData.circle || null); setDirectMessages(directData.messages || []); if (data.user) setUser((current) => ({ ...current, ...data.user })); }).catch((error) => setNotice(error.message)), [setUser]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if(view==='direct'&&directMessages.some((item)=>item.direction==='received'&&!item.readAt)) api('/api/fleet/messages/read',{method:'POST',body:{}}).then(load).catch(()=>{}); }, [view, directMessages, load]);
   useEffect(() => { const timer=setTimeout(()=>api('/api/fleet/messages/members',{method:'POST',body:{query:directQuery}}).then((data)=>setDirectMembers(data.members||[])).catch((error)=>setNotice(error.message)),250); return()=>clearTimeout(timer); },[directQuery]);
-  function share() {
-    if (navigator.share) navigator.share({ title: 'Join my SpaceNovaX Fleet', text: 'Explore, mine and evolve with my fleet.', url: link });
-    else navigator.clipboard?.writeText(link);
+  async function copyInvite() {
+    if (!invitation.text) return setNotice(invitation.notices.unavailable);
+    try {
+      const copied = await copyReferralText(invitation.text);
+      setNotice(copied ? invitation.notices.copied : invitation.notices.failed);
+    } catch {
+      setNotice(invitation.notices.failed);
+    }
+  }
+  async function share() {
+    if (!invitation.text) return setNotice(invitation.notices.unavailable);
+    try {
+      const outcome = await shareReferralInvitation(invitation);
+      setNotice(outcome === 'shared' ? invitation.notices.shared : outcome === 'copied' ? invitation.notices.copied : invitation.notices.failed);
+    } catch (error) {
+      if (error?.name !== 'AbortError') setNotice(invitation.notices.failed);
+    }
   }
   async function join() {
     try { const data = await api('/api/fleet/join', { method: 'POST', body: { code: codeInput } }); setNotice(data.message); if (data.user) setUser((current) => ({ ...current, ...data.user })); setCodeInput(''); load(); } catch (error) { setNotice(error.message); }
@@ -1409,7 +1423,7 @@ function Fleet({ user, setUser, t, language }) {
     <div className="section-heading"><div><small>CAPTAIN REFERRAL NETWORK</small><h2>{t.referrals}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>LIVE NETWORK</span></div>
     <div className="fleet-explainer"><Icon name="fleet"/><div><b>{language === 'ko' ? '함대가 성장할수록 함께 강해집니다.' : 'Your fleet grows stronger together.'}</b><p>{language === 'ko' ? '활성 추천인 1명당 채굴 속도 +5%, 최대 1,000명까지 적용됩니다. 최종 전환은 KYC 인증 추천인만 인정됩니다.' : '+5% mining speed per active referral, up to 1,000 members. Final conversion recognizes KYC-verified referrals only.'}</p></div></div>
     <div className="fleet-hero"><div className="fleet-radar"><i/><i/><i/><span><Icon name="fleet" size={32}/></span></div><div><small>YOUR FLEET CODE</small><strong>{code}</strong><p>Invite verified captains. Every active member adds +5% mining speed.</p></div></div>
-    <div className="referral-box"><input readOnly value={link}/><button onClick={() => navigator.clipboard?.writeText(link)}><Icon name="copy"/>COPY</button><button onClick={share}><Icon name="external"/>SHARE</button></div>
+    <div className="referral-box"><input readOnly value={link}/><button onClick={copyInvite}><Icon name="copy"/>COPY</button><button onClick={share}><Icon name="external"/>SHARE</button></div>
     {!user.referredBy && <div className="join-fleet"><div><small>HAVE A REFERRAL CODE?</small><b>Join a captain fleet</b></div><input value={codeInput} onChange={(event) => setCodeInput(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))} placeholder="8-DIGIT CODE" maxLength={8}/><button onClick={join}>APPLY CODE<Icon name="arrow"/></button></div>}
     <div className="ops-stats fleet-stat-grid"><span><small>TOTAL INVITES</small><b>{fleet?.total ?? user.referrals?.length ?? 0}/1000</b></span><span><small>ACTIVE FLEET</small><b>{fleet?.active ?? user.activeFleet ?? 0}</b></span><span><small>KYC VERIFIED</small><b>{fleet?.kycVerified || 0}</b></span><span><small>MINING BONUS</small><b>+{user.fleetBonus || 0}%</b></span><span><small>SECURITY BONUS</small><b>+{user.securityCircleBonus || 0}%</b></span><span><small>FLEET GRADE</small><b>{fleet?.grade || user.fleetGrade || 'Explorer'}</b></span></div>
     <div className="fleet-conversion-alert"><Icon name="shield"/><div><b>{language === 'ko' ? '추천 보너스의 Solana SPNX 전환 기준' : 'Referral Bonus Conversion to Solana SPNX'}</b><p>{language === 'ko' ? '앱에서는 활성 추천인 기준으로 채굴 속도가 표시됩니다. 공식 전환 시에는 KYC를 통과한 정상 추천인만 최종 추천 보너스에 합산되며, 본인 KYC 승인과 Solana 지갑 등록도 필수입니다.' : 'The app displays speed using active referrals. At official conversion, only legitimate referrals who pass KYC count toward the final bonus. Your KYC approval and Solana wallet registration are also required.'}</p></div></div>
