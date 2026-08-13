@@ -1209,7 +1209,7 @@ function Community({ user, setUser, language, setTab }) {
   const { voiceState, play: playCommunityVoice } = useNovaVoiceFeedback('community-briefing');
   const ko = language === 'ko';
   const referralCode = dashboard?.referralCode || user.referralCode || '';
-  const referralLink = dashboard?.telegramReferralLink || dashboard?.referralLink || '';
+  const referralLink = dashboard?.referralLink || dashboard?.legacyReferralLink || '';
   const invitation = useMemo(() => buildReferralInvitation({ language, code: referralCode, link: referralLink }), [language, referralCode, referralLink]);
   const load = useCallback(() => api('/api/community/feed', { method: 'POST', body: { category, sort: feedSort } }).then((data) => { setPosts(data.posts || []); setPermission(data.permission || permission); }).catch((error) => setNotice(error.message)), [category, feedSort]);
   useEffect(() => {

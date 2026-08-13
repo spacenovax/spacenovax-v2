@@ -479,6 +479,11 @@ function makeReferralCode(userId = '') {
   return crypto.createHash('sha256').update(`SPNX:${userId}`).digest('hex').slice(0, 8).toUpperCase();
 }
 
+function publicReferralLink(code = '') {
+  const normalized = String(code).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  return `${PUBLIC_APP_ORIGIN}/join/${encodeURIComponent(normalized)}`;
+}
+
 function telegramReferralLink(code = '') {
   const normalized = String(code).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
   return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(normalized)}`;
@@ -1665,14 +1670,16 @@ app.post('/api/fleet/dashboard', (req, res) => {
   const ranking = fleetRanking(data).slice(0, 20);
   const ownRank = ranking.findIndex((fleet) => fleet.captainId === captainId) + 1;
   const messages = (data.fleetMessages || []).filter((message) => message.captainId === captainId).slice(-80);
+  const referralCode = captain?.referralCode || makeReferralCode(captainId);
   writeData(data);
   res.json({
     ok: true,
     fleet: {
       captainId,
       captainName: captain?.firstName || 'Captain',
-      code: captain?.referralCode || makeReferralCode(captainId),
-      link: telegramReferralLink(captain?.referralCode || makeReferralCode(captainId)),
+      code: referralCode,
+      link: publicReferralLink(referralCode),
+      telegramReferralLink: telegramReferralLink(referralCode),
       total: Math.max(0, members.length - 1),
       active: members.filter((member) => member.id !== captainId && Number(member.lastMiningAt || 0) >= cutoff).length,
       kycVerified: members.filter((member) => member.id !== captainId && String(member.kyc?.status || '').toLowerCase() === 'approved').length,
@@ -1863,13 +1870,14 @@ app.post('/api/community/dashboard', (req, res) => {
     .slice(0, 100);
   const gameRankIndex = gameRanking.findIndex((captain) => captain.id === user.id);
   const activeFleet = getActiveFleetCount(data, user.id);
+  const referralCode = user.referralCode || makeReferralCode(user.id);
   res.json({
     ok: true,
     dashboard: {
-      referralCode: user.referralCode || makeReferralCode(user.id),
-      referralLink: telegramReferralLink(user.referralCode || makeReferralCode(user.id)),
-      telegramReferralLink: telegramReferralLink(user.referralCode || makeReferralCode(user.id)),
-      legacyReferralLink: `${PUBLIC_APP_ORIGIN}/join/${user.referralCode || makeReferralCode(user.id)}`,
+      referralCode,
+      referralLink: publicReferralLink(referralCode),
+      telegramReferralLink: telegramReferralLink(referralCode),
+      legacyReferralLink: publicReferralLink(referralCode),
       totalInvites: Math.min(fleetReferralLimit(data), verifiedReferralCount(data, user)),
       referralLimit: fleetReferralLimit(data),
       activeFleet,

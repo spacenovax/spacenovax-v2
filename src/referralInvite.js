@@ -1,4 +1,4 @@
-const OFFICIAL_REFERRAL_BOT = 'SpaceNovaXAdminBot';
+const PUBLIC_REFERRAL_ORIGIN = 'https://app.spacenovax.com';
 
 export const REFERRAL_SHARE_COPY = {
   en: {
@@ -187,22 +187,22 @@ export function normalizeReferralCode(value = '') {
   return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
 }
 
-export function buildTelegramReferralLink(code = '', preferredLink = '') {
+export function buildPublicReferralLink(code = '', preferredLink = '') {
   const normalizedCode = normalizeReferralCode(code);
   if (!normalizedCode) return '';
+  const expectedPath = '/join/' + encodeURIComponent(normalizedCode);
   try {
     const candidate = new URL(String(preferredLink || ''));
-    const candidateCode = normalizeReferralCode(candidate.searchParams.get('start') || '');
-    if (candidate.protocol === 'https:' && candidate.hostname === 't.me' && candidate.pathname.length > 1 && candidateCode === normalizedCode) {
-      return candidate.toString();
+    if (candidate.protocol === 'https:' && candidate.hostname === 'app.spacenovax.com' && candidate.pathname === expectedPath) {
+      return PUBLIC_REFERRAL_ORIGIN + expectedPath;
     }
   } catch {}
-  return 'https://t.me/' + OFFICIAL_REFERRAL_BOT + '?start=' + encodeURIComponent(normalizedCode);
+  return PUBLIC_REFERRAL_ORIGIN + expectedPath;
 }
 
 export function buildReferralInvitation({ language = 'en', code = '', link = '' } = {}) {
   const normalizedCode = normalizeReferralCode(code);
-  const referralLink = buildTelegramReferralLink(normalizedCode, link);
+  const referralLink = buildPublicReferralLink(normalizedCode, link);
   const copy = REFERRAL_SHARE_COPY[language] || REFERRAL_SHARE_COPY.en;
   return {
     code: normalizedCode,

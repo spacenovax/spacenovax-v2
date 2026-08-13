@@ -268,7 +268,7 @@ function MissionsPage({ setUser }) {
 
 function FriendsPage({ user }) {
   const code = refCode(user);
-  const link = `https://t.me/SpaceNovaXAdminBot?start=${code}`;
+  const link = `https://app.spacenovax.com/join/${encodeURIComponent(code)}`;
   const invitation = buildReferralInvitation({ code, link });
   async function copy() {
     const copied = await copyReferralText(invitation.text);
