@@ -446,6 +446,7 @@ function normalizeTelegramUser(raw) {
     username: raw.username || '',
     firstName: raw.first_name || raw.firstName || 'Space Explorer',
     lastName: raw.last_name || '',
+    languageCode: String(raw.language_code || raw.languageCode || '').toLowerCase().slice(0, 12),
     isGuest: false
   };
 }
@@ -1327,11 +1328,28 @@ app.get('/api/ecosystem-stats', (req, res) => {
   const timestamp = now();
   const tenMinutesAgo = timestamp - 10 * 60 * 1000;
   const dayAgo = timestamp - 24 * 60 * 60 * 1000;
-  const activeUserIds = new Set(events.filter((event) => event.type === 'session' && Number(event.at || 0) >= tenMinutesAgo).map((event) => event.userId));
+  // A Captain is active when the app session endpoint was reached OR another
+  // authenticated action recently updated the profile.  Older releases only
+  // counted explicit `session` events, which could show 0 active users while
+  // the same Captains had live mining sessions.
+  const activeUserIds = new Set([
+    ...events
+      .filter((event) => event.userId && Number(event.at || 0) >= tenMinutesAgo)
+      .map((event) => event.userId),
+    ...users
+      .filter((user) => Math.max(Number(user.lastActiveAt || 0), Number(user.updatedAt || 0)) >= tenMinutesAgo)
+      .map((user) => user.id),
+  ]);
   const newUsers24h = users.filter((user) => Number(user.createdAt || 0) >= dayAgo).length;
   const priorUsers = Math.max(0, users.length - newUsers24h);
-  const communityGrowth = priorUsers ? Number((newUsers24h / priorUsers * 100).toFixed(2)) : (newUsers24h ? 100 : 0);
+  const communityGrowthRatePercent = priorUsers ? Number((newUsers24h / priorUsers * 100).toFixed(2)) : (newUsers24h ? 100 : 0);
   const completedMissions = users.reduce((total, user) => total + OFFICIAL_MISSION_IDS.filter((id) => Boolean(user.missionClaims?.[id])).length, 0);
+  const missionPassports = users.filter((user) => OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id]))).length;
+  // NOVA Wallet is created when its protected profile/PIN is configured.
+  // A linked Solana address is optional and must not be used as the wallet
+  // count; the old definition incorrectly displayed 0 for valid NOVA Wallets.
+  const novaWallets = users.filter((user) => Boolean(user.novaWalletSecurity?.pinHash || user.solanaWallet)).length;
+  const countryCodes = new Set(users.map((user) => String(user.countryCode || '').trim().toUpperCase()).filter(Boolean));
   const nodeProgram = communityNodeProgram(data);
   res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
   res.json({ ok: true, generatedAt: timestamp, stats: {
@@ -1340,13 +1358,18 @@ app.get('/api/ecosystem-stats', (req, res) => {
     onlineNodes: nodeProgram.online,
     registeredNodes: nodeProgram.registered,
     miningSessions: users.filter((user) => calculateMining(data, user).active).length,
-    walletsConnected: users.filter((user) => Boolean(user.solanaWallet)).length,
+    walletsConnected: novaWallets,
+    novaWallets,
+    solanaWalletsConnected: users.filter((user) => Boolean(user.solanaWallet)).length,
     walletsVerified: users.filter((user) => Boolean(user.walletVerifiedAt && user.verifiedSolanaWallet === user.solanaWallet)).length,
     completedMissions,
-    missionPassports: users.filter((user) => OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id]))).length,
-    countries: null,
+    missionPassports,
+    countries: countryCodes.size || null,
     languages: 12,
-    communityGrowth,
+    // The website card is a count, not a percentage. Keep the rate as a
+    // separate explicit field so the UI cannot accidentally mix the units.
+    communityGrowth: newUsers24h,
+    communityGrowthRatePercent,
     communityGrowthPeriod: '24h',
   }});
 });
@@ -1355,6 +1378,11 @@ app.get('/api/ecosystem-stats', (req, res) => {
 app.post('/api/session', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
+  const countryCode = String(req.body?.countryCode || '').trim().toUpperCase();
+  const languageCode = String(req.body?.languageCode || '').trim().toLowerCase();
+  if (/^[A-Z]{2}$/.test(countryCode)) user.countryCode = countryCode;
+  if (/^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/.test(languageCode)) user.languageCode = languageCode.slice(0, 12);
+  user.lastActiveAt = now();
   data.events.push({ type: 'session', userId: user.id, at: now() });
   writeData(data);
   res.json({ ok: true, user: publicUser(data, user) });

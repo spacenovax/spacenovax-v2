@@ -79,6 +79,12 @@ async function api(path, options = {}) {
   return data;
 }
 
+function clientRegionMetadata() {
+  const locale = String(Intl.DateTimeFormat().resolvedOptions().locale || navigator.language || '');
+  const region = locale.match(/[-_]([A-Za-z]{2})(?:$|[-_])/i)?.[1] || '';
+  return { languageCode: locale.toLowerCase().slice(0, 12), countryCode: region.toUpperCase() };
+}
+
 function SymbolLogo() {
   return (
     <div className="symbol-logo">
@@ -1031,7 +1037,7 @@ export default function App() {
   const [user, setUserState] = useState(defaultUser());
   const [loading, setLoading] = useState(false);
   function setUser(u) { setUserState({ ...defaultUser(), ...u }); }
-  async function sync() { try { const data = await api('/api/session', { method: 'POST', body: JSON.stringify({}) }); if (data.user) setUser(data.user); } catch {} }
+  async function sync() { try { const data = await api('/api/session', { method: 'POST', body: JSON.stringify(clientRegionMetadata()) }); if (data.user) setUser(data.user); } catch {} }
   useEffect(() => { sync(); const t = setInterval(sync, 30000); return () => clearInterval(t); }, []);
   async function startMining() { setLoading(true); try { const data = await api('/api/mining/start', { method: 'POST', body: JSON.stringify({}) }); if (data.user) setUser(data.user); } catch(e) { alert(e.message); } setLoading(false); }
   async function claimMining() { setLoading(true); try { const data = await api('/api/mining/claim', { method: 'POST', body: JSON.stringify({}) }); if (data.user) setUser(data.user); } catch(e) { alert(e.message); } setLoading(false); }

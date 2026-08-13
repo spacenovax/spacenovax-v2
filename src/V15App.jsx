@@ -121,6 +121,15 @@ async function api(path, options = {}) {
   return data;
 }
 
+function clientRegionMetadata() {
+  const locale = String(Intl.DateTimeFormat().resolvedOptions().locale || navigator.language || '');
+  const region = locale.match(/[-_]([A-Za-z]{2})(?:$|[-_])/i)?.[1] || '';
+  return {
+    languageCode: locale.toLowerCase().slice(0, 12),
+    countryCode: region.toUpperCase(),
+  };
+}
+
 // Voice and conversational routing are deliberately isolated from the app
 // modules.  The router resolves browser speech, local audio, FAQ and rules
 // before the final text-only provider is even considered.
@@ -1812,7 +1821,7 @@ export default function V15App() {
   const t = COPY[language] || COPY.en;
   const setLanguage = (value) => { localStorage.setItem('spnx_language', value); setLanguageState(value); document.documentElement.lang = value; };
   const sync = useCallback(async () => {
-    try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
+    try { const data = await api('/api/session', { method: 'POST', body: clientRegionMetadata() }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
   }, []);
   useEffect(() => {
     document.documentElement.lang = language;
