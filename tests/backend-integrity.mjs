@@ -150,7 +150,7 @@ const gate = await gateResponse.json();
 const result = {
   freshSession: Boolean(session.user?.id),
   personalReferralAttribution:
-    referralDashboard.dashboard?.referralLink === 'https://app.spacenovax.com/join/' + encodeURIComponent(session.user.referralCode)
+    referralDashboard.dashboard?.referralLink === 'https://app.spacenovax.com/join/' + encodeURIComponent(session.user.referralCode) + '?v=join-fleet-20260814'
     && referralDashboard.dashboard?.telegramReferralLink === 'https://t.me/SpaceNovaXAdminBot?start=' + encodeURIComponent(session.user.referralCode)
     && referredSession.user?.referredBy === session.user.id
     && referredSession.user?.referralCode !== session.user.referralCode,

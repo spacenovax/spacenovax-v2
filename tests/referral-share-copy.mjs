@@ -3,8 +3,8 @@ import { REFERRAL_SHARE_COPY, buildReferralInvitation } from '../src/referralInv
 
 const firstCode = '3E807788';
 const secondCode = 'AB12CD34';
-const firstLink = 'https://app.spacenovax.com/join/3E807788';
-const secondLink = 'https://app.spacenovax.com/join/AB12CD34';
+const firstLink = 'https://app.spacenovax.com/join/3E807788?v=join-fleet-20260814';
+const secondLink = 'https://app.spacenovax.com/join/AB12CD34?v=join-fleet-20260814';
 const languages = Object.keys(REFERRAL_SHARE_COPY);
 
 assert.equal(languages.length, 12, 'every supported app language needs referral copy');

@@ -1,4 +1,5 @@
 const PUBLIC_REFERRAL_ORIGIN = 'https://app.spacenovax.com';
+const REFERRAL_SHARE_VERSION = 'join-fleet-20260814';
 
 export const REFERRAL_SHARE_COPY = {
   en: {
@@ -191,13 +192,14 @@ export function buildPublicReferralLink(code = '', preferredLink = '') {
   const normalizedCode = normalizeReferralCode(code);
   if (!normalizedCode) return '';
   const expectedPath = '/join/' + encodeURIComponent(normalizedCode);
+  const versionedLink = PUBLIC_REFERRAL_ORIGIN + expectedPath + '?v=' + encodeURIComponent(REFERRAL_SHARE_VERSION);
   try {
     const candidate = new URL(String(preferredLink || ''));
-    if (candidate.protocol === 'https:' && candidate.hostname === 'app.spacenovax.com' && candidate.pathname === expectedPath) {
-      return PUBLIC_REFERRAL_ORIGIN + expectedPath;
+    if (candidate.protocol === 'https:' && candidate.hostname === 'app.spacenovax.com' && candidate.pathname === expectedPath && candidate.searchParams.get('v') === REFERRAL_SHARE_VERSION) {
+      return versionedLink;
     }
   } catch {}
-  return PUBLIC_REFERRAL_ORIGIN + expectedPath;
+  return versionedLink;
 }
 
 export function buildReferralInvitation({ language = 'en', code = '', link = '' } = {}) {

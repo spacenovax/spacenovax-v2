@@ -51,6 +51,9 @@ const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data
 // Public share links must resolve to this server so KakaoTalk and Telegram can
 // read the Open Graph card before a Captain opens the Telegram Mini App.
 const PUBLIC_APP_ORIGIN = String(process.env.PUBLIC_APP_ORIGIN || 'https://app.spacenovax.com').replace(/\/$/, '');
+// Changing this creates a new Open Graph URL, so Telegram/Kakao fetch a fresh
+// invitation preview instead of reusing an older card cached for the same code.
+const REFERRAL_SHARE_VERSION = 'join-fleet-20260814';
 const TELEGRAM_BOT_USERNAME = String(process.env.TELEGRAM_BOT_USERNAME || 'SpaceNovaXAdminBot').replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '') || 'SpaceNovaXAdminBot';
 const WEBAUTHN_RP_ID = String(process.env.WEBAUTHN_RP_ID || new URL(PUBLIC_APP_ORIGIN).hostname).toLowerCase();
 const WEBAUTHN_ORIGIN = String(process.env.WEBAUTHN_ORIGIN || PUBLIC_APP_ORIGIN).replace(/\/$/, '');
@@ -481,7 +484,7 @@ function makeReferralCode(userId = '') {
 
 function publicReferralLink(code = '') {
   const normalized = String(code).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
-  return `${PUBLIC_APP_ORIGIN}/join/${encodeURIComponent(normalized)}`;
+  return `${PUBLIC_APP_ORIGIN}/join/${encodeURIComponent(normalized)}?v=${encodeURIComponent(REFERRAL_SHARE_VERSION)}`;
 }
 
 function telegramReferralLink(code = '') {
@@ -3585,9 +3588,9 @@ app.get('/join/:code', (req, res) => {
   const referrer = code ? findUserByReferralCode(data, code) : null;
   if (!referrer) return res.status(404).send('SpaceNovaX invitation not found.');
   const inviter = escapeHtml(referrer.firstName || 'a SpaceNovaX Captain');
-  const shareUrl = `${PUBLIC_APP_ORIGIN}/join/${code}`;
+  const shareUrl = publicReferralLink(code);
   const telegramUrl = telegramReferralLink(code);
-  const imageUrl = `${PUBLIC_APP_ORIGIN}/spacenovax-referral-card.jpg?v=join-fleet-20260814`;
+  const imageUrl = `${PUBLIC_APP_ORIGIN}/spacenovax-referral-card.jpg?v=${encodeURIComponent(REFERRAL_SHARE_VERSION)}`;
   res.setHeader('Cache-Control', 'public, max-age=60');
   res.type('html').send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SpaceNovaX Fleet Invitation</title><meta name="description" content="${inviter} Captain invites you to explore, earn and build beyond with SpaceNovaX.">

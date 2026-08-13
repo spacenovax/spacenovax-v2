@@ -9,6 +9,7 @@ assert.equal(/SpaceNovaXBot/.test(`${server}\n${v15}\n${legacy}`), false, 'retir
 assert.match(server, /SpaceNovaXAdminBot/, 'official Admin Bot fallback is missing');
 assert.match(server, /verifiedBotReferralTicket/, 'signed bot-to-app referral verification is missing');
 assert.match(server, /function publicReferralLink/, 'public invitation-card link helper is missing');
+assert.match(server, /REFERRAL_SHARE_VERSION = 'join-fleet-20260814'/, 'referral preview cache-busting version is missing');
 assert.match(server, /referralLink:\s*publicReferralLink/, 'primary app referral link must open the public invitation card');
 assert.match(server, /telegramReferralLink:\s*telegramReferralLink/, 'invitation card must retain the official Telegram handoff');
 assert.match(server, /legacyReferralLink:/, 'legacy share-link compatibility is missing');
