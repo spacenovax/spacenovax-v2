@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/v15.css';
+import './styles/node-status.css';
 import { NovaAIRouter } from './nova/index.js';
 import { WALLET_UI_COPY } from './i18n/wallet.js';
 
@@ -643,6 +644,9 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
       detailed={detailed}
       onActivate={!active && !busy ? onStart : claimable && !busy ? onClaim : undefined}
       actionLabel={claimable ? t.claim : t.start}
+      nodeOnline={Boolean(m.nodeOnline)}
+      nodeStatus={m.nodeStatus || user.communityNode?.status || ''}
+      nodeBonus={nodeBonus}
     />
     <div className="cycle-visual">
       <div className="progress-ring" style={{ '--progress': `${pct * 3.6}deg` }}>
@@ -675,15 +679,20 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
   </section>;
 }
 
-function MiningReactor({ active, progress, detailed, onActivate, actionLabel }) {
+function MiningReactor({ active, progress, detailed, onActivate, actionLabel, nodeOnline = false, nodeStatus = '', nodeBonus = 0 }) {
   const particles = useMemo(() => Array.from({ length: detailed ? 26 : 16 }, (_, index) => ({
     left: 8 + ((index * 37) % 84),
     delay: (index * .17) % 2.4,
     duration: 1.8 + ((index * 13) % 16) / 10,
     size: 2 + (index % 3),
   })), [detailed]);
+  const nodeWaiting = ['awaiting_heartbeat', 'not_registered', ''].includes(String(nodeStatus));
+  const nodeState = nodeOnline ? 'ONLINE' : nodeWaiting ? 'WAITING' : 'OFFLINE';
+  const hashState = nodeOnline ? 'STABLE' : nodeWaiting ? 'WAITING' : 'OFFLINE';
+  const coreState = active ? 'MINING' : nodeOnline ? 'NODE ONLINE' : onActivate ? 'TOUCH' : 'STANDBY';
+  const coreOutput = active ? `${progress}% OUTPUT` : nodeOnline ? `+${nodeBonus}% SPEED` : actionLabel?.toUpperCase();
   return <div
-    className={`mining-reactor ${active ? 'running' : 'idle'} ${detailed ? 'reactor-large' : ''} ${onActivate ? 'reactor-touchable' : ''}`}
+    className={`mining-reactor ${active ? 'running' : 'idle'} ${nodeOnline ? 'node-online' : 'node-offline'} ${detailed ? 'reactor-large' : ''} ${onActivate ? 'reactor-touchable' : ''}`}
     onClick={onActivate}
     onKeyDown={(event) => { if (onActivate && (event.key === 'Enter' || event.key === ' ')) onActivate(); }}
     role={onActivate ? 'button' : undefined}
@@ -695,11 +704,15 @@ function MiningReactor({ active, progress, detailed, onActivate, actionLabel }) 
     <div className="reactor-machine">
       <span className="reactor-ring ring-one"/><span className="reactor-ring ring-two"/><span className="reactor-ring ring-three"/>
       <span className="reactor-bracket b1"/><span className="reactor-bracket b2"/><span className="reactor-bracket b3"/><span className="reactor-bracket b4"/>
-      <div className="reactor-core"><i/><b>{active ? 'MINING' : onActivate ? 'TOUCH' : 'STANDBY'}</b><small>{active ? `${progress}% OUTPUT` : actionLabel?.toUpperCase()}</small></div>
+      <div className="reactor-core"><i/><b>{coreState}</b><small>{coreOutput}</small></div>
       <span className="scanner-beam"/>
     </div>
     <div className="reactor-particles">{particles.map((particle, index) => <i key={index} style={{ left: `${particle.left}%`, animationDelay: `${particle.delay}s`, animationDuration: `${particle.duration}s`, width: particle.size, height: particle.size }}/>)}</div>
-    <div className="reactor-status"><span><i/>QUANTUM CORE</span><span>HASH LINK {active ? 'STABLE' : 'READY'}</span><span>NODE 01</span></div>
+    <div className="reactor-status">
+      <span className={active ? 'status-core is-active' : 'status-core'}><i/>QUANTUM CORE {active ? 'ACTIVE' : 'READY'}</span>
+      <span className={`status-link ${nodeOnline ? 'is-online' : nodeWaiting ? 'is-waiting' : 'is-offline'}`}><i/>HASH LINK {hashState}</span>
+      <span className={`status-node ${nodeOnline ? 'is-online' : nodeWaiting ? 'is-waiting' : 'is-offline'}`}><i/>NODE 01 {nodeState}</span>
+    </div>
   </div>;
 }
 

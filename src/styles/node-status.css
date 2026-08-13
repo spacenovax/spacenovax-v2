@@ -1,0 +1,58 @@
+/* Community Node presence is driven by the server-authoritative heartbeat,
+   not by the local 24-hour mining-cycle animation. */
+.mining-reactor.node-online{
+  border-color:rgba(103,248,176,.42);
+  box-shadow:inset 0 0 50px rgba(0,0,0,.55),0 0 26px rgba(103,248,176,.11);
+}
+
+.mining-reactor.node-online .ring-one{
+  border-top-color:#67f8b0;
+  border-bottom-color:#52e7ff;
+  animation:reactorSpin 7s linear infinite;
+}
+
+.mining-reactor.node-online .ring-two{animation:reactorSpin 4s linear infinite reverse}
+.mining-reactor.node-online .ring-three{
+  border-left-color:#67f8b0;
+  border-right-color:#5bffd2;
+  animation:reactorSpin 2.4s linear infinite;
+}
+
+.mining-reactor.node-online .reactor-core{
+  animation:corePower 1.4s ease-in-out infinite alternate;
+  box-shadow:0 0 22px #67f8b0,0 0 62px rgba(83,231,255,.55),inset 0 0 18px white;
+}
+
+.mining-reactor.node-online .reactor-core:before{border-color:rgba(103,248,176,.62)}
+.mining-reactor.node-online .scanner-beam{animation:scanRotate 3s linear infinite}
+.mining-reactor.node-online .energy-stream{
+  opacity:.85;
+  background:linear-gradient(90deg,transparent,#43cfa1,#67f8b0);
+  animation:energyFlow .8s linear infinite;
+}
+
+.mining-reactor.node-online .reactor-particles i{
+  background:#67f8b0;
+  box-shadow:0 0 8px #67f8b0;
+  animation:particleMine linear infinite;
+}
+
+.reactor-status{gap:6px}
+.reactor-status span{display:inline-flex;align-items:center;white-space:nowrap}
+.reactor-status i{background:#48677a}
+.reactor-status span:first-child{color:#668397}
+.reactor-status .is-active,.reactor-status .is-online{color:#67f8b0}
+.reactor-status .is-active i,.reactor-status .is-online i{
+  background:#67f8b0;
+  box-shadow:0 0 8px #67f8b0;
+  animation:v15pulse 1s infinite;
+}
+.reactor-status .is-waiting{color:#9ab1c3}
+.reactor-status .is-waiting i{background:#7794aa}
+.reactor-status .is-offline{color:#7890a1}
+.reactor-status .is-offline i{background:#557181}
+
+@media(max-width:420px){
+  .reactor-status{font-size:6px;letter-spacing:.075em}
+  .reactor-status i{width:4px;height:4px;margin-right:3px}
+}
