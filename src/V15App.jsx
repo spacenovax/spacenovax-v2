@@ -102,8 +102,27 @@ function getClientId() {
   return value;
 }
 
+const REFERRAL_TICKET_KEY = 'spnx_referral_ticket';
+
+function getReferralTicket() {
+  try {
+    const url = new URL(window.location.href);
+    const incoming = url.searchParams.get('rt') || '';
+    if (incoming) {
+      window.sessionStorage.setItem(REFERRAL_TICKET_KEY, incoming);
+      url.searchParams.delete('rt');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      return incoming;
+    }
+    return window.sessionStorage.getItem(REFERRAL_TICKET_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 async function api(path, options = {}) {
   const initData = window.Telegram?.WebApp?.initData || '';
+  const referralTicket = getReferralTicket();
   let body = options.body;
   if (typeof body === 'object' && body !== null) body = JSON.stringify({ ...body, clientId: getClientId() });
   const response = await fetch(path, {
@@ -113,21 +132,13 @@ async function api(path, options = {}) {
       'Content-Type': 'application/json',
       'X-SPNX-Client-ID': getClientId(),
       ...(initData ? { 'X-Telegram-Init-Data': initData } : {}),
+      ...(referralTicket ? { 'X-SPNX-Referral-Ticket': referralTicket } : {}),
       ...(options.headers || {}),
     },
   });
   const data = await response.json();
   if (!response.ok || data.ok === false) throw new Error(data.message || 'Request failed');
   return data;
-}
-
-function clientRegionMetadata() {
-  const locale = String(Intl.DateTimeFormat().resolvedOptions().locale || navigator.language || '');
-  const region = locale.match(/[-_]([A-Za-z]{2})(?:$|[-_])/i)?.[1] || '';
-  return {
-    languageCode: locale.toLowerCase().slice(0, 12),
-    countryCode: region.toUpperCase(),
-  };
 }
 
 // Voice and conversational routing are deliberately isolated from the app
@@ -1368,7 +1379,7 @@ function Fleet({ user, setUser, t, language }) {
   const [notice, setNotice] = useState('');
   const [view, setView] = useState('overview');
   const code = fleet?.code || user.referralCode || 'SYNCING';
-  const link = fleet?.link || `https://t.me/SpaceNovaXBot?start=${code}`;
+  const link = fleet?.link || `https://t.me/SpaceNovaXAdminBot?start=${code}`;
   const load = useCallback(() => Promise.all([api('/api/fleet/dashboard', { method: 'POST', body: {} }), api('/api/security-circle/dashboard', { method: 'POST', body: {} }), api('/api/fleet/messages', { method:'POST', body:{} })]).then(([data, securityData, directData]) => { setFleet(data.fleet); setSecurity(securityData.circle || null); setDirectMessages(directData.messages || []); if (data.user) setUser((current) => ({ ...current, ...data.user })); }).catch((error) => setNotice(error.message)), [setUser]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if(view==='direct'&&directMessages.some((item)=>item.direction==='received'&&!item.readAt)) api('/api/fleet/messages/read',{method:'POST',body:{}}).then(load).catch(()=>{}); }, [view, directMessages, load]);
@@ -1821,7 +1832,7 @@ export default function V15App() {
   const t = COPY[language] || COPY.en;
   const setLanguage = (value) => { localStorage.setItem('spnx_language', value); setLanguageState(value); document.documentElement.lang = value; };
   const sync = useCallback(async () => {
-    try { const data = await api('/api/session', { method: 'POST', body: clientRegionMetadata() }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
+    try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
   }, []);
   useEffect(() => {
     document.documentElement.lang = language;

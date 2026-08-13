@@ -51,6 +51,7 @@ const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'spacenovax-data
 // Public share links must resolve to this server so KakaoTalk and Telegram can
 // read the Open Graph card before a Captain opens the Telegram Mini App.
 const PUBLIC_APP_ORIGIN = String(process.env.PUBLIC_APP_ORIGIN || 'https://app.spacenovax.com').replace(/\/$/, '');
+const TELEGRAM_BOT_USERNAME = String(process.env.TELEGRAM_BOT_USERNAME || 'SpaceNovaXAdminBot').replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '') || 'SpaceNovaXAdminBot';
 const WEBAUTHN_RP_ID = String(process.env.WEBAUTHN_RP_ID || new URL(PUBLIC_APP_ORIGIN).hostname).toLowerCase();
 const WEBAUTHN_ORIGIN = String(process.env.WEBAUTHN_ORIGIN || PUBLIC_APP_ORIGIN).replace(/\/$/, '');
 const WEBAUTHN_CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -446,7 +447,6 @@ function normalizeTelegramUser(raw) {
     username: raw.username || '',
     firstName: raw.first_name || raw.firstName || 'Space Explorer',
     lastName: raw.last_name || '',
-    languageCode: String(raw.language_code || raw.languageCode || '').toLowerCase().slice(0, 12),
     isGuest: false
   };
 }
@@ -477,6 +477,11 @@ function verifiedTelegramUser(req) {
 
 function makeReferralCode(userId = '') {
   return crypto.createHash('sha256').update(`SPNX:${userId}`).digest('hex').slice(0, 8).toUpperCase();
+}
+
+function telegramReferralLink(code = '') {
+  const normalized = String(code).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(normalized)}`;
 }
 
 function findUserByReferralCode(data, code = '') {
@@ -920,6 +925,20 @@ function verifiedTelegramStartParam(req, telegramUser) {
   }
 }
 
+function verifiedBotReferralTicket(req, telegramUser) {
+  if (!telegramUser?.id) return '';
+  const ticket = String(req.headers['x-spnx-referral-ticket'] || '').trim();
+  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '');
+  if (!ticket || !botToken) return '';
+  const [code, userId, issuedAtRaw, signature] = ticket.split('.');
+  const issuedAt = Number(issuedAtRaw || 0);
+  const normalized = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  if (!normalized || String(telegramUser.id) !== String(userId) || !issuedAt || Math.abs(Math.floor(Date.now() / 1000) - issuedAt) > 30 * 60) return '';
+  const payload = `${normalized}.${userId}.${issuedAt}`;
+  const expected = crypto.createHmac('sha256', botToken).update(payload).digest('hex');
+  return safeEqual(signature || '', expected) ? normalized : '';
+}
+
 function getSessionUser(req, data) {
   const telegramUser = verifiedTelegramUser(req);
   const clientId = String(req.headers['x-spnx-client-id'] || req.body?.clientId || '');
@@ -929,7 +948,9 @@ function getSessionUser(req, data) {
   // In production, referral attribution accepts only Telegram's signed start
   // parameter. This prevents scripted guest requests from consuming a fleet's
   // 1,000-member capacity. Local previews may still pass ref explicitly.
-  const referralCode = verifiedTelegramStartParam(req, telegramUser) || (!IS_PRODUCTION ? (req.body?.ref || req.query?.ref || '') : '');
+  const referralCode = verifiedTelegramStartParam(req, telegramUser)
+    || verifiedBotReferralTicket(req, telegramUser)
+    || (!IS_PRODUCTION ? (req.body?.ref || req.query?.ref || '') : '');
   return ensureUser(data, telegramUser || fallbackUser, referralCode);
 }
 
@@ -1328,28 +1349,11 @@ app.get('/api/ecosystem-stats', (req, res) => {
   const timestamp = now();
   const tenMinutesAgo = timestamp - 10 * 60 * 1000;
   const dayAgo = timestamp - 24 * 60 * 60 * 1000;
-  // A Captain is active when the app session endpoint was reached OR another
-  // authenticated action recently updated the profile.  Older releases only
-  // counted explicit `session` events, which could show 0 active users while
-  // the same Captains had live mining sessions.
-  const activeUserIds = new Set([
-    ...events
-      .filter((event) => event.userId && Number(event.at || 0) >= tenMinutesAgo)
-      .map((event) => event.userId),
-    ...users
-      .filter((user) => Math.max(Number(user.lastActiveAt || 0), Number(user.updatedAt || 0)) >= tenMinutesAgo)
-      .map((user) => user.id),
-  ]);
+  const activeUserIds = new Set(events.filter((event) => event.type === 'session' && Number(event.at || 0) >= tenMinutesAgo).map((event) => event.userId));
   const newUsers24h = users.filter((user) => Number(user.createdAt || 0) >= dayAgo).length;
   const priorUsers = Math.max(0, users.length - newUsers24h);
-  const communityGrowthRatePercent = priorUsers ? Number((newUsers24h / priorUsers * 100).toFixed(2)) : (newUsers24h ? 100 : 0);
+  const communityGrowth = priorUsers ? Number((newUsers24h / priorUsers * 100).toFixed(2)) : (newUsers24h ? 100 : 0);
   const completedMissions = users.reduce((total, user) => total + OFFICIAL_MISSION_IDS.filter((id) => Boolean(user.missionClaims?.[id])).length, 0);
-  const missionPassports = users.filter((user) => OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id]))).length;
-  // NOVA Wallet is created when its protected profile/PIN is configured.
-  // A linked Solana address is optional and must not be used as the wallet
-  // count; the old definition incorrectly displayed 0 for valid NOVA Wallets.
-  const novaWallets = users.filter((user) => Boolean(user.novaWalletSecurity?.pinHash || user.solanaWallet)).length;
-  const countryCodes = new Set(users.map((user) => String(user.countryCode || '').trim().toUpperCase()).filter(Boolean));
   const nodeProgram = communityNodeProgram(data);
   res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
   res.json({ ok: true, generatedAt: timestamp, stats: {
@@ -1358,18 +1362,13 @@ app.get('/api/ecosystem-stats', (req, res) => {
     onlineNodes: nodeProgram.online,
     registeredNodes: nodeProgram.registered,
     miningSessions: users.filter((user) => calculateMining(data, user).active).length,
-    walletsConnected: novaWallets,
-    novaWallets,
-    solanaWalletsConnected: users.filter((user) => Boolean(user.solanaWallet)).length,
+    walletsConnected: users.filter((user) => Boolean(user.solanaWallet)).length,
     walletsVerified: users.filter((user) => Boolean(user.walletVerifiedAt && user.verifiedSolanaWallet === user.solanaWallet)).length,
     completedMissions,
-    missionPassports,
-    countries: countryCodes.size || null,
+    missionPassports: users.filter((user) => OFFICIAL_MISSION_IDS.every((id) => Boolean(user.missionClaims?.[id]))).length,
+    countries: null,
     languages: 12,
-    // The website card is a count, not a percentage. Keep the rate as a
-    // separate explicit field so the UI cannot accidentally mix the units.
-    communityGrowth: newUsers24h,
-    communityGrowthRatePercent,
+    communityGrowth,
     communityGrowthPeriod: '24h',
   }});
 });
@@ -1378,11 +1377,6 @@ app.get('/api/ecosystem-stats', (req, res) => {
 app.post('/api/session', (req, res) => {
   const data = readData();
   const user = getSessionUser(req, data);
-  const countryCode = String(req.body?.countryCode || '').trim().toUpperCase();
-  const languageCode = String(req.body?.languageCode || '').trim().toLowerCase();
-  if (/^[A-Z]{2}$/.test(countryCode)) user.countryCode = countryCode;
-  if (/^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/.test(languageCode)) user.languageCode = languageCode.slice(0, 12);
-  user.lastActiveAt = now();
   data.events.push({ type: 'session', userId: user.id, at: now() });
   writeData(data);
   res.json({ ok: true, user: publicUser(data, user) });
@@ -1678,7 +1672,7 @@ app.post('/api/fleet/dashboard', (req, res) => {
       captainId,
       captainName: captain?.firstName || 'Captain',
       code: captain?.referralCode || makeReferralCode(captainId),
-      link: `https://t.me/SpaceNovaXBot?start=${captain?.referralCode || makeReferralCode(captainId)}`,
+      link: telegramReferralLink(captain?.referralCode || makeReferralCode(captainId)),
       total: Math.max(0, members.length - 1),
       active: members.filter((member) => member.id !== captainId && Number(member.lastMiningAt || 0) >= cutoff).length,
       kycVerified: members.filter((member) => member.id !== captainId && String(member.kyc?.status || '').toLowerCase() === 'approved').length,
@@ -1873,8 +1867,9 @@ app.post('/api/community/dashboard', (req, res) => {
     ok: true,
     dashboard: {
       referralCode: user.referralCode || makeReferralCode(user.id),
-      referralLink: `${PUBLIC_APP_ORIGIN}/join/${user.referralCode || makeReferralCode(user.id)}`,
-      telegramReferralLink: `https://t.me/SpaceNovaXBot?start=${user.referralCode || makeReferralCode(user.id)}`,
+      referralLink: telegramReferralLink(user.referralCode || makeReferralCode(user.id)),
+      telegramReferralLink: telegramReferralLink(user.referralCode || makeReferralCode(user.id)),
+      legacyReferralLink: `${PUBLIC_APP_ORIGIN}/join/${user.referralCode || makeReferralCode(user.id)}`,
       totalInvites: Math.min(fleetReferralLimit(data), verifiedReferralCount(data, user)),
       referralLimit: fleetReferralLimit(data),
       activeFleet,
@@ -3583,7 +3578,7 @@ app.get('/join/:code', (req, res) => {
   if (!referrer) return res.status(404).send('SpaceNovaX invitation not found.');
   const inviter = escapeHtml(referrer.firstName || 'a SpaceNovaX Captain');
   const shareUrl = `${PUBLIC_APP_ORIGIN}/join/${code}`;
-  const telegramUrl = `https://t.me/SpaceNovaXBot?start=${code}`;
+  const telegramUrl = telegramReferralLink(code);
   const imageUrl = `${PUBLIC_APP_ORIGIN}/spacenovax-referral-card.jpg`;
   res.setHeader('Cache-Control', 'public, max-age=60');
   res.type('html').send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
