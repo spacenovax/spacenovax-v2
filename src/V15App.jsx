@@ -149,7 +149,7 @@ const novaVoiceRouter = new NovaAIRouter({ request: api, clientKey: getClientId(
 
 const fallbackUser = {
   id: 'guest', firstName: 'Space Explorer', level: 1, balance: 0, activeFleet: 0,
-  fleetBonus: 0, securityCircle: [], securityCircleCount: 0, securityCircleBonus: 0, missionBonus: 0, missionPassportComplete: false,
+  totalReferrals: 0, fleetBonus: 0, securityCircle: [], securityCircleCount: 0, securityCircleBonus: 0, missionBonus: 0, missionPassportComplete: false,
   gameReward: { earnedToday: 0, bestScore: 0 },
   mining: { active: false, claimable: false, reward: 30, speedPerHour: 1.25, remainingMs: 86400000, progress: 0, minedSoFar: 0, phase: 1 },
 };
@@ -641,6 +641,9 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detaile
   const ko = document.documentElement.lang === 'ko';
   const baseSpeed = Number(m.baseSpeedPerHour || (m.baseReward || 30) / 24);
   const fleetBonus = Number(m.fleetBonus || user.fleetBonus || 0);
+  const activeReferrals = Math.max(0, Number(m.activeFleet ?? user.activeFleet ?? 0));
+  const totalReferrals = Math.max(activeReferrals, Number(m.totalReferrals ?? user.totalReferrals ?? user.referrals?.length ?? 0));
+  const referralBonusPerMember = Number(user.fleetBonusPerMember || 5);
   const securityBonus = Number(m.securityBonus || user.securityCircleBonus || 0);
   const missionBonus = Number(m.missionBonus || user.missionBonus || 0);
   const nodeBonus = m.nodeOnline ? Number(m.nodeBonus || 0) : 0;
@@ -680,12 +683,17 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detaile
         <span><small>{t.remaining}</small><b>{claimable ? '00:00:00' : clock(m.remainingMs || 86400000)}</b></span>
         <span><small>{t.reward}</small><b>{format(m.reward || 30)} SPNX</b></span>
         <span><small>{t.rate}</small><b>{format(currentSpeed, 5)} SPNX/h</b></span>
+        <span className="referral-live-stat">
+          <small>{ko ? '활성 채굴자 / 총 레퍼럴' : 'ACTIVE / TOTAL REFERRALS'}</small>
+          <b><Icon name="fleet" size={16}/>{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</b>
+          <strong>{ko ? `활성 ${activeReferrals}명 × +${referralBonusPerMember}% = +${fleetBonus}%` : `${activeReferrals} active × +${referralBonusPerMember}% = +${fleetBonus}%`}</strong>
+        </span>
       </div>
     </div>
     <div className="mining-track"><i style={{ width: `${pct}%` }} /><span className="track-node n1"/><span className="track-node n2"/><span className="track-node n3"/></div>
     <div className="mining-metrics">
       <span><small>{t.phase}</small><b>{t.phase} {m.phase || 1}</b></span>
-      <span><small>{t.fleet}</small><b>+{Number(m.fleetBonus || user.fleetBonus || 0)}%</b></span>
+      <span className="fleet-live-metric"><small>{ko ? '활성 / 총 레퍼럴' : 'ACTIVE / TOTAL REFERRALS'}</small><b>{activeReferrals.toLocaleString()}/{totalReferrals.toLocaleString()} · +{fleetBonus}%</b></span>
       <span><small>SECURITY CIRCLE</small><b>{Number(m.securityCircleCount || user.securityCircleCount || 0)}/5 · +{Number(m.securityBonus || user.securityCircleBonus || 0)}%</b></span>
       <span><small>MISSION PASSPORT</small><b>{m.missionPassportComplete || user.missionPassportComplete ? 'VERIFIED · +5%' : 'LOCKED · +0%'}</b></span>
       <span><small>LIVE EARNED</small><b>{format(m.minedSoFar || 0, 4)}</b></span>
