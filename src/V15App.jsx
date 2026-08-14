@@ -632,7 +632,7 @@ function Header({ user, language, setLanguage, t, onPreview, onMessages, onAnnou
   </header>;
 }
 
-function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
+function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detailed = false }) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const m = user.mining || fallbackUser.mining;
   const pct = Math.max(0, Math.min(100, Math.round(Number(m.progress || 0) * 100)));
@@ -655,9 +655,12 @@ function MiningCore({ user, t, onStart, onClaim, busy, detailed = false }) {
   const reductionAmountPerHour = Math.max(0, grossSpeedBeforeReduction - currentSpeed);
   useEffect(() => { const open=()=>setSpeedOpen(true); window.addEventListener('spnx-open-speed',open); return()=>window.removeEventListener('spnx-open-speed',open); }, []);
   return <section className={`command-card mining-core ${detailed ? 'detailed' : ''}`}>
-    <div className="section-heading">
+    <div className="section-heading mining-command-heading">
       <div><small>SPNX DISTRIBUTION ENGINE</small><h2>{t.mining}</h2></div>
-      <span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span>
+      <div className="mining-command-actions">
+        {onOpenGlobalChat && <button className="global-chat-launch" onClick={onOpenGlobalChat} title={ko ? '전 세계 12개국 채팅방 열기' : 'Open 12 global chat rooms'}><Icon name="community" size={16}/><span>{ko ? '글로벌 채팅' : 'GLOBAL CHAT'}</span><b>12</b></button>}
+        <span className={active ? 'live-state pulse' : 'live-state'}><i />{active ? t.active : t.ready}</span>
+      </div>
     </div>
     <MiningReactor
       active={active}
@@ -763,7 +766,65 @@ function ActivityLedger({ balance, t }) {
   </section>;
 }
 
-function Home({ user, t, onStart, onClaim, busy, setTab }) {
+function SponsoredBannerSlot({ placement, language }) {
+  const ko = language === 'ko';
+  const [enabled, setEnabled] = useState(false);
+  const [banners, setBanners] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const data = await api('/api/sponsored-banners', { method: 'POST', body: { placement } });
+        if (!alive) return;
+        setEnabled(Boolean(data.enabled));
+        setBanners(Array.isArray(data.banners) ? data.banners : []);
+        setActiveIndex(0);
+      } catch {
+        if (!alive) return;
+        setEnabled(false);
+        setBanners([]);
+      }
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [placement]);
+
+  useEffect(() => {
+    if (banners.length < 2) return undefined;
+    const timer = setInterval(() => setActiveIndex((current) => (current + 1) % banners.length), 7000);
+    return () => clearInterval(timer);
+  }, [banners.length]);
+
+  const banner = banners[activeIndex] || null;
+  if (!enabled || !banner) return null;
+
+  function recordPartnerClick(event) {
+    // A real link preserves the user's browser gesture. Telegram uses its
+    // native outbound-link view; the normal web app opens the same link in a
+    // separate tab. Either route starts only after the explicit user tap.
+    const telegram = window.Telegram?.WebApp;
+    if (typeof telegram?.openLink === 'function') {
+      event.preventDefault();
+      telegram.openLink(banner.destinationUrl);
+    }
+    void api('/api/sponsored-banners/click', { method: 'POST', body: { bannerId: banner.id } }).catch(() => {});
+  }
+
+  return <section className="sponsored-banner-slot" aria-label={ko ? '스폰서 파트너 안내' : 'Sponsored partner information'}>
+    <div className="sponsored-banner-topline"><span>{ko ? '광고 · SPONSORED' : 'ADVERTISEMENT · SPONSORED'}</span><small>{banner.label}</small></div>
+    <div className="sponsored-banner-main">
+      {banner.imageUrl ? <img className="sponsored-banner-image" src={banner.imageUrl} alt={`${banner.partnerName} partner banner`} loading="lazy"/> : <div className="sponsored-banner-fallback" aria-hidden="true"><span>{String(banner.partnerName || 'P').slice(0, 1).toUpperCase()}</span></div>}
+      <div className="sponsored-banner-copy"><small>{banner.partnerName}</small><h3>{banner.title}</h3><p>{banner.body}</p></div>
+      <a className="sponsored-banner-action" href={banner.destinationUrl} target="_blank" rel="noopener noreferrer" onClick={recordPartnerClick}><span>{ko ? '공식 파트너 열기' : 'VIEW PARTNER'}</span><Icon name="external" size={15}/></a>
+    </div>
+    <div className="sponsored-banner-foot"><p>{banner.disclosure}</p><small>{ko ? 'SpaceNovaX 앱은 이 배너에서 지갑 연결·서명·자동 이동을 실행하지 않습니다.' : 'SpaceNovaX never starts a wallet connection, signature, or automatic redirect from this banner.'}</small>{banners.length > 1 && <span className="sponsored-banner-dots" aria-label={ko ? '파트너 배너 선택' : 'Partner banner selection'}>{banners.map((item, index) => <button type="button" key={item.id} className={index === activeIndex ? 'active' : ''} onClick={() => setActiveIndex(index)} aria-label={`${index + 1}`}/>)}</span>}</div>
+  </section>;
+}
+
+function Home({ user, t, onStart, onClaim, busy, setTab, language }) {
   const live = useLiveMiningView(user);
   const liveUser = { ...user, mining: live.mining };
   const [balanceInteger, balanceFraction = ''] = format(live.displayBalance, 5).split('.');
@@ -785,7 +846,8 @@ function Home({ user, t, onStart, onClaim, busy, setTab }) {
       <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
-    <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} busy={busy}/>
+    <SponsoredBannerSlot placement="mining-top" language={language}/>
+    <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} onOpenGlobalChat={() => setTab('global-chat')} busy={busy}/>
     <section className="command-card home-mission-banner" onClick={() => setTab('missions')}>
       <div className="mission-emblem"><Icon name="mission" size={26}/></div>
       <div><small>MISSION PASSPORT · PERMANENT BONUS</small><h3>{t.missions}</h3><p>Complete all 5 missions · Unlock +5% mining speed</p></div>
@@ -1313,6 +1375,191 @@ function Community({ user, setUser, language, setTab }) {
     <div className="community-feed">{posts.length ? posts.map((post) => <article className="community-post" key={post.id}><header><span className="community-avatar">{post.author.avatarUrl ? <img src={post.author.avatarUrl} alt=""/> : post.author.firstName.slice(0,1).toUpperCase()}</span><div><b>{post.author.firstName}</b><small>{post.author.fleetGrade} · {new Date(post.createdAt).toLocaleDateString()}</small></div><em>{post.category.toUpperCase()}</em></header><h3>{post.title}</h3><p>{post.body}</p>{post.imageUrl && <img className="community-post-image" src={post.imageUrl} alt="Community upload" loading="lazy"/>}<footer><button className={post.liked ? 'liked' : ''} onClick={() => like(post)}>♡ {post.likes}</button><button onClick={() => sharePost(post)}><Icon name="external" size={13}/>{ko ? '공유' : 'Share'}</button><button onClick={() => report(post)}><Icon name="shield" size={13}/>{ko ? '신고' : 'Report'}</button></footer><div className="community-comments">{(post.comments || []).slice(-3).map((item) => <p key={item.id}><b>{item.authorName}</b><span>{item.body}</span></p>)}<div><input value={commentDrafts[post.id] || ''} maxLength={500} onChange={(event) => setCommentDrafts((current) => ({ ...current, [post.id]: event.target.value }))} placeholder={ko ? `댓글 ${post.comments?.length || 0}개 · 의견을 남겨보세요` : `${post.comments?.length || 0} comments · Add a comment`}/><button onClick={() => comment(post)}>{ko ? '등록' : 'SEND'}</button></div></div></article>) : <div className="community-empty"><Icon name="community" size={38}/><b>{ko ? '첫 번째 지식과 사진을 공유해 보세요.' : 'Be the first to share knowledge and photos.'}</b><p>{ko ? '5대 공식 미션을 완료한 캡틴의 게시물이 이곳에 표시됩니다.' : 'Posts from Captains who completed all five official missions appear here.'}</p></div>}</div>
     {notice && <p className="module-notice">{notice}</p>}
   </section></main>;
+}
+
+const GLOBAL_CHAT_PREFERRED_ROOM = {
+  ko: 'korea', ja: 'japan', zh: 'china', vi: 'vietnam', es: 'spain', pt: 'brazil',
+  ru: 'russia', id: 'indonesia', ar: 'arabic', en: 'global-en',
+};
+
+function formatGlobalChatTime(value, language) {
+  if (!value) return '';
+  try {
+    return new Intl.DateTimeFormat(language === 'ko' ? 'ko-KR' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  } catch {
+    return new Date(value).toLocaleString();
+  }
+}
+
+function GlobalChat({ user, language, setTab }) {
+  const ko = language === 'ko';
+  const [rooms, setRooms] = useState([]);
+  const [roomId, setRoomId] = useState('');
+  const [roomOpen, setRoomOpen] = useState(false);
+  const [roomDetails, setRoomDetails] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [viewerState, setViewerState] = useState(null);
+  const [moderation, setModeration] = useState(null);
+  const [retention, setRetention] = useState(null);
+  const [roomTab, setRoomTab] = useState('chat');
+  const [draft, setDraft] = useState('');
+  const [photo, setPhoto] = useState({ data: '', name: '' });
+  const [moderatorReason, setModeratorReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const loadRooms = useCallback(async () => {
+    try {
+      const data = await api('/api/global-chat/rooms', { method: 'POST', body: {} });
+      const nextRooms = data.rooms || [];
+      setRooms(nextRooms);
+      setRetention(data.retention || null);
+      setRoomId((current) => current || nextRooms.find((room) => room.id === (GLOBAL_CHAT_PREFERRED_ROOM[language] || 'global-en'))?.id || nextRooms[0]?.id || '');
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }, [language]);
+  const loadMessages = useCallback(async (targetRoomId) => {
+    if (!targetRoomId) return;
+    try {
+      const data = await api('/api/global-chat/messages', { method: 'POST', body: { roomId: targetRoomId } });
+      setRoomDetails(data.room || null);
+      setMessages(data.messages || []);
+      setViewerState(data.viewer || null);
+      setModeration(data.moderation || null);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }, []);
+  useEffect(() => { loadRooms(); }, [loadRooms]);
+  useEffect(() => {
+    if (!roomId || !roomOpen) return undefined;
+    loadMessages(roomId);
+    const poll = setInterval(() => loadMessages(roomId), 8000);
+    return () => clearInterval(poll);
+  }, [roomId, roomOpen, loadMessages]);
+  const selectedRoom = roomDetails || rooms.find((room) => room.id === roomId) || null;
+  const isMuted = Number(viewerState?.muteUntil || 0) > Date.now();
+  const refresh = async () => {
+    await Promise.all([loadRooms(), roomOpen ? loadMessages(roomId) : Promise.resolve()]);
+  };
+  function openRoom(room) {
+    setRoomId(room.id);
+    setRoomOpen(true);
+    setRoomDetails(null);
+    setRoomTab('chat');
+    setNotice('');
+  }
+  async function preparePhoto(file) {
+    if (!file) { setPhoto({ data: '', name: '' }); return; }
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { setNotice(ko ? 'JPG, PNG 또는 WebP 사진만 올릴 수 있습니다.' : 'Use a JPG, PNG, or WebP image.'); return; }
+    try {
+      const source = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+      const image = await new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = source; });
+      let longest = 1280;
+      let quality = .78;
+      let imageData = '';
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const scale = Math.min(1, longest / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        imageData = canvas.toDataURL('image/jpeg', quality);
+        if (imageData.length <= 900000) break;
+        longest = Math.round(longest * .78);
+        quality -= .08;
+      }
+      if (imageData.length > 900000) throw new Error(ko ? '사진 크기를 더 줄여 주세요.' : 'Please choose a smaller photo.');
+      setPhoto({ data: imageData, name: file.name });
+    } catch (error) {
+      setNotice(error.message || (ko ? '사진을 준비하지 못했습니다.' : 'Could not prepare the photo.'));
+    }
+  }
+  async function sendMessage(event) {
+    event.preventDefault();
+    if (busy || !roomId || isMuted || (!draft.trim() && !photo.data)) return;
+    setBusy(true); setNotice('');
+    try {
+      await api('/api/global-chat/send', { method: 'POST', body: { roomId, body: draft, imageData: photo.data } });
+      setDraft(''); setPhoto({ data: '', name: '' });
+      await refresh();
+    } catch (error) {
+      setNotice(error.message);
+    }
+    setBusy(false);
+  }
+  async function reportMessage(message) {
+    if (!window.confirm(ko ? '이 메시지를 신고하고 작성자를 차단할까요?' : 'Report this message and block this author?')) return;
+    try {
+      const data = await api('/api/global-chat/report', { method: 'POST', body: { messageId: message.id, reason: 'community_review' } });
+      setNotice(data.message || (ko ? '신고를 접수했습니다.' : 'Report submitted.'));
+      await refresh();
+    } catch (error) { setNotice(error.message); }
+  }
+  async function blockAuthor(message) {
+    if (!window.confirm(ko ? `${message.author.firstName} 님을 이 채팅에서 차단할까요?` : `Block ${message.author.firstName} in Global Chat?`)) return;
+    try {
+      await api('/api/global-chat/block', { method: 'POST', body: { userId: message.author.id, action: 'block' } });
+      setNotice(ko ? '작성자를 차단했습니다.' : 'Author blocked.');
+      await refresh();
+    } catch (error) { setNotice(error.message); }
+  }
+  async function moderateMessage(message, action) {
+    if (action === 'delete' && !window.confirm(ko ? '이 메시지를 이 방에서 삭제할까요?' : 'Remove this message from this room?')) return;
+    let minutes = 60;
+    if (action === 'mute') {
+      const value = window.prompt(ko ? '채팅 일시정지 시간을 분 단위로 입력하세요. (5~10080)' : 'Enter chat pause minutes (5–10080).', '60');
+      if (value === null) return;
+      minutes = Number(value);
+      if (!Number.isFinite(minutes) || minutes < 5 || minutes > 10080) { setNotice(ko ? '5분에서 10,080분 사이로 입력하세요.' : 'Enter 5 to 10,080 minutes.'); return; }
+    }
+    try {
+      const data = await api('/api/global-chat/moderate', { method: 'POST', body: { roomId, messageId: message.id, action, minutes } });
+      setNotice(data.message || (ko ? '모더레이션을 적용했습니다.' : 'Moderation applied.'));
+      await refresh();
+    } catch (error) { setNotice(error.message); }
+  }
+  async function unmuteCaptain(mute) {
+    try {
+      const data = await api('/api/global-chat/moderate', { method: 'POST', body: { roomId, userId: mute.userId, action: 'unmute' } });
+      setNotice(data.message || (ko ? '채팅 일시정지를 해제했습니다.' : 'Chat pause removed.'));
+      await refresh();
+    } catch (error) { setNotice(error.message); }
+  }
+  async function applyForModerator(event) {
+    event.preventDefault();
+    if (!roomId || busy) return;
+    setBusy(true); setNotice('');
+    try {
+      await api('/api/global-chat/moderator/apply', { method: 'POST', body: { roomId, reason: moderatorReason } });
+      setModeratorReason('');
+      setNotice(ko ? '모더레이터 신청을 접수했습니다. 운영 승인 후 이 방에서만 관리 권한이 열립니다.' : 'Moderator application submitted. Rights activate only in this room after approval.');
+      await refresh();
+    } catch (error) { setNotice(error.message); }
+    setBusy(false);
+  }
+  const roomModerators = selectedRoom?.moderators || [];
+  return <main className="v15-page global-chat-page">
+    {!roomId ? <section className="command-card global-chat-loading"><Icon name="community" size={32}/><b>{ko ? '글로벌 채널을 연결 중입니다…' : 'CONNECTING GLOBAL CHANNELS…'}</b></section> : <section className="command-card global-chat-shell">
+      {!selectedRoom ? <div className="global-chat-loading"><Icon name="community" size={32}/><b>{ko ? '채널을 불러오는 중입니다…' : 'LOADING CHANNELS…'}</b></div> : <>
+        <div className="global-chat-hero">
+          <div><small>SPACENOVAX GLOBAL COMMUNITY · 12 REGIONS</small><h2>{ko ? '글로벌 채팅' : 'Global Chat'}</h2><p>{ko ? '국가·언어별 채널에서 전 세계 캡틴과 대화하세요. 모든 채팅은 채굴·SPNX·지갑과 분리됩니다.' : 'Talk with Captains by country and language. Chat is separate from mining, SPNX, and wallets.'}</p></div>
+          <div className="global-chat-hero-actions"><span><Icon name="shield" size={15}/>{ko ? '공식 텔레그램 캡틴 전용' : 'VERIFIED CAPTAINS ONLY'}</span><button onClick={() => setTab('home')}><Icon name="home" size={16}/>{ko ? '채굴 화면' : 'MINING'}</button></div>
+        </div>
+        <SponsoredBannerSlot placement="global-chat" language={language}/>
+        {!roomOpen && <div className="global-chat-room-list">{rooms.map((room) => <button className={`global-chat-room-card ${room.id === roomId ? 'active' : ''}`} key={room.id} onClick={() => openRoom(room)}><span className="global-chat-room-flag">{room.flag}</span><span className="global-chat-room-copy"><b>{room.name}</b><small>{room.nativeName} · {room.language}</small><em>{room.lastMessage ? `${room.lastMessage.authorName}: ${room.lastMessage.body}` : (ko ? '첫 인사를 남겨보세요.' : 'Be the first to say hello.')}</em></span><span className="global-chat-room-meta"><strong>{room.moderatorCount}/{room.moderatorLimit}</strong><small>MOD</small><Icon name="arrow" size={16}/></span></button>)}</div>}
+        {roomOpen && selectedRoom && <section className="global-chat-room-view">
+          <header className="global-chat-room-header"><button className="global-chat-back" onClick={() => { setRoomOpen(false); setRoomDetails(null); setMessages([]); setViewerState(null); setModeration(null); }} aria-label={ko ? '채널 목록' : 'Channel list'}>←</button><span className="global-chat-room-flag">{selectedRoom.flag}</span><div><small>GLOBAL COMMUNITY CHANNEL</small><h3>{selectedRoom.name}</h3><p>{selectedRoom.nativeName} · {selectedRoom.moderatorCount}/{selectedRoom.moderatorLimit} MODERATORS</p></div><button className="global-chat-refresh" onClick={refresh} aria-label={ko ? '새로고침' : 'Refresh'}>↻</button></header>
+          <div className="global-chat-tabs"><button className={roomTab === 'chat' ? 'active' : ''} onClick={() => setRoomTab('chat')}>{ko ? '모든 메시지' : 'ALL MESSAGES'}</button><button className={roomTab === 'rules' ? 'active' : ''} onClick={() => setRoomTab('rules')}>{ko ? '채널 안내' : 'CHANNEL GUIDE'}</button><button className={roomTab === 'moderators' ? 'active' : ''} onClick={() => setRoomTab('moderators')}>{ko ? '모더레이터' : 'MODERATORS'}</button></div>
+          {roomTab === 'rules' && <div className="global-chat-info-card"><Icon name="shield" size={26}/><div><small>{ko ? '안전한 글로벌 대화를 위한 기본 원칙' : 'GLOBAL CHAT SAFETY RULES'}</small><b>{ko ? '지갑 시드문구·개인키·송금 요청·외부 투자 링크는 금지됩니다.' : 'Seed phrases, private keys, payment requests, and unapproved investment links are prohibited.'}</b><p>{ko ? '각 방은 해당 언어 중심으로 운영됩니다. 사진은 첨부할 수 있지만, 보관 한도를 넘으면 오래된 기록과 사진부터 자동 정리됩니다.' : 'Each room is language-led. Photos are supported, while the oldest records and photos are automatically cleared after the retention limit.'}</p></div></div>}
+          {roomTab === 'moderators' && <div className="global-chat-moderator-panel"><div className="global-chat-moderator-summary"><span>{selectedRoom.flag}</span><div><small>COUNTRY CHANNEL REPRESENTATIVES</small><b>{selectedRoom.moderatorCount}/{selectedRoom.moderatorLimit} {ko ? '명 배정' : 'ASSIGNED'}</b><p>{ko ? '승인된 모더레이터는 이 국가/권역 방에서만 메시지 삭제와 채팅 일시정지를 할 수 있습니다.' : 'Approved moderators can remove messages and temporarily pause chat only in this country or region room.'}</p></div></div><div className="global-chat-moderator-list">{roomModerators.length ? roomModerators.map((moderator) => <article key={moderator.id}><span className="global-chat-avatar">{moderator.avatarUrl ? <img src={moderator.avatarUrl} alt=""/> : moderator.firstName.slice(0, 1).toUpperCase()}</span><div><b>{moderator.firstName}</b><small>{moderator.badge}</small></div></article>) : <p>{ko ? '아직 승인된 모더레이터가 없습니다.' : 'No moderator has been approved yet.'}</p>}</div>{viewerState?.isModerator ? <div className="global-chat-mod-active"><b>{viewerState.moderatorBadge}</b><p>{ko ? '현재 이 방의 모더레이터입니다. 메시지 아래의 관리 버튼으로 삭제 또는 일시정지를 실행할 수 있습니다.' : 'You are a moderator for this room. Use the message controls to remove or temporarily pause chat.'}</p>{(moderation?.activeMutes || []).length > 0 && <div className="global-chat-mute-list">{moderation.activeMutes.map((mute) => <span key={mute.id}><b>{mute.firstName}</b><small>{formatGlobalChatTime(mute.until, language)} {ko ? '까지' : 'until'}</small><button onClick={() => unmuteCaptain(mute)}>{ko ? '해제' : 'UNMUTE'}</button></span>)}</div>}</div> : viewerState?.application?.status === 'pending' ? <div className="global-chat-mod-pending"><b>{ko ? '모더레이터 신청 검토 중' : 'MODERATOR APPLICATION PENDING'}</b><p>{ko ? '관리자 승인 전에는 일반 캡틴 권한으로 참여합니다.' : 'You continue as a Captain until an administrator approves the application.'}</p></div> : <form className="global-chat-mod-apply" onSubmit={applyForModerator}><label><small>{ko ? '이 방을 어떻게 안전하게 운영할지 적어주세요.' : 'Explain how you will keep this room safe and useful.'}</small><textarea minLength="20" maxLength="500" value={moderatorReason} onChange={(event) => setModeratorReason(event.target.value)} placeholder={ko ? '예: 해당 언어의 가이드 안내, 사칭·사기 신고 처리, 대화 질서 유지…' : 'Example: help with local guidance, review reports, and keep conversation respectful…'} required/></label><button disabled={busy || selectedRoom.moderatorCount >= selectedRoom.moderatorLimit}>{selectedRoom.moderatorCount >= selectedRoom.moderatorLimit ? (ko ? '정원 마감' : 'ALL 10 MODERATOR SLOTS FILLED') : (ko ? '모더레이터 신청' : 'APPLY TO MODERATE')}</button><p>{ko ? '모더레이터는 지갑·SPNX·KYC·계정 권한에 접근할 수 없습니다.' : 'Moderators never receive wallet, SPNX, KYC, or account-control access.'}</p></form>}</div>}
+          {roomTab === 'chat' && <><div className="global-chat-message-list">{messages.length ? messages.map((message) => <article className={`global-chat-message ${message.author.id === user.id ? 'mine' : ''}`} key={message.id}><span className="global-chat-avatar">{message.author.avatarUrl ? <img src={message.author.avatarUrl} alt=""/> : message.author.firstName.slice(0, 1).toUpperCase()}</span><div className="global-chat-bubble"><header><b>{message.author.firstName}</b>{message.author.isModerator && <em>{message.author.badge}</em>}<time>{formatGlobalChatTime(message.createdAt, language)}</time></header>{message.body && <p>{message.body}</p>}{message.imageUrl && <img src={message.imageUrl} alt="Global chat upload" loading="lazy"/>}{message.imageExpired && <small className="global-chat-expired">{ko ? '사진 보관 기간이 지나 정리되었습니다.' : 'Photo cleared after the retention period.'}</small>}{message.author.id !== user.id && <footer><button onClick={() => reportMessage(message)}>{ko ? '신고' : 'REPORT'}</button><button onClick={() => blockAuthor(message)}>{ko ? '차단' : 'BLOCK'}</button>{viewerState?.canModerate && <><button className="moderator-control" onClick={() => moderateMessage(message, 'delete')}>{ko ? '삭제' : 'REMOVE'}</button>{!message.author.isModerator && <button className="moderator-control mute" onClick={() => moderateMessage(message, 'mute')}>{ko ? '일시정지' : 'PAUSE CHAT'}</button>}</>}</footer>}</div></article>) : <div className="global-chat-empty"><Icon name="community" size={36}/><b>{ko ? '아직 메시지가 없습니다.' : 'No messages yet.'}</b><p>{ko ? '첫 인사와 함께 글로벌 채널을 시작해 보세요.' : 'Start this global channel with a friendly hello.'}</p></div>}</div>{isMuted ? <div className="global-chat-muted"><Icon name="shield" size={18}/><div><b>{ko ? '이 방에서 채팅이 일시정지되었습니다.' : 'Chat is temporarily paused in this room.'}</b><p>{formatGlobalChatTime(viewerState.muteUntil, language)} {ko ? '까지 메시지를 보낼 수 없습니다.' : ' — you cannot send messages until then.'}</p></div></div> : <form className="global-chat-composer" onSubmit={sendMessage}>{photo.data && <div className="global-chat-photo-preview"><img src={photo.data} alt="Upload preview"/><span>{photo.name}</span><button type="button" onClick={() => setPhoto({ data: '', name: '' })}>×</button></div>}<textarea value={draft} maxLength="400" onChange={(event) => setDraft(event.target.value)} placeholder={ko ? '여기에 메시지를 작성하세요…' : 'Write a message…'}/><div><label><Icon name="plus" size={16}/>{ko ? '사진' : 'PHOTO'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => preparePhoto(event.target.files?.[0])}/></label><small>{draft.length}/400</small><button disabled={busy || (!draft.trim() && !photo.data)}>{busy ? '…' : (ko ? '전송' : 'SEND')}<Icon name="arrow" size={16}/></button></div></form>}</>}
+        </section>}
+        {!roomOpen && <p className="global-chat-retention"><Icon name="shield" size={15}/>{ko ? `각 방은 최근 ${retention?.messagesPerRoom || 1200}개 메시지와 ${retention?.photosPerRoom || 150}장 사진을 보관합니다. 트래픽 한도를 넘으면 가장 오래된 순서부터 자동 정리됩니다.` : `Each room retains the latest ${retention?.messagesPerRoom || 1200} messages and ${retention?.photosPerRoom || 150} photos. The oldest records are cleared first when traffic limits are reached.`}</p>}
+      </>}
+      {notice && <p className="module-notice">{notice}</p>}
+    </section>}
+  </main>;
 }
 
 function Whitepaper({ language }) {
@@ -1878,11 +2125,12 @@ export default function V15App() {
     setBusy(false);
   }
   let page;
-  if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab}/>;
+  if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab} language={language}/>;
   else if (tab === 'orbit') page = <Suspense fallback={<main className="v15-page"><section className="command-card ops-module"><div className="section-heading"><div><small>EARTH NAVIGATION NETWORK</small><h2>Orbit Control</h2></div><span className="live-state"><i/>CONNECTING</span></div></section></main>}><OrbitV20 language={language} user={user}/></Suspense>;
   else if (tab === 'game') page = <Game user={user} t={t} language={language}/>;
   else if (tab === 'ai') page = <NovaAI user={user} t={t} language={language}/>;
   else if (tab === 'community') page = <Community user={user} setUser={setUser} language={language} setTab={setTab}/>;
+  else if (tab === 'global-chat') page = <GlobalChat user={user} language={language} setTab={setTab}/>;
   else if (tab === 'missions') page = <Missions user={user} setUser={setUser} t={t} language={language}/>;
   else if (tab === 'nodes') page = <Nodes language={language} setTab={setTab} user={user} setUser={setUser}/>;
   else if (tab === 'node-setup') page = <NodeSetup language={language} setTab={setTab}/>;
