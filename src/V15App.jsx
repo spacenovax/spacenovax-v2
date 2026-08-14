@@ -1236,12 +1236,19 @@ function PersonalMessages({ language, onRead }) {
   const ko = language === 'ko';
   const [messages, setMessages] = useState([]);
   const [notice, setNotice] = useState('');
-  const load = useCallback(() => api('/api/messages', { method: 'POST', body: {} }).then((data) => setMessages(data.messages || [])).catch((error) => setNotice(error.message)), []);
-  useEffect(() => { load(); }, [load]);
-  async function markAllRead() {
+  const load = useCallback(() => api('/api/messages', { method: 'POST', body: {} }).then((data) => { setMessages(data.messages || []); return data; }).catch((error) => { setNotice(error.message); return null; }), []);
+  const markAllRead = useCallback(async () => {
     try { await api('/api/messages/read', { method: 'POST', body: { messageId: 'all' } }); onRead?.(); await load(); }
     catch (error) { setNotice(error.message); }
-  }
+  }, [load, onRead]);
+  useEffect(() => {
+    let alive = true;
+    load().then((data) => {
+      if (alive && Number(data?.unreadCount || 0) > 0) return markAllRead();
+      return undefined;
+    });
+    return () => { alive = false; };
+  }, [load, markAllRead]);
   return <main className="v15-page"><section className="command-card ops-module personal-message-module">
     <div className="section-heading"><div><small>OFFICIAL SYSTEM INBOX</small><h2>{ko ? '시스템 알림함' : 'System Inbox'}</h2></div><button className="node-guide-link" onClick={markAllRead}>{ko ? '전체 읽음' : 'MARK ALL READ'}</button></div>
     <p className="module-notice">{ko?'이곳은 운영자·노드·서비스 상태 알림 전용입니다. 회원 간 비공개 대화는 함대 관제의 함대 쪽지를 이용하세요.':'This inbox is reserved for official, node, and service-status notices. Use Fleet Direct Messages for private conversations.'}</p>
