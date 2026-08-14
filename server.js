@@ -93,6 +93,34 @@ const COMMUNITY_NODE_WORK_TYPES = new Set([
   'nova-ai-public-help-cache', 'nova-ai-service-health',
   'nova-x-game-gateway-status', 'nova-x-public-ranking-cache', 'nova-x-asset-integrity',
 ]);
+const GLOBAL_CHAT_MAX_ROOM_MODERATORS = 10;
+const GLOBAL_CHAT_MAX_MESSAGE_LENGTH = 400;
+const GLOBAL_CHAT_MAX_IMAGE_BYTES = 700_000;
+const GLOBAL_CHAT_SEND_WINDOW_MS = 60 * 1000;
+const GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW = 8;
+// Keep the global chat useful without allowing unbounded database or media growth.
+// These values can be overridden at deployment time without changing the app.
+const GLOBAL_CHAT_ROOM_MESSAGE_LIMIT = Math.max(200, Math.min(5000, Number(process.env.GLOBAL_CHAT_ROOM_MESSAGE_LIMIT || 1200)));
+const GLOBAL_CHAT_TOTAL_MESSAGE_LIMIT = Math.max(GLOBAL_CHAT_ROOM_MESSAGE_LIMIT, Math.min(60000, Number(process.env.GLOBAL_CHAT_TOTAL_MESSAGE_LIMIT || GLOBAL_CHAT_ROOM_MESSAGE_LIMIT * 12)));
+const GLOBAL_CHAT_ROOM_MEDIA_LIMIT = Math.max(50, Math.min(1000, Number(process.env.GLOBAL_CHAT_ROOM_MEDIA_LIMIT || 150)));
+const GLOBAL_CHAT_ROOMS = [
+  { id: 'global-en', flag: '🌐', name: 'Global (English)', nativeName: 'Global', language: 'English' },
+  { id: 'korea', flag: '🇰🇷', name: 'Korea', nativeName: '한국어', language: 'Korean' },
+  { id: 'japan', flag: '🇯🇵', name: 'Japan', nativeName: '日本語', language: 'Japanese' },
+  { id: 'china', flag: '🇨🇳', name: 'China', nativeName: '中文', language: 'Chinese' },
+  { id: 'vietnam', flag: '🇻🇳', name: 'Vietnam', nativeName: 'Tiếng Việt', language: 'Vietnamese' },
+  { id: 'spain', flag: '🇪🇸', name: 'Spanish Community', nativeName: 'Español', language: 'Spanish' },
+  { id: 'brazil', flag: '🇧🇷', name: 'Brazil & Portugal', nativeName: 'Português', language: 'Portuguese' },
+  { id: 'russia', flag: '🇷🇺', name: 'Russia', nativeName: 'Русский', language: 'Russian' },
+  { id: 'india', flag: '🇮🇳', name: 'India', nativeName: 'हिन्दी', language: 'Hindi' },
+  { id: 'turkiye', flag: '🇹🇷', name: 'Türkiye', nativeName: 'Türkçe', language: 'Turkish' },
+  { id: 'indonesia', flag: '🇮🇩', name: 'Indonesia', nativeName: 'Bahasa Indonesia', language: 'Indonesian' },
+  { id: 'arabic', flag: '🌍', name: 'Arabic Region', nativeName: 'العربية', language: 'Arabic' },
+];
+const GLOBAL_CHAT_ROOM_BY_ID = new Map(GLOBAL_CHAT_ROOMS.map((room) => [room.id, room]));
+const MAX_SPONSORED_PARTNERS = 5;
+const MAX_SPONSORED_BANNER_IMAGE_BYTES = 900_000;
+const SPONSORED_BANNER_PLACEMENTS = new Set(['mining-top', 'global-chat']);
 
 const DEFAULT_MISSIONS = [
   { id: 'website', title: 'Visit SpaceNovaX Website', icon: '🌐', reward: 100, type: 'one_time', url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
@@ -135,6 +163,13 @@ function createInitialData() {
       fleetWeeklySettlements: {},
       communityPosts: [],
       communityReports: [],
+      globalChatMessages: [],
+      globalChatReports: [],
+      globalChatModeratorApplications: [],
+      globalChatModerators: [],
+      globalChatMutes: [],
+      sponsoredBanners: [],
+      sponsoredBannerClicks: {},
       communityNodes: {},
       nodePairings: {},
       personalMessages: [],
@@ -157,7 +192,8 @@ function createInitialData() {
         totalSupply: 10000000000,
         miningPool: 3500000000,
         communityNodeLimit: COMMUNITY_NODE_LIMIT,
-        communityNodeBonusPercent: COMMUNITY_NODE_BONUS_PERCENT
+        communityNodeBonusPercent: COMMUNITY_NODE_BONUS_PERCENT,
+        sponsoredBannersEnabled: false
       }
     };
 }
@@ -197,6 +233,7 @@ function normalizeData(data) {
   data.settings.kycEnabled ??= false;
   data.settings.convertEnabled ??= false;
   data.settings.autoPayoutEnabled ??= false;
+  data.settings.sponsoredBannersEnabled ??= false;
   data.walletChallenges ||= {};
   data.webauthnChallenges ||= {};
   for (const [challengeId, challenge] of Object.entries(data.webauthnChallenges)) {
@@ -213,6 +250,18 @@ function normalizeData(data) {
   data.fleetWeeklySettlements ||= {};
   data.communityPosts ||= [];
   data.communityReports ||= [];
+  data.globalChatMessages ||= [];
+  data.globalChatMessages = data.globalChatMessages.slice(-GLOBAL_CHAT_TOTAL_MESSAGE_LIMIT);
+  data.globalChatReports ||= [];
+  data.globalChatReports = data.globalChatReports.slice(-5000);
+  data.globalChatModeratorApplications ||= [];
+  data.globalChatModeratorApplications = data.globalChatModeratorApplications.slice(-5000);
+  data.globalChatModerators ||= [];
+  data.globalChatMutes ||= [];
+  data.globalChatMutes = data.globalChatMutes.slice(-5000);
+  data.sponsoredBanners ||= [];
+  data.sponsoredBanners = data.sponsoredBanners.slice(-50);
+  data.sponsoredBannerClicks ||= {};
   data.communityNodes ||= {};
   data.nodePairings ||= {};
   data.personalMessages ||= [];
@@ -228,6 +277,7 @@ function normalizeData(data) {
   }
   for (const user of Object.values(data.users || {})) {
     user.messageBlocks ||= [];
+    user.globalChatBlocks ||= [];
     user.referralCode ||= makeReferralCode(user.id);
     user.referrals ||= [];
     user.securityCircle ||= [];
@@ -425,6 +475,262 @@ function publicCommunityPost(data, post, viewerId = '') {
     comments: (post.comments || []).slice(-30),
     status: post.status || 'published'
   };
+}
+
+function globalChatRoom(roomId) {
+  return GLOBAL_CHAT_ROOM_BY_ID.get(String(roomId || '')) || null;
+}
+
+function globalChatModeratorRecord(data, userId, roomId) {
+  return (data.globalChatModerators || []).find((record) => (
+    record?.status === 'active' && record.userId === userId && record.roomId === roomId
+  )) || null;
+}
+
+function globalChatRoomModerators(data, roomId) {
+  return (data.globalChatModerators || [])
+    .filter((record) => record?.status === 'active' && record.roomId === roomId)
+    .sort((a, b) => Number(a.appointedAt || 0) - Number(b.appointedAt || 0));
+}
+
+function globalChatMutedUntil(data, userId, roomId) {
+  const activeMute = (data.globalChatMutes || [])
+    .filter((mute) => mute?.status === 'active' && mute.userId === userId && mute.roomId === roomId && Number(mute.until || 0) > now())
+    .sort((a, b) => Number(b.until || 0) - Number(a.until || 0))[0];
+  return activeMute || null;
+}
+
+function canModerateGlobalChatRoom(data, userId, roomId) {
+  return Boolean(globalChatModeratorRecord(data, userId, roomId));
+}
+
+function globalChatDisplayName(user, fallback = 'Captain') {
+  return String(user?.communityNickname || user?.firstName || fallback).trim().slice(0, 40) || fallback;
+}
+
+function publicGlobalChatModerator(data, record) {
+  const room = globalChatRoom(record.roomId);
+  const user = data.users?.[record.userId];
+  return {
+    id: record.id,
+    userId: record.userId,
+    firstName: globalChatDisplayName(user, 'Captain'),
+    avatarUrl: user?.avatarUrl || '',
+    badge: `${room?.flag || '✦'} ✦ MOD`,
+    appointedAt: Number(record.appointedAt || 0),
+  };
+}
+
+function publicGlobalChatMessage(data, message) {
+  const author = data.users?.[message.authorId];
+  const room = globalChatRoom(message.roomId);
+  const moderator = canModerateGlobalChatRoom(data, message.authorId, message.roomId);
+  return {
+    id: message.id,
+    roomId: message.roomId,
+    body: message.body || '',
+    imageUrl: message.imageUrl || '',
+    imageExpired: Boolean(message.imageExpired),
+    createdAt: Number(message.createdAt || 0),
+    author: {
+      id: message.authorId,
+      firstName: globalChatDisplayName(author, message.authorName || 'Captain'),
+      avatarUrl: author?.avatarUrl || message.authorAvatarUrl || '',
+      isModerator: moderator,
+      badge: moderator ? `${room?.flag || '✦'} ✦ MOD` : '',
+    },
+  };
+}
+
+function publicGlobalChatRoom(data, room) {
+  const latest = (data.globalChatMessages || [])
+    .filter((message) => message.roomId === room.id && message.status === 'published')
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
+  const moderators = globalChatRoomModerators(data, room.id).map((record) => publicGlobalChatModerator(data, record));
+  return {
+    ...room,
+    messageCount: (data.globalChatMessages || []).filter((message) => message.roomId === room.id && message.status === 'published').length,
+    moderatorCount: moderators.length,
+    moderatorLimit: GLOBAL_CHAT_MAX_ROOM_MODERATORS,
+    moderators,
+    lastMessage: latest ? {
+      body: latest.body || (latest.imageUrl ? '📷 Photo' : ''),
+      authorName: globalChatDisplayName(data.users?.[latest.authorId], latest.authorName || 'Captain'),
+      createdAt: Number(latest.createdAt || 0),
+      hasImage: Boolean(latest.imageUrl),
+    } : null,
+  };
+}
+
+function globalChatViewerState(data, user, roomId) {
+  const room = globalChatRoom(roomId);
+  const role = room ? globalChatModeratorRecord(data, user.id, room.id) : null;
+  const mute = room ? globalChatMutedUntil(data, user.id, room.id) : null;
+  const application = room ? (data.globalChatModeratorApplications || [])
+    .filter((item) => item.userId === user.id && item.roomId === room.id)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0] : null;
+  return {
+    isModerator: Boolean(role),
+    canModerate: Boolean(role),
+    moderatorBadge: role ? `${room.flag} ✦ MOD` : '',
+    muteUntil: Number(mute?.until || 0),
+    mutedReason: mute?.reason || '',
+    blockedUserIds: user.globalChatBlocks || [],
+    application: application ? {
+      id: application.id,
+      status: application.status,
+      createdAt: Number(application.createdAt || 0),
+      reviewedAt: Number(application.reviewedAt || 0),
+    } : null,
+  };
+}
+
+function normalizeGlobalChatText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, GLOBAL_CHAT_MAX_MESSAGE_LENGTH);
+}
+
+function globalChatContentBlocked(text) {
+  const normalized = text.normalize('NFKC').toLowerCase();
+  const prohibitedPatterns = [
+    /(seed phrase|recovery phrase|private key|wallet password|시드\s*문구|복구\s*문구|개인\s*키|지갑\s*비밀번호)/i,
+    /(send|transfer|deposit|송금|입금).{0,30}(usdt|sol|spnx|coin|token|코인|토큰)/i,
+    /(admin|administrator|operator|support|운영자|관리자|고객센터).{0,20}(입니다|공식|official|payment|송금)/i,
+    /https?:\/\/(?!([a-z0-9-]+\.)?(spacenovax\.com|t\.me|discord\.gg|youtube\.com|x\.com)(\/|$))[^\s]+/i,
+  ];
+  return prohibitedPatterns.some((pattern) => pattern.test(normalized));
+}
+
+function saveGlobalChatImage(imageData) {
+  const match = String(imageData || '').match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new Error('Only JPEG, PNG, and WebP images are supported.');
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length || buffer.length > GLOBAL_CHAT_MAX_IMAGE_BYTES) throw new Error('Chat photo must be 700 KB or smaller.');
+  fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
+  const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const filename = `global-chat-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${extension}`;
+  fs.writeFileSync(path.join(COMMUNITY_MEDIA_DIR, filename), buffer);
+  return `/community-media/${filename}`;
+}
+
+function removeGlobalChatImage(imageUrl) {
+  if (!String(imageUrl || '').startsWith('/community-media/global-chat-')) return;
+  try {
+    const file = path.join(COMMUNITY_MEDIA_DIR, path.basename(imageUrl));
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  } catch {}
+}
+
+function trimGlobalChatHistory(data) {
+  const messages = data.globalChatMessages || [];
+  const removeIds = new Set();
+  for (const room of GLOBAL_CHAT_ROOMS) {
+    const roomMessages = messages
+      .filter((message) => message.roomId === room.id)
+      .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+    for (const message of roomMessages.slice(0, Math.max(0, roomMessages.length - GLOBAL_CHAT_ROOM_MESSAGE_LIMIT))) removeIds.add(message.id);
+  }
+  const remaining = messages
+    .filter((message) => !removeIds.has(message.id))
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+  for (const message of remaining.slice(0, Math.max(0, remaining.length - GLOBAL_CHAT_TOTAL_MESSAGE_LIMIT))) removeIds.add(message.id);
+  const removed = messages.filter((message) => removeIds.has(message.id));
+  for (const message of removed) removeGlobalChatImage(message.imageUrl);
+  data.globalChatMessages = messages.filter((message) => !removeIds.has(message.id));
+  data.globalChatReports = (data.globalChatReports || []).filter((report) => !removeIds.has(report.messageId));
+
+  for (const room of GLOBAL_CHAT_ROOMS) {
+    const media = data.globalChatMessages
+      .filter((message) => message.roomId === room.id && message.imageUrl)
+      .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+    for (const message of media.slice(0, Math.max(0, media.length - GLOBAL_CHAT_ROOM_MEDIA_LIMIT))) {
+      removeGlobalChatImage(message.imageUrl);
+      message.imageUrl = '';
+      message.imageExpired = true;
+    }
+  }
+}
+
+function normalizeSponsoredBannerText(value, limit) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, limit);
+}
+
+function normalizeSponsoredBannerUrl(value) {
+  try {
+    const raw = String(value || '').trim();
+    if (!raw || raw.length > 2048) return '';
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function saveSponsoredBannerImage(imageData) {
+  const match = String(imageData || '').match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new Error('Only JPEG, PNG, and WebP banner images are supported.');
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length || buffer.length > MAX_SPONSORED_BANNER_IMAGE_BYTES) throw new Error('Banner image must be 900 KB or smaller.');
+  fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
+  const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const filename = `sponsor-banner-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${extension}`;
+  fs.writeFileSync(path.join(COMMUNITY_MEDIA_DIR, filename), buffer);
+  return `/community-media/${filename}`;
+}
+
+function removeSponsoredBannerImage(imageUrl) {
+  if (!String(imageUrl || '').startsWith('/community-media/sponsor-banner-')) return;
+  try {
+    const file = path.join(COMMUNITY_MEDIA_DIR, path.basename(imageUrl));
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  } catch {}
+}
+
+function isSponsoredBannerVisible(data, banner, placement = '') {
+  const timestamp = now();
+  return Boolean(
+    data.settings?.sponsoredBannersEnabled
+    && banner?.active
+    && SPONSORED_BANNER_PLACEMENTS.has(banner.placement)
+    && (!placement || banner.placement === placement)
+    && (!Number(banner.startsAt || 0) || Number(banner.startsAt) <= timestamp)
+    && (!Number(banner.endsAt || 0) || Number(banner.endsAt) > timestamp)
+  );
+}
+
+function publicSponsoredBanner(data, banner) {
+  return {
+    id: banner.id,
+    partnerName: banner.partnerName,
+    label: banner.label || 'SPONSORED PARTNER',
+    title: banner.title,
+    body: banner.body,
+    imageUrl: banner.imageUrl || '',
+    destinationUrl: banner.destinationUrl,
+    placement: banner.placement,
+    disclosure: banner.disclosure || 'Sponsored partner information. Terms, KYC requirements, and availability vary by region.',
+    order: Number(banner.order || 0),
+  };
+}
+
+function sponsoredBannersForPlacement(data, placement) {
+  return (data.sponsoredBanners || [])
+    .filter((banner) => isSponsoredBannerVisible(data, banner, placement))
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0) || Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .slice(0, MAX_SPONSORED_PARTNERS)
+    .map((banner) => publicSponsoredBanner(data, banner));
 }
 
 function makeGuestUser(clientId = '') {
@@ -1500,6 +1806,41 @@ app.post('/api/announcements/read', (req, res) => {
   res.json({ ok: true });
 });
 
+// Partner banners are an opt-in presentation surface.  They deliberately
+// contain no wallet connection, signature, or automatic redirect behaviour:
+// the client renders an explicit outbound-link button only after the user taps.
+app.post('/api/sponsored-banners', (req, res) => {
+  const placement = String(req.body?.placement || 'mining-top');
+  if (!SPONSORED_BANNER_PLACEMENTS.has(placement)) {
+    return res.status(400).json({ ok: false, message: 'Invalid sponsored banner placement.' });
+  }
+  const data = readData();
+  res.json({
+    ok: true,
+    enabled: Boolean(data.settings?.sponsoredBannersEnabled),
+    maxPartners: MAX_SPONSORED_PARTNERS,
+    banners: sponsoredBannersForPlacement(data, placement),
+  });
+});
+
+// Aggregate-only click accounting.  No per-user click history, wallet data,
+// or behavioural profile is stored for partner referrals.
+app.post('/api/sponsored-banners/click', (req, res) => {
+  const bannerId = String(req.body?.bannerId || '');
+  const data = readData();
+  const banner = (data.sponsoredBanners || []).find((item) => item.id === bannerId);
+  if (!banner || !isSponsoredBannerVisible(data, banner)) {
+    return res.status(404).json({ ok: false, message: 'Sponsored banner is not available.' });
+  }
+  const metric = data.sponsoredBannerClicks[banner.id] || { clicks: 0, lastClickedAt: 0 };
+  metric.clicks = Number(metric.clicks || 0) + 1;
+  metric.lastClickedAt = now();
+  data.sponsoredBannerClicks[banner.id] = metric;
+  data.events.push({ type: 'sponsored_banner_click', bannerId: banner.id, at: metric.lastClickedAt });
+  writeData(data);
+  res.json({ ok: true, destinationUrl: banner.destinationUrl });
+});
+
 // Community nodes are paired by a Captain once, then become active automatically
 // after their first valid heartbeat. They never receive financial or identity data.
 app.post('/api/nodes/pairing', (req, res) => {
@@ -2009,6 +2350,235 @@ app.post('/api/community/report', (req, res) => {
   res.json({ ok: true, message: 'Report submitted for administrator review.' });
 });
 
+app.post('/api/global-chat/rooms', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const applications = (data.globalChatModeratorApplications || [])
+    .filter((item) => item.userId === user.id)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  res.json({
+    ok: true,
+    rooms: GLOBAL_CHAT_ROOMS.map((room) => publicGlobalChatRoom(data, room)),
+    viewer: {
+      isVerifiedCaptain: true,
+      applications: applications.map((item) => ({
+        id: item.id,
+        roomId: item.roomId,
+        status: item.status,
+        createdAt: Number(item.createdAt || 0),
+        reviewedAt: Number(item.reviewedAt || 0),
+      })),
+    },
+    retention: {
+      messagesPerRoom: GLOBAL_CHAT_ROOM_MESSAGE_LIMIT,
+      photosPerRoom: GLOBAL_CHAT_ROOM_MEDIA_LIMIT,
+      moderatorLimit: GLOBAL_CHAT_MAX_ROOM_MODERATORS,
+    },
+  });
+});
+
+app.post('/api/global-chat/messages', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
+  const blocked = new Set(user.globalChatBlocks || []);
+  const messages = (data.globalChatMessages || [])
+    .filter((message) => message.roomId === room.id && message.status === 'published' && !blocked.has(message.authorId))
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
+    .slice(-180)
+    .map((message) => publicGlobalChatMessage(data, message));
+  const viewer = globalChatViewerState(data, user, room.id);
+  res.json({
+    ok: true,
+    room: publicGlobalChatRoom(data, room),
+    messages,
+    viewer,
+    moderation: viewer.canModerate ? {
+      activeMutes: (data.globalChatMutes || [])
+        .filter((mute) => mute.status === 'active' && mute.roomId === room.id && Number(mute.until || 0) > now())
+        .sort((a, b) => Number(a.until || 0) - Number(b.until || 0))
+        .map((mute) => ({ id: mute.id, userId: mute.userId, firstName: globalChatDisplayName(data.users?.[mute.userId], 'Captain'), until: Number(mute.until || 0), reason: mute.reason || '' })),
+    } : null,
+    rules: {
+      maxMessageLength: GLOBAL_CHAT_MAX_MESSAGE_LENGTH,
+      photoLimitBytes: GLOBAL_CHAT_MAX_IMAGE_BYTES,
+      messageWindow: GLOBAL_CHAT_SEND_WINDOW_MS / 1000,
+      maxMessagesPerWindow: GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW,
+    },
+  });
+});
+
+app.post('/api/global-chat/send', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
+  const activeMute = globalChatMutedUntil(data, user.id, room.id);
+  if (activeMute) return res.status(403).json({ ok: false, message: `Chat is temporarily paused in this room until ${new Date(activeMute.until).toLocaleString()}.` });
+
+  const body = normalizeGlobalChatText(req.body?.body);
+  const imageData = String(req.body?.imageData || '');
+  if (!body && !imageData) return res.status(400).json({ ok: false, message: 'Write a message or attach a photo.' });
+  if (body && globalChatContentBlocked(body)) return res.status(403).json({ ok: false, message: 'For your security, requests for wallet secrets, payments, impersonation, and unapproved links are blocked in Global Chat.' });
+  const recent = (data.globalChatMessages || []).filter((message) => message.authorId === user.id && Number(message.createdAt || 0) > now() - GLOBAL_CHAT_SEND_WINDOW_MS);
+  if (recent.length >= GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW) return res.status(429).json({ ok: false, message: 'Chat rate limit reached. Please wait a moment.' });
+
+  let imageUrl = '';
+  try {
+    if (imageData) imageUrl = saveGlobalChatImage(imageData);
+  } catch (error) {
+    return res.status(413).json({ ok: false, message: error.message || 'Photo upload failed.' });
+  }
+  const message = {
+    id: crypto.randomUUID(),
+    roomId: room.id,
+    authorId: user.id,
+    authorName: globalChatDisplayName(user),
+    authorAvatarUrl: user.avatarUrl || '',
+    body,
+    imageUrl,
+    imageExpired: false,
+    status: 'published',
+    reportCount: 0,
+    createdAt: now(),
+  };
+  data.globalChatMessages.push(message);
+  trimGlobalChatHistory(data);
+  data.events.push({ type: 'global_chat_message', userId: user.id, roomId: room.id, messageId: message.id, hasImage: Boolean(imageUrl), at: message.createdAt });
+  writeData(data);
+  res.status(201).json({ ok: true, message: publicGlobalChatMessage(data, message) });
+});
+
+app.post('/api/global-chat/block', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const targetId = String(req.body?.userId || '');
+  const action = String(req.body?.action || 'block');
+  if (!data.users?.[targetId] || targetId === user.id || !['block', 'unblock'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid block request.' });
+  user.globalChatBlocks ||= [];
+  user.globalChatBlocks = action === 'block'
+    ? [...new Set([...user.globalChatBlocks, targetId])]
+    : user.globalChatBlocks.filter((id) => id !== targetId);
+  data.events.push({ type: 'global_chat_block', userId: user.id, targetId, action, at: now() });
+  writeData(data);
+  res.json({ ok: true, blocked: action === 'block' });
+});
+
+app.post('/api/global-chat/report', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const message = (data.globalChatMessages || []).find((item) => item.id === String(req.body?.messageId || '') && item.status === 'published');
+  if (!message || message.authorId === user.id) return res.status(404).json({ ok: false, message: 'Chat message not found.' });
+  if ((data.globalChatReports || []).some((report) => report.messageId === message.id && report.reporterId === user.id)) return res.status(409).json({ ok: false, message: 'This chat message has already been reported.' });
+  const report = {
+    id: crypto.randomUUID(),
+    messageId: message.id,
+    roomId: message.roomId,
+    reporterId: user.id,
+    reportedUserId: message.authorId,
+    reason: normalizeGlobalChatText(req.body?.reason || 'community_review').slice(0, 200),
+    status: 'pending',
+    createdAt: now(),
+  };
+  data.globalChatReports.push(report);
+  message.reportCount = Number(message.reportCount || 0) + 1;
+  if (message.reportCount >= 3) {
+    message.status = 'review';
+    message.reviewAt = now();
+  }
+  user.globalChatBlocks = [...new Set([...(user.globalChatBlocks || []), message.authorId])];
+  data.events.push({ type: 'global_chat_report', userId: user.id, messageId: message.id, roomId: message.roomId, reportId: report.id, at: report.createdAt });
+  writeData(data);
+  res.json({ ok: true, message: message.status === 'review' ? 'Report submitted. The message is hidden while it is reviewed.' : 'Report submitted. The author is now blocked in your Global Chat view.' });
+});
+
+app.post('/api/global-chat/moderator/apply', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
+  if (canModerateGlobalChatRoom(data, user.id, room.id)) return res.status(409).json({ ok: false, message: 'You are already an active moderator for this room.' });
+  if (globalChatRoomModerators(data, room.id).length >= GLOBAL_CHAT_MAX_ROOM_MODERATORS) return res.status(409).json({ ok: false, message: 'This room already has the maximum of 10 moderators.' });
+  if ((data.globalChatModeratorApplications || []).some((item) => item.userId === user.id && item.roomId === room.id && item.status === 'pending')) return res.status(409).json({ ok: false, message: 'Your moderator application is already under review.' });
+  const reason = normalizeGlobalChatText(req.body?.reason);
+  if (reason.length < 20) return res.status(400).json({ ok: false, message: 'Explain in at least 20 characters how you will keep this channel safe and helpful.' });
+  const application = { id: crypto.randomUUID(), roomId: room.id, userId: user.id, reason: reason.slice(0, 500), status: 'pending', createdAt: now() };
+  data.globalChatModeratorApplications.push(application);
+  data.events.push({ type: 'global_chat_moderator_application', userId: user.id, roomId: room.id, applicationId: application.id, at: application.createdAt });
+  writeData(data);
+  res.status(201).json({ ok: true, application: { id: application.id, roomId: application.roomId, status: application.status, createdAt: application.createdAt } });
+});
+
+app.post('/api/global-chat/moderate', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
+  if (!canModerateGlobalChatRoom(data, user.id, room.id)) return res.status(403).json({ ok: false, message: 'Only the approved moderator for this room can use chat controls.' });
+  const action = String(req.body?.action || '');
+  if (!['delete', 'mute', 'unmute'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid moderator action.' });
+
+  if (action === 'unmute') {
+    const targetId = String(req.body?.userId || '');
+    let changed = false;
+    for (const mute of data.globalChatMutes || []) {
+      if (mute.status === 'active' && mute.roomId === room.id && mute.userId === targetId) {
+        mute.status = 'revoked';
+        mute.revokedAt = now();
+        mute.revokedBy = user.id;
+        changed = true;
+      }
+    }
+    if (!changed) return res.status(404).json({ ok: false, message: 'No active chat pause was found for this Captain.' });
+    data.events.push({ type: 'global_chat_moderator_unmute', userId: user.id, targetId, roomId: room.id, at: now() });
+    writeData(data);
+    return res.json({ ok: true, message: 'Chat pause removed for this room.' });
+  }
+
+  const message = (data.globalChatMessages || []).find((item) => item.id === String(req.body?.messageId || '') && item.roomId === room.id);
+  if (!message) return res.status(404).json({ ok: false, message: 'Chat message not found in this room.' });
+  if (action === 'delete') {
+    if (message.status !== 'removed') {
+      removeGlobalChatImage(message.imageUrl);
+      message.imageUrl = '';
+      message.imageExpired = false;
+      message.status = 'removed';
+      message.removedAt = now();
+      message.removedBy = user.id;
+      message.removeReason = normalizeGlobalChatText(req.body?.reason || 'room_moderation').slice(0, 200);
+    }
+    for (const report of data.globalChatReports || []) if (report.messageId === message.id && report.status === 'pending') { report.status = 'resolved_by_moderator'; report.reviewedAt = now(); report.reviewedBy = user.id; }
+    data.events.push({ type: 'global_chat_moderator_delete', userId: user.id, targetId: message.authorId, roomId: room.id, messageId: message.id, at: now() });
+    writeData(data);
+    return res.json({ ok: true, message: 'Message removed from this room.' });
+  }
+
+  if (message.authorId === user.id) return res.status(400).json({ ok: false, message: 'A moderator cannot pause their own chat access.' });
+  if (canModerateGlobalChatRoom(data, message.authorId, room.id)) return res.status(403).json({ ok: false, message: 'Another active room moderator cannot be paused by a peer moderator.' });
+  const requestedMinutes = Number(req.body?.minutes || 60);
+  const minutes = Math.max(5, Math.min(7 * 24 * 60, Number.isFinite(requestedMinutes) ? Math.round(requestedMinutes) : 60));
+  for (const mute of data.globalChatMutes || []) {
+    if (mute.status === 'active' && mute.roomId === room.id && mute.userId === message.authorId) {
+      mute.status = 'replaced';
+      mute.replacedAt = now();
+      mute.replacedBy = user.id;
+    }
+  }
+  const mute = { id: crypto.randomUUID(), roomId: room.id, userId: message.authorId, moderatorId: user.id, reason: normalizeGlobalChatText(req.body?.reason || 'room_moderation').slice(0, 200), status: 'active', createdAt: now(), until: now() + minutes * 60 * 1000 };
+  data.globalChatMutes.push(mute);
+  data.events.push({ type: 'global_chat_moderator_mute', userId: user.id, targetId: message.authorId, roomId: room.id, messageId: message.id, minutes, at: mute.createdAt });
+  writeData(data);
+  res.json({ ok: true, message: `Chat is paused for ${minutes} minutes in this room only.`, mute: { until: mute.until, minutes } });
+});
+
 app.get('/api/admin/community/reports', requireAdmin, (req, res) => {
   const data = readData();
   const posts = (data.communityPosts || [])
@@ -2034,6 +2604,129 @@ app.post('/api/admin/community/moderate', requireAdmin, (req, res) => {
   data.events.push({ type: 'admin_community_moderate', adminId: req.admin.id, postId: post.id, action, at: now() });
   writeData(data);
   res.json({ ok: true, post });
+});
+
+app.get('/api/admin/global-chat', requireAdmin, (req, res) => {
+  const data = readData();
+  const rooms = GLOBAL_CHAT_ROOMS.map((room) => ({
+    ...publicGlobalChatRoom(data, room),
+    pendingApplications: (data.globalChatModeratorApplications || []).filter((item) => item.roomId === room.id && item.status === 'pending').length,
+  }));
+  const applications = (data.globalChatModeratorApplications || [])
+    .slice(-300)
+    .reverse()
+    .map((application) => {
+      const applicant = data.users?.[application.userId];
+      return {
+        ...application,
+        room: globalChatRoom(application.roomId),
+        applicant: applicant ? { id: applicant.id, firstName: globalChatDisplayName(applicant), avatarUrl: applicant.avatarUrl || '', banned: Boolean(applicant.banned) } : { id: application.userId, firstName: 'Former Captain', avatarUrl: '', banned: true },
+      };
+    });
+  const messages = (data.globalChatMessages || [])
+    .slice(-350)
+    .reverse()
+    .map((message) => ({
+      ...publicGlobalChatMessage(data, message),
+      status: message.status || 'published',
+      reportCount: Number(message.reportCount || 0),
+      room: globalChatRoom(message.roomId),
+      reports: (data.globalChatReports || []).filter((report) => report.messageId === message.id),
+    }));
+  const mutes = (data.globalChatMutes || [])
+    .filter((mute) => mute.status === 'active' && Number(mute.until || 0) > now())
+    .sort((a, b) => Number(a.until || 0) - Number(b.until || 0))
+    .map((mute) => ({
+      ...mute,
+      room: globalChatRoom(mute.roomId),
+      user: data.users?.[mute.userId] ? { id: mute.userId, firstName: globalChatDisplayName(data.users[mute.userId]) } : { id: mute.userId, firstName: 'Former Captain' },
+    }));
+  res.json({ ok: true, rooms, applications, messages, mutes, limits: { moderatorsPerRoom: GLOBAL_CHAT_MAX_ROOM_MODERATORS, messagesPerRoom: GLOBAL_CHAT_ROOM_MESSAGE_LIMIT, photosPerRoom: GLOBAL_CHAT_ROOM_MEDIA_LIMIT } });
+});
+
+app.post('/api/admin/global-chat/application', requireAdmin, (req, res) => {
+  const data = readData();
+  const action = String(req.body?.action || '');
+  if (action === 'revoke') {
+    const moderator = (data.globalChatModerators || []).find((item) => item.id === String(req.body?.moderatorId || '') && item.status === 'active');
+    if (!moderator) return res.status(404).json({ ok: false, message: 'Active moderator not found.' });
+    moderator.status = 'revoked';
+    moderator.revokedAt = now();
+    moderator.revokedBy = req.admin.id;
+    moderator.revokeReason = normalizeGlobalChatText(req.body?.reason || 'administrator_review').slice(0, 200);
+    data.events.push({ type: 'admin_global_chat_moderator_revoke', adminId: req.admin.id, userId: moderator.userId, roomId: moderator.roomId, moderatorId: moderator.id, at: moderator.revokedAt });
+    writeData(data);
+    return res.json({ ok: true, status: moderator.status });
+  }
+
+  const application = (data.globalChatModeratorApplications || []).find((item) => item.id === String(req.body?.applicationId || '') && item.status === 'pending');
+  if (!application || !['approve', 'reject'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid moderator application action.' });
+  const room = globalChatRoom(application.roomId);
+  const applicant = data.users?.[application.userId];
+  if (!room || !applicant || applicant.banned) return res.status(409).json({ ok: false, message: 'This applicant or room is no longer eligible.' });
+  if (action === 'approve') {
+    if (globalChatRoomModerators(data, room.id).length >= GLOBAL_CHAT_MAX_ROOM_MODERATORS) return res.status(409).json({ ok: false, message: 'This room already has the maximum of 10 moderators.' });
+    if (!canModerateGlobalChatRoom(data, applicant.id, room.id)) {
+      data.globalChatModerators.push({ id: crypto.randomUUID(), roomId: room.id, userId: applicant.id, status: 'active', badge: `${room.flag} ✦ MOD`, appointedAt: now(), appointedBy: req.admin.id, applicationId: application.id });
+    }
+  }
+  application.status = action === 'approve' ? 'approved' : 'rejected';
+  application.reviewedAt = now();
+  application.reviewedBy = req.admin.id;
+  application.reviewNote = normalizeGlobalChatText(req.body?.reason || '').slice(0, 200);
+  data.events.push({ type: `admin_global_chat_moderator_${action}`, adminId: req.admin.id, userId: applicant.id, roomId: room.id, applicationId: application.id, at: application.reviewedAt });
+  writeData(data);
+  res.json({ ok: true, application: { id: application.id, status: application.status } });
+});
+
+app.post('/api/admin/global-chat/moderate', requireAdmin, (req, res) => {
+  const data = readData();
+  const action = String(req.body?.action || '');
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room || !['remove', 'restore', 'mute', 'unmute'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid Global Chat moderation request.' });
+
+  if (action === 'unmute') {
+    const targetId = String(req.body?.userId || '');
+    let changed = false;
+    for (const mute of data.globalChatMutes || []) {
+      if (mute.status === 'active' && mute.roomId === room.id && mute.userId === targetId) {
+        mute.status = 'revoked';
+        mute.revokedAt = now();
+        mute.revokedBy = req.admin.id;
+        changed = true;
+      }
+    }
+    if (!changed) return res.status(404).json({ ok: false, message: 'No active chat pause was found.' });
+    data.events.push({ type: 'admin_global_chat_unmute', adminId: req.admin.id, userId: targetId, roomId: room.id, at: now() });
+    writeData(data);
+    return res.json({ ok: true });
+  }
+
+  const message = (data.globalChatMessages || []).find((item) => item.id === String(req.body?.messageId || '') && item.roomId === room.id);
+  if (!message) return res.status(404).json({ ok: false, message: 'Chat message not found.' });
+  if (action === 'remove') {
+    removeGlobalChatImage(message.imageUrl);
+    message.imageUrl = '';
+    message.imageExpired = false;
+    message.status = 'removed';
+    message.removedAt = now();
+    message.removedBy = req.admin.id;
+    message.removeReason = normalizeGlobalChatText(req.body?.reason || 'administrator_review').slice(0, 200);
+    for (const report of data.globalChatReports || []) if (report.messageId === message.id && report.status === 'pending') { report.status = 'resolved_removed'; report.reviewedAt = now(); report.reviewedBy = req.admin.id; }
+  } else if (action === 'restore') {
+    message.status = 'published';
+    message.restoredAt = now();
+    message.restoredBy = req.admin.id;
+    for (const report of data.globalChatReports || []) if (report.messageId === message.id && report.status === 'pending') { report.status = 'dismissed'; report.reviewedAt = now(); report.reviewedBy = req.admin.id; }
+  } else {
+    const requestedMinutes = Number(req.body?.minutes || 60);
+    const minutes = Math.max(5, Math.min(7 * 24 * 60, Number.isFinite(requestedMinutes) ? Math.round(requestedMinutes) : 60));
+    for (const mute of data.globalChatMutes || []) if (mute.status === 'active' && mute.roomId === room.id && mute.userId === message.authorId) { mute.status = 'replaced'; mute.replacedAt = now(); mute.replacedBy = req.admin.id; }
+    data.globalChatMutes.push({ id: crypto.randomUUID(), roomId: room.id, userId: message.authorId, moderatorId: req.admin.id, reason: normalizeGlobalChatText(req.body?.reason || 'administrator_review').slice(0, 200), status: 'active', createdAt: now(), until: now() + minutes * 60 * 1000 });
+  }
+  data.events.push({ type: `admin_global_chat_${action}`, adminId: req.admin.id, userId: message.authorId, roomId: room.id, messageId: message.id, at: now() });
+  writeData(data);
+  res.json({ ok: true, status: message.status });
 });
 
 app.post('/api/mining/start', (req, res) => {
@@ -2258,6 +2951,146 @@ app.post('/api/admin/announcements/update', requireAdmin, (req, res) => {
   data.events.push({ type: 'admin_announcement_updated', adminId: req.admin.id, announcementId: announcement.id, active: announcement.active, at: now() });
   writeData(data);
   res.json({ ok: true, announcement });
+});
+
+function adminSponsoredBanner(data, banner) {
+  return {
+    ...publicSponsoredBanner(data, banner),
+    active: Boolean(banner.active),
+    startsAt: Number(banner.startsAt || 0),
+    endsAt: Number(banner.endsAt || 0),
+    createdAt: Number(banner.createdAt || 0),
+    createdBy: banner.createdBy || '',
+    updatedAt: Number(banner.updatedAt || 0),
+    updatedBy: banner.updatedBy || '',
+    clicks: Number(data.sponsoredBannerClicks?.[banner.id]?.clicks || 0),
+    lastClickedAt: Number(data.sponsoredBannerClicks?.[banner.id]?.lastClickedAt || 0),
+  };
+}
+
+app.get('/api/admin/sponsored-banners', requireAdmin, (req, res) => {
+  const data = readData();
+  const banners = (data.sponsoredBanners || [])
+    .slice()
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0) || Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .map((banner) => adminSponsoredBanner(data, banner));
+  res.json({
+    ok: true,
+    enabled: Boolean(data.settings?.sponsoredBannersEnabled),
+    maxPartners: MAX_SPONSORED_PARTNERS,
+    placements: [...SPONSORED_BANNER_PLACEMENTS],
+    banners,
+  });
+});
+
+app.post('/api/admin/sponsored-banners/settings', requireAdmin, (req, res) => {
+  const data = readData();
+  data.settings.sponsoredBannersEnabled = req.body?.enabled === true;
+  data.events.push({
+    type: 'admin_sponsored_banners_setting_updated',
+    adminId: req.admin.id,
+    enabled: data.settings.sponsoredBannersEnabled,
+    at: now(),
+  });
+  writeData(data);
+  res.json({ ok: true, enabled: data.settings.sponsoredBannersEnabled });
+});
+
+app.post('/api/admin/sponsored-banners/save', requireAdmin, (req, res) => {
+  const data = readData();
+  const bannerId = String(req.body?.id || '');
+  const existing = bannerId ? (data.sponsoredBanners || []).find((item) => item.id === bannerId) : null;
+  if (bannerId && !existing) return res.status(404).json({ ok: false, message: 'Sponsored banner not found.' });
+
+  const partnerName = normalizeSponsoredBannerText(req.body?.partnerName, 60);
+  const label = normalizeSponsoredBannerText(req.body?.label, 42) || 'SPONSORED PARTNER';
+  const title = normalizeSponsoredBannerText(req.body?.title, 100);
+  const body = normalizeSponsoredBannerText(req.body?.body, 280);
+  const destinationUrl = normalizeSponsoredBannerUrl(req.body?.destinationUrl);
+  const placement = String(req.body?.placement || '');
+  const disclosure = normalizeSponsoredBannerText(req.body?.disclosure, 260)
+    || 'Sponsored partner information. Terms, KYC requirements, and availability vary by region.';
+  const active = req.body?.active === true;
+  const requestedOrder = Number(req.body?.order);
+  const order = Number.isFinite(requestedOrder) ? Math.max(1, Math.min(MAX_SPONSORED_PARTNERS, Math.round(requestedOrder))) : 1;
+
+  if (partnerName.length < 2) return res.status(400).json({ ok: false, message: 'Partner name must be at least 2 characters.' });
+  if (title.length < 4) return res.status(400).json({ ok: false, message: 'Banner title must be at least 4 characters.' });
+  if (body.length < 8) return res.status(400).json({ ok: false, message: 'Banner description must be at least 8 characters.' });
+  if (!destinationUrl) return res.status(400).json({ ok: false, message: 'Use a valid HTTPS destination URL.' });
+  if (!SPONSORED_BANNER_PLACEMENTS.has(placement)) return res.status(400).json({ ok: false, message: 'Invalid sponsored banner placement.' });
+
+  const activeCount = (data.sponsoredBanners || []).filter((item) => item.active && item.id !== existing?.id).length;
+  if (active && activeCount >= MAX_SPONSORED_PARTNERS) {
+    return res.status(409).json({ ok: false, message: `Only ${MAX_SPONSORED_PARTNERS} sponsored partners can be active at one time.` });
+  }
+
+  let imageUrl = existing?.imageUrl || '';
+  const imageData = String(req.body?.imageData || '');
+  try {
+    if (imageData) imageUrl = saveSponsoredBannerImage(imageData);
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Could not save banner image.' });
+  }
+
+  const timestamp = now();
+  const banner = existing || { id: crypto.randomUUID(), createdAt: timestamp, createdBy: req.admin.id };
+  const previousImageUrl = existing?.imageUrl || '';
+  Object.assign(banner, {
+    partnerName,
+    label,
+    title,
+    body,
+    destinationUrl,
+    placement,
+    disclosure,
+    order,
+    active,
+    imageUrl,
+    updatedAt: timestamp,
+    updatedBy: req.admin.id,
+  });
+  if (!existing) data.sponsoredBanners.push(banner);
+  if (imageData && previousImageUrl && previousImageUrl !== imageUrl) removeSponsoredBannerImage(previousImageUrl);
+  data.events.push({
+    type: 'admin_sponsored_banner_saved',
+    adminId: req.admin.id,
+    bannerId: banner.id,
+    active: banner.active,
+    placement: banner.placement,
+    at: timestamp,
+  });
+  writeData(data);
+  res.status(existing ? 200 : 201).json({ ok: true, banner: adminSponsoredBanner(data, banner) });
+});
+
+app.post('/api/admin/sponsored-banners/toggle', requireAdmin, (req, res) => {
+  const data = readData();
+  const banner = (data.sponsoredBanners || []).find((item) => item.id === String(req.body?.id || ''));
+  if (!banner) return res.status(404).json({ ok: false, message: 'Sponsored banner not found.' });
+  const active = req.body?.active === true;
+  const activeCount = (data.sponsoredBanners || []).filter((item) => item.active && item.id !== banner.id).length;
+  if (active && activeCount >= MAX_SPONSORED_PARTNERS) {
+    return res.status(409).json({ ok: false, message: `Only ${MAX_SPONSORED_PARTNERS} sponsored partners can be active at one time.` });
+  }
+  banner.active = active;
+  banner.updatedAt = now();
+  banner.updatedBy = req.admin.id;
+  data.events.push({ type: 'admin_sponsored_banner_toggled', adminId: req.admin.id, bannerId: banner.id, active, at: banner.updatedAt });
+  writeData(data);
+  res.json({ ok: true, banner: adminSponsoredBanner(data, banner) });
+});
+
+app.post('/api/admin/sponsored-banners/remove', requireAdmin, (req, res) => {
+  const data = readData();
+  const index = (data.sponsoredBanners || []).findIndex((item) => item.id === String(req.body?.id || ''));
+  if (index < 0) return res.status(404).json({ ok: false, message: 'Sponsored banner not found.' });
+  const [removed] = data.sponsoredBanners.splice(index, 1);
+  removeSponsoredBannerImage(removed.imageUrl);
+  delete data.sponsoredBannerClicks[removed.id];
+  data.events.push({ type: 'admin_sponsored_banner_removed', adminId: req.admin.id, bannerId: removed.id, at: now() });
+  writeData(data);
+  res.json({ ok: true, removedId: removed.id });
 });
 
 // Administrators monitor node health; they do not approve normal node activation.
