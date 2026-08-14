@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/v15.css';
+import './styles/hero-fleet-pulse.css';
 import './styles/node-status.css';
 import { NovaAIRouter } from './nova/index.js';
 import { WALLET_UI_COPY } from './i18n/wallet.js';
@@ -641,9 +642,6 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detaile
   const ko = document.documentElement.lang === 'ko';
   const baseSpeed = Number(m.baseSpeedPerHour || (m.baseReward || 30) / 24);
   const fleetBonus = Number(m.fleetBonus || user.fleetBonus || 0);
-  const activeReferrals = Math.max(0, Number(m.activeFleet ?? user.activeFleet ?? 0));
-  const totalReferrals = Math.max(activeReferrals, Number(m.totalReferrals ?? user.totalReferrals ?? user.referrals?.length ?? 0));
-  const referralBonusPerMember = Number(user.fleetBonusPerMember || 5);
   const securityBonus = Number(m.securityBonus || user.securityCircleBonus || 0);
   const missionBonus = Number(m.missionBonus || user.missionBonus || 0);
   const nodeBonus = m.nodeOnline ? Number(m.nodeBonus || 0) : 0;
@@ -683,17 +681,11 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detaile
         <span><small>{t.remaining}</small><b>{claimable ? '00:00:00' : clock(m.remainingMs || 86400000)}</b></span>
         <span><small>{t.reward}</small><b>{format(m.reward || 30)} SPNX</b></span>
         <span><small>{t.rate}</small><b>{format(currentSpeed, 5)} SPNX/h</b></span>
-        <span className="referral-live-stat">
-          <small>{ko ? '활성 채굴자 / 총 레퍼럴' : 'ACTIVE / TOTAL REFERRALS'}</small>
-          <b><Icon name="fleet" size={16}/>{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</b>
-          <strong>{ko ? `활성 ${activeReferrals}명 × +${referralBonusPerMember}% = +${fleetBonus}%` : `${activeReferrals} active × +${referralBonusPerMember}% = +${fleetBonus}%`}</strong>
-        </span>
       </div>
     </div>
     <div className="mining-track"><i style={{ width: `${pct}%` }} /><span className="track-node n1"/><span className="track-node n2"/><span className="track-node n3"/></div>
     <div className="mining-metrics">
       <span><small>{t.phase}</small><b>{t.phase} {m.phase || 1}</b></span>
-      <span className="fleet-live-metric"><small>{ko ? '활성 / 총 레퍼럴' : 'ACTIVE / TOTAL REFERRALS'}</small><b>{activeReferrals.toLocaleString()}/{totalReferrals.toLocaleString()} · +{fleetBonus}%</b></span>
       <span><small>SECURITY CIRCLE</small><b>{Number(m.securityCircleCount || user.securityCircleCount || 0)}/5 · +{Number(m.securityBonus || user.securityCircleBonus || 0)}%</b></span>
       <span><small>MISSION PASSPORT</small><b>{m.missionPassportComplete || user.missionPassportComplete ? 'VERIFIED · +5%' : 'LOCKED · +0%'}</b></span>
       <span><small>LIVE EARNED</small><b>{format(m.minedSoFar || 0, 4)}</b></span>
@@ -838,6 +830,9 @@ function Home({ user, t, onStart, onClaim, busy, setTab, language }) {
   const [balanceInteger, balanceFraction = ''] = format(live.displayBalance, 5).split('.');
   const miningIsLive = Boolean(live.mining.active) && !Boolean(live.mining.claimable);
   const heroSpeed = miningIsLive ? Number(live.mining.speedPerHour || (live.mining.reward || 30) / 24) : 0;
+  const activeReferrals = Math.max(0, Number(live.mining.activeFleet ?? user.activeFleet ?? 0));
+  const totalReferrals = Math.max(activeReferrals, Number(live.mining.totalReferrals ?? user.totalReferrals ?? user.referrals?.length ?? 0));
+  const ko = document.documentElement.lang === 'ko';
   return <main className="v15-page">
     <section className="hero-command">
       <div className="hero-space"/>
@@ -851,6 +846,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab, language }) {
       <div className="cosmic-dust" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index}/>)}</div>
       <div className="spnx-token-flight" aria-hidden="true"><span><img src="/spnx-orbital-token-v1.webp" alt="" /></span></div>
       <button className={`hero-nova-pulse ${miningIsLive ? 'mining-live' : 'mining-offline'}`} onClick={() => window.dispatchEvent(new Event('spnx-open-speed'))} aria-label="Open NOVA Pulse mining speed details"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="7"/><ellipse cx="32" cy="32" rx="25" ry="10"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="10" transform="rotate(120 32 32)"/><path d="m25 23 14 18M39 23 25 41"/></svg><span><small>NOVA PULSE · {document.documentElement.lang==='ko'?(miningIsLive?'현재 채굴 속도':'채굴 정지'):(miningIsLive?'LIVE MINING SPEED':'MINING OFFLINE')}</small><b>{format(heroSpeed,5)} SPNX/h</b><em>{document.documentElement.lang==='ko'?'터치하여 상세 보기':'TOUCH FOR DETAILS'}</em></span></button>
+      <button type="button" className="hero-fleet-pulse" onClick={() => setTab('fleet')} title={ko ? '내 함대와 초대 링크 열기' : 'Open my fleet and invite link'} aria-label={ko ? `활성 채굴자 ${activeReferrals}명, 총 레퍼럴 ${totalReferrals}명. 내 함대 열기` : `${activeReferrals} active miners out of ${totalReferrals} referrals. Open my fleet`}><Icon name="fleet" size={18}/><b>{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</b></button>
       <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
