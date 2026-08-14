@@ -632,7 +632,7 @@ function Header({ user, language, setLanguage, t, onPreview, onMessages, onAnnou
   </header>;
 }
 
-function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detailed = false }) {
+function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, onOpenFleet, busy, detailed = false }) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const m = user.mining || fallbackUser.mining;
   const pct = Math.max(0, Math.min(100, Math.round(Number(m.progress || 0) * 100)));
@@ -643,7 +643,6 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detaile
   const fleetBonus = Number(m.fleetBonus || user.fleetBonus || 0);
   const activeReferrals = Math.max(0, Number(m.activeFleet ?? user.activeFleet ?? 0));
   const totalReferrals = Math.max(activeReferrals, Number(m.totalReferrals ?? user.totalReferrals ?? user.referrals?.length ?? 0));
-  const referralBonusPerMember = Number(user.fleetBonusPerMember || 5);
   const securityBonus = Number(m.securityBonus || user.securityCircleBonus || 0);
   const missionBonus = Number(m.missionBonus || user.missionBonus || 0);
   const nodeBonus = m.nodeOnline ? Number(m.nodeBonus || 0) : 0;
@@ -683,17 +682,12 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, busy, detaile
         <span><small>{t.remaining}</small><b>{claimable ? '00:00:00' : clock(m.remainingMs || 86400000)}</b></span>
         <span><small>{t.reward}</small><b>{format(m.reward || 30)} SPNX</b></span>
         <span><small>{t.rate}</small><b>{format(currentSpeed, 5)} SPNX/h</b></span>
-        <span className="referral-live-stat">
-          <small>{ko ? '활성 채굴자 / 총 레퍼럴' : 'ACTIVE / TOTAL REFERRALS'}</small>
-          <b><Icon name="fleet" size={16}/>{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</b>
-          <strong>{ko ? `활성 ${activeReferrals}명 × +${referralBonusPerMember}% = +${fleetBonus}%` : `${activeReferrals} active × +${referralBonusPerMember}% = +${fleetBonus}%`}</strong>
-        </span>
       </div>
     </div>
     <div className="mining-track"><i style={{ width: `${pct}%` }} /><span className="track-node n1"/><span className="track-node n2"/><span className="track-node n3"/></div>
     <div className="mining-metrics">
       <span><small>{t.phase}</small><b>{t.phase} {m.phase || 1}</b></span>
-      <span className="fleet-live-metric"><small>{ko ? '활성 / 총 레퍼럴' : 'ACTIVE / TOTAL REFERRALS'}</small><b>{activeReferrals.toLocaleString()}/{totalReferrals.toLocaleString()} · +{fleetBonus}%</b></span>
+      <button type="button" className="fleet-live-metric fleet-entry-button" onClick={onOpenFleet} title={ko ? '내 함대와 초대 링크 열기' : 'Open my fleet and invite link'} aria-label={ko ? `활성 채굴자 ${activeReferrals}명, 총 레퍼럴 ${totalReferrals}명. 내 함대 열기` : `${activeReferrals} active miners out of ${totalReferrals} referrals. Open my fleet`}><Icon name="fleet" size={15}/><b>{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</b></button>
       <span><small>SECURITY CIRCLE</small><b>{Number(m.securityCircleCount || user.securityCircleCount || 0)}/5 · +{Number(m.securityBonus || user.securityCircleBonus || 0)}%</b></span>
       <span><small>MISSION PASSPORT</small><b>{m.missionPassportComplete || user.missionPassportComplete ? 'VERIFIED · +5%' : 'LOCKED · +0%'}</b></span>
       <span><small>LIVE EARNED</small><b>{format(m.minedSoFar || 0, 4)}</b></span>
@@ -855,7 +849,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab, language }) {
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
     <SponsoredBannerSlot placement="mining-top" language={language}/>
-    <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} onOpenGlobalChat={() => setTab('global-chat')} busy={busy}/>
+    <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} onOpenGlobalChat={() => setTab('global-chat')} onOpenFleet={() => setTab('fleet')} busy={busy}/>
     <section className="command-card home-mission-banner" onClick={() => setTab('missions')}>
       <div className="mission-emblem"><Icon name="mission" size={26}/></div>
       <div><small>MISSION PASSPORT · PERMANENT BONUS</small><h3>{t.missions}</h3><p>Complete all 5 missions · Unlock +5% mining speed</p></div>

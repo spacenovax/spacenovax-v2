@@ -56,3 +56,22 @@
   .reactor-status{font-size:6px;letter-spacing:.075em}
   .reactor-status i{width:4px;height:4px;margin-right:3px}
 }
+
+
+/* A running mining session must make the Quantum Core indicator unmistakably live. */
+.mining-reactor.running .reactor-status .status-core.is-active{
+  color:#7dffc3 !important;
+  font-weight:900;
+  text-shadow:0 0 8px rgba(95,255,166,.62);
+}
+.mining-reactor.running .reactor-status .status-core.is-active i{
+  width:6px;
+  height:6px;
+  background:#5fffa6 !important;
+  box-shadow:0 0 7px #5fffa6,0 0 15px rgba(95,255,166,.78);
+  animation:quantumCoreLive .85s ease-in-out infinite !important;
+}
+@keyframes quantumCoreLive{
+  0%,100%{opacity:.58;transform:scale(.78)}
+  50%{opacity:1;transform:scale(1.22)}
+}
