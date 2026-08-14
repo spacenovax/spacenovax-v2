@@ -814,6 +814,25 @@ function fleetBonusPercent(activeFleet, data) {
   return Math.max(0, Math.min(fleetReferralLimit(data), Number(activeFleet || 0))) * perMember;
 }
 
+// A referral contributes to mining speed only while its own 24-hour mining
+// session is genuinely running. A past mining start (or an expired cycle
+// waiting to be claimed) must never keep contributing to the Captain's rate.
+function hasLiveMiningSession(data, user, at = now()) {
+  const startedAt = Number(user?.mining?.startedAt || 0);
+  return Boolean(user?.mining?.active)
+    && startedAt > 0
+    && startedAt + getMiningDuration(data) > Number(at);
+}
+
+function fleetReferralStats(data, userId) {
+  const limit = fleetReferralLimit(data);
+  const members = Object.values(data.users || {}).filter((user) => user.referredBy === userId);
+  return {
+    total: Math.min(limit, members.length),
+    active: Math.min(limit, members.filter((member) => hasLiveMiningSession(data, member)).length),
+  };
+}
+
 function verifiedReferralCount(data, user) {
   return (user?.referrals || []).filter((userId) => Boolean(data.users?.[userId]?.telegramId)).length;
 }
@@ -829,12 +848,7 @@ function fleetGrade(activeFleet) {
 }
 
 function getActiveFleetCount(data, userId) {
-  const activeDays = Math.max(1, Math.min(30, Number(data?.settings?.activeFleetDays ?? 7)));
-  const cutoff = now() - activeDays * 24 * 60 * 60 * 1000;
-  return Math.min(
-    fleetReferralLimit(data),
-    Object.values(data.users).filter((u) => u.referredBy === userId && (u.lastMiningAt || 0) >= cutoff).length,
-  );
+  return fleetReferralStats(data, userId).active;
 }
 
 const HALVING_CAPTAINS_PER_STEP = 10_000;
@@ -1060,7 +1074,8 @@ function communityNodeProgram(data) {
 
 function miningSpeedPerHour(data, user) {
   const phase = miningPhase(data);
-  const activeFleet = getActiveFleetCount(data, user.id);
+  const fleetStats = fleetReferralStats(data, user.id);
+  const activeFleet = fleetStats.active;
   const fleetBonus = fleetBonusPercent(activeFleet, data);
   const securityCircle = (user.securityCircle || [])
     .map((id) => data.users[id])
@@ -1075,7 +1090,7 @@ function miningSpeedPerHour(data, user) {
   const rateWithoutNode = basePerHour * (1 + (fleetBonus + securityBonus + missionBonus) / 100) * eventMultiplier;
   const node = communityNodeState(data, user);
   const finalPerHour = rateWithoutNode * (1 + node.bonusPercent / 100);
-  return { basePerHour, baseBeforeReductionPerHour: BASE_MINING_REWARD / 24, rateWithoutNode: Number(rateWithoutNode.toFixed(8)), finalPerHour: Number(finalPerHour.toFixed(8)), fleetBonus, securityBonus, securityCircleCount: securityCircle.length, missionBonus, missionPassportComplete, activeFleet, phase: phase.phase, eventMultiplier, duration, nodeBonus: node.bonusPercent, nodeOnline: node.online, nodeStatus: node.status, nodeId: node.nodeId, reductionSteps: phase.reductionSteps, reductionMultiplier: phase.multiplier, reductionPerStepPercent: phase.reductionPerStepPercent };
+  return { basePerHour, baseBeforeReductionPerHour: BASE_MINING_REWARD / 24, rateWithoutNode: Number(rateWithoutNode.toFixed(8)), finalPerHour: Number(finalPerHour.toFixed(8)), fleetBonus, securityBonus, securityCircleCount: securityCircle.length, missionBonus, missionPassportComplete, activeFleet, totalReferrals: fleetStats.total, phase: phase.phase, eventMultiplier, duration, nodeBonus: node.bonusPercent, nodeOnline: node.online, nodeStatus: node.status, nodeId: node.nodeId, reductionSteps: phase.reductionSteps, reductionMultiplier: phase.multiplier, reductionPerStepPercent: phase.reductionPerStepPercent };
 }
 function miningRewardForCycle(data, user) {
   const speed = miningSpeedPerHour(data, user);
@@ -1130,7 +1145,8 @@ function settleClaimableMiningCycle(data, user, status = calculateMining(data, u
 }
 
 function publicUser(data, user) {
-  const activeFleet = getActiveFleetCount(data, user.id);
+  const fleetStats = fleetReferralStats(data, user.id);
+  const activeFleet = fleetStats.active;
   const bonus = fleetBonusPercent(activeFleet, data);
   const mining = calculateMining(data, user);
   const settledBalance = Number(user.balance || 0);
@@ -1161,6 +1177,7 @@ function publicUser(data, user) {
     referredBy: user.referredBy,
     referralCode: user.referralCode || makeReferralCode(user.id),
     referrals: user.referrals || [],
+    totalReferrals: fleetStats.total,
     securityCircle: user.securityCircle || [],
     securityCircleCount: (user.securityCircle || []).filter((id) => data.users[id] && String(data.users[id].kyc?.status || '').toLowerCase() === 'approved').slice(0, 5).length,
     securityCircleBonus: securityCircleCount(data, user),
@@ -2010,7 +2027,6 @@ app.post('/api/fleet/dashboard', (req, res) => {
   const captainId = fleetCaptainId(data, user);
   const captain = data.users[captainId];
   const members = fleetMembers(data, captainId);
-  const cutoff = now() - 7 * 86400000;
   const ranking = fleetRanking(data).slice(0, 20);
   const ownRank = ranking.findIndex((fleet) => fleet.captainId === captainId) + 1;
   const messages = (data.fleetMessages || []).filter((message) => message.captainId === captainId).slice(-80);
@@ -2025,7 +2041,7 @@ app.post('/api/fleet/dashboard', (req, res) => {
       link: publicReferralLink(referralCode),
       telegramReferralLink: telegramReferralLink(referralCode),
       total: Math.max(0, members.length - 1),
-      active: members.filter((member) => member.id !== captainId && Number(member.lastMiningAt || 0) >= cutoff).length,
+      active: members.filter((member) => member.id !== captainId && hasLiveMiningSession(data, member)).length,
       kycVerified: members.filter((member) => member.id !== captainId && String(member.kyc?.status || '').toLowerCase() === 'approved').length,
       grade: fleetGrade(Math.max(0, members.length - 1)),
       bonusPerMember: Number(data.settings?.fleetBonusPerActiveReferral || 5),
@@ -2034,7 +2050,7 @@ app.post('/api/fleet/dashboard', (req, res) => {
         id: member.id,
         firstName: member.firstName || 'Captain',
         username: member.username || '',
-        active: Number(member.lastMiningAt || 0) >= cutoff,
+        active: hasLiveMiningSession(data, member),
         kycVerified: String(member.kyc?.status || '').toLowerCase() === 'approved',
         inSecurityCircle: (user.securityCircle || []).includes(member.id),
         lastMiningAt: Number(member.lastMiningAt || 0),
@@ -2169,7 +2185,7 @@ app.post('/api/fleet/remind', async (req, res) => {
   const captain = getSessionUser(req, data);
   const target = data.users[String(req.body?.userId || '')];
   if (!target || target.referredBy !== captain.id) return res.status(403).json({ ok: false, message: 'Only your direct fleet members can be notified.' });
-  if (Number(target.lastMiningAt || 0) >= now() - 7 * 86400000) return res.status(409).json({ ok: false, message: 'This member is already active.' });
+  if (hasLiveMiningSession(data, target)) return res.status(409).json({ ok: false, message: 'This member is already active.' });
   const prior = (data.fleetNotifications || []).find((notice) => notice.from === captain.id && notice.to === target.id && notice.at > now() - 86400000);
   if (prior) return res.status(429).json({ ok: false, message: 'A reminder was already sent in the last 24 hours.' });
   const notice = { id: crypto.randomUUID(), from: captain.id, to: target.id, type: 'mining_reminder', at: now() };
