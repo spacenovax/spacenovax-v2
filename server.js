@@ -505,7 +505,7 @@ function canModerateGlobalChatRoom(data, userId, roomId) {
 }
 
 function globalChatDisplayName(user, fallback = 'Captain') {
-  return String(user?.communityNickname || user?.firstName || fallback).trim().slice(0, 40) || fallback;
+  return String(user?.firstName || user?.communityNickname || fallback).trim().slice(0, 40) || fallback;
 }
 
 function publicGlobalChatModerator(data, record) {
