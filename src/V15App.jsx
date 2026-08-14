@@ -613,6 +613,7 @@ function Splash({ done }) {
 
 function Header({ user, language, setLanguage, t, onPreview, onMessages, onAnnouncements }) {
   const [open, setOpen] = useState(false);
+  const unreadMessages = Number(user.unreadMessageCount || 0);
   return <header className="v15-header">
     <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
       <img src="/brand/spacenovax-symbol.jpg" alt="" /><span><b>SpaceNovaX</b><small>{t.tagline}</small></span>
@@ -620,7 +621,7 @@ function Header({ user, language, setLanguage, t, onPreview, onMessages, onAnnou
     <div className="header-actions">
       {PREVIEW_BUILD && <button className="preview-chip" onClick={onPreview}>{t.preview}</button>}
       <button className="announcement-bell comms-control" onClick={onAnnouncements} aria-label="Global announcements" title={language === 'ko' ? '전체 공지' : 'Global announcements'}><span className="comms-symbol broadcast-symbol"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 17h4l10 6V9l-10 6H7v2Z"/><path d="M11 17v7h4l1-4M24 11c2.6 2.8 2.6 7.2 0 10M27 8c4.4 4.6 4.4 11.4 0 16"/></svg></span>{Number(user.unreadAnnouncementCount || 0) > 0 && <b className="comms-count notice-count">{Math.min(99, Number(user.unreadAnnouncementCount || 0))}</b>}</button>
-      <button className="message-bell comms-control" onClick={onMessages} aria-label="Personal messages" title={language === 'ko' ? '개인 쪽지' : 'Personal messages'}><span className="comms-symbol message-symbol"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 8h20v14H14l-6 5v-5H6V8Z"/><path d="m10 12 6 5 6-5"/><circle cx="24.5" cy="7.5" r="3.2" className="signal-core"/></svg></span>{Number(user.unreadMessageCount || 0) > 0 && <b className="comms-count message-count">{Math.min(99, Number(user.unreadMessageCount || 0))}</b>}</button>
+      <button className="message-bell comms-control" onClick={onMessages} aria-label="Personal messages" title={language === 'ko' ? '개인 쪽지' : 'Personal messages'}><span className="comms-symbol message-symbol"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 8h20v14H14l-6 5v-5H6V8Z"/><path d="m10 12 6 5 6-5"/>{unreadMessages > 0 && <circle cx="24.5" cy="7.5" r="3.2" className="signal-core"/>}</svg></span>{unreadMessages > 0 && <b className="comms-count message-count">{Math.min(99, unreadMessages)}</b>}</button>
       <a className="header-website" href="https://spacenovax.com" target="_blank" rel="noreferrer" aria-label="Open official SpaceNovaX website" title="spacenovax.com"><Icon name="external" size={17}/><span>WEB</span></a>
       <button className="language-button" onClick={() => setOpen(!open)}><Icon name="globe" size={18}/><span>{language.toUpperCase()}</span></button>
       <span className="rank-chip"><i />{t.rank}</span>
