@@ -111,6 +111,27 @@ function coordinateDestination(query, ko) {
   };
 }
 
+function eventKind(category = '') {
+  if (/wildfire/i.test(category)) return 'wildfire';
+  if (/volcano/i.test(category)) return 'volcano';
+  if (/storm|cyclone|typhoon|hurricane/i.test(category)) return 'typhoon';
+  return 'other';
+}
+
+// EONET may publish a storm coordinate before an official public name is available.
+// Keep those unlabelled systems out of the captain map: a named, active system is far
+// more useful than a row of identical decorative swirls.
+function officialStormName(title = '') {
+  const raw = String(title || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  const name = raw
+    .replace(/^(?:tropical\s+(?:storm|cyclone|depression)|super\s+typhoon|typhoon|hurricane)\s+/i, '')
+    .trim();
+  const generic = /^(?:unnamed|unknown|event|storm|cyclone|tropical\s+(?:storm|cyclone|depression)|typhoon|hurricane|disturbance|invest(?:\s*\d+[a-z]{0,2})?|\d{1,3}[a-z]{0,3})$/i;
+  const hasName = /[a-z]{3,}/i.test(name);
+  return hasName && !generic.test(name) ? name.slice(0, 28) : '';
+}
+
 export default function OrbitV20({ language, user }) {
   const t = useCopy(language);
   const containerRef = useRef(null);
@@ -163,9 +184,16 @@ export default function OrbitV20({ language, user }) {
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
+    const perf = new PerformanceManager({ onModeChange: (low) => {
+      MasterRenderLoop.setFrameSkip(low ? 2 : 1);
+      engineRef.current?.setPerformanceMode(low);
+    } });
+    perfRef.current = perf;
+    // Start in the sharp renderer mode. Browser hardware hints are often inaccurate
+    // in Telegram WebView; only a measured low FPS switches the renderer down.
     const engine = new EarthEngine(containerRef.current, { onTextureQualityChange: setEarthQuality });
     engineRef.current = engine;
-    perfRef.current = new PerformanceManager({ onModeChange: (low) => MasterRenderLoop.setFrameSkip(low ? 2 : 1) });
+    MasterRenderLoop.setFrameSkip(1);
     MasterRenderLoop.add('orbit-earth', (time) => engine.renderFrame(time));
     MasterRenderLoop.add('orbit-perf', () => perfRef.current?.tick());
     engine.setSunFromDate(new Date());
@@ -256,17 +284,21 @@ export default function OrbitV20({ language, user }) {
       if (!alive) return;
       const merged = [
         ...quakes.map((q) => ({ id: `q_${q.id}`, kind: 'quake', title: q.place ? `M${q.mag} · ${q.place}` : `M${q.mag} earthquake`, lat: q.lat, lon: q.lon, time: q.time })),
-        ...eonet.map((e) => ({ id: `e_${e.id}`, kind: /wildfire/i.test(e.category) ? 'wildfire' : /volcano/i.test(e.category) ? 'volcano' : /storm|cyclone/i.test(e.category) ? 'typhoon' : 'other', title: e.title || e.category, lat: e.lat, lon: e.lon, time: e.date ? Date.parse(e.date) : 0, track: e.track })),
+        ...eonet.map((e) => {
+          const kind = eventKind(e.category);
+          return { id: `e_${e.id}`, kind, title: e.title || e.category, stormName: kind === 'typhoon' ? officialStormName(e.title) : '', lat: e.lat, lon: e.lon, time: e.date ? Date.parse(e.date) : 0, track: e.track };
+        }),
       ];
       setEvents(merged);
       if (engineRef.current) {
-        const markers = merged.filter((m) => Number.isFinite(m.lat)).map((m) => ({ id: m.id, lat: m.lat, lon: m.lon, color: m.kind === 'quake' ? 0xff6f6f : 0xffc15e }));
+        const visibleEvents = merged.filter((m) => Number.isFinite(m.lat) && (m.kind !== 'typhoon' || m.stormName));
+        const markers = visibleEvents.map((m) => ({ id: m.id, lat: m.lat, lon: m.lon, color: m.kind === 'quake' ? 0xff6f6f : 0xffc15e }));
         engineRef.current.setMarkerLayer('events', markers, { size: 0.04 });
         // A historical storm path looks like a broken orange "tail" over the globe on
         // a compact phone display.  Keep the live storm eye only; it is clearer and
         // closer to an operations display than a long, ambiguous route line.
         engineRef.current.clearEventTracks();
-        const typhoonPoints = merged.filter((m) => m.kind === 'typhoon' && Number.isFinite(m.lat)).map((m) => ({ id: m.id, lat: m.lat, lon: m.lon }));
+        const typhoonPoints = visibleEvents.filter((m) => m.kind === 'typhoon').map((m) => ({ id: m.id, lat: m.lat, lon: m.lon }));
         engineRef.current.setTyphoonSwirls(typhoonPoints);
       }
     })();
@@ -295,12 +327,11 @@ export default function OrbitV20({ language, user }) {
         label: t.ko ? '캡틴 베이스' : 'CAPTAIN BASE', detail: base.home.label || (t.ko ? '집' : 'HOME'),
       });
     }
-    events.filter((event) => event.kind === 'typhoon' && Number.isFinite(event.lat)).slice(0, 2).forEach((event) => {
-      const name = String(event.title || 'Typhoon').replace(/^Typhoon\s*/i, '').slice(0, 28);
+    events.filter((event) => event.kind === 'typhoon' && event.stormName && Number.isFinite(event.lat)).forEach((event) => {
       targets.push({
         id: `storm-${event.id}`, type: 'typhoon', lat: event.lat, lon: event.lon,
-        label: `🌀 ${name || (t.ko ? '태풍' : 'Typhoon')}`,
-        detail: t.ko ? '실시간 · 태풍 추적' : 'LIVE · TYPHOON TRACKING',
+        label: `🌀 ${event.stormName}`,
+        detail: t.ko ? '실시간 · 공식 태풍 추적' : 'LIVE · OFFICIAL STORM TRACKING',
       });
     });
     if (issPosition) {
@@ -512,9 +543,9 @@ export default function OrbitV20({ language, user }) {
   const dataRate = navigator.connection?.downlink ? `${navigator.connection.downlink} Mbps` : '—';
   const uptimeMs = clock.getTime() - mountedAt.current;
   const uptimeStr = `${Math.floor(uptimeMs / 3600000)}h ${Math.floor((uptimeMs % 3600000) / 60000)}m`;
-  const eventCounts = { typhoon: events.filter((e) => e.kind === 'typhoon').length, quake: events.filter((e) => e.kind === 'quake').length, volcano: events.filter((e) => e.kind === 'volcano').length, wildfire: events.filter((e) => e.kind === 'wildfire').length };
+  const eventCounts = { typhoon: events.filter((e) => e.kind === 'typhoon' && e.stormName).length, quake: events.filter((e) => e.kind === 'quake').length, volcano: events.filter((e) => e.kind === 'volcano').length, wildfire: events.filter((e) => e.kind === 'wildfire').length };
   const topEvents = useMemo(() => events
-    .filter((event) => ['typhoon', 'quake', 'volcano', 'wildfire'].includes(event.kind))
+    .filter((event) => ['typhoon', 'quake', 'volcano', 'wildfire'].includes(event.kind) && (event.kind !== 'typhoon' || event.stormName))
     .sort((a, b) => b.time - a.time)
     .slice(0, 4), [events]);
 

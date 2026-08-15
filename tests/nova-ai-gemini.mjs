@@ -10,6 +10,7 @@ const dataFile = `/tmp/spnx-nova-free-first-${process.pid}.json`;
 const upstreamRequests = [];
 let activeUpstream = 0;
 let maxActiveUpstream = 0;
+let forceGroqFallback = false;
 const clientSource = fs.readFileSync(new URL('../src/V15App.jsx', import.meta.url), 'utf8');
 
 if (!clientSource.includes('NovaAIRouter')
@@ -23,20 +24,40 @@ const upstream = http.createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-  upstreamRequests.push({ url: req.url, headers: req.headers, body });
+  const groqRequest = req.url.includes('/chat/completions');
+  upstreamRequests.push({ url: req.url, headers: req.headers, body, groqRequest });
   activeUpstream += 1;
   maxActiveUpstream = Math.max(maxActiveUpstream, activeUpstream);
   setTimeout(() => {
     activeUpstream -= 1;
+    if (groqRequest && forceGroqFallback) {
+      res.writeHead(429, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Groq free tier limit reached.' } }));
+      return;
+    }
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: 'NOVA AI test response.' }] } }] }));
+    res.end(JSON.stringify(groqRequest
+      ? { choices: [{ message: { role: 'assistant', content: 'NOVA AI Groq test response.' } }] }
+      : { candidates: [{ content: { role: 'model', parts: [{ text: 'NOVA AI Gemini fallback response.' }] } }] }
+    ));
   }, 25);
 });
 await new Promise((resolve) => upstream.listen(Number(upstreamPort), '127.0.0.1', resolve));
 
 const server = spawn(process.execPath, ['server.js'], {
   cwd: new URL('..', import.meta.url),
-  env: { ...process.env, PORT: appPort, DATA_FILE: dataFile, NODE_ENV: 'test', GEMINI_API_KEY: 'test-secret', GEMINI_MODEL: 'gemini-test-model', GEMINI_API_BASE_URL: upstreamBase },
+  env: {
+    ...process.env,
+    PORT: appPort,
+    DATA_FILE: dataFile,
+    NODE_ENV: 'test',
+    GROQ_API_KEY: 'groq-test-secret',
+    GROQ_MODEL: 'groq-test-model',
+    GROQ_API_BASE_URL: upstreamBase,
+    GEMINI_API_KEY: 'gemini-test-secret',
+    GEMINI_MODEL: 'gemini-test-model',
+    GEMINI_API_BASE_URL: upstreamBase,
+  },
   stdio: ['ignore', 'ignore', 'inherit'],
 });
 const cleanup = () => { server.kill('SIGTERM'); upstream.close(); fs.rmSync(dataFile, { force: true }); };
@@ -66,7 +87,7 @@ try {
   for (let index = 0; index < 10; index += 1) {
     const response = await chat(headers, `Question ${index + 1}`, index === 0 ? 'es' : 'en');
     const body = await response.json();
-    if (!response.ok || body.reply !== 'NOVA AI test response.' || body.usage?.used !== index + 1) throw new Error(`NOVA request ${index + 1} failed.`);
+    if (!response.ok || body.reply !== 'NOVA AI Groq test response.' || body.usage?.used !== index + 1) throw new Error(`NOVA request ${index + 1} failed.`);
   }
   const limited = await chat(headers, '한 번 더', 'ko');
   const limitedBody = await limited.json();
@@ -78,12 +99,21 @@ try {
   const englishLimitedBody = await englishLimited.json();
   if (englishLimited.status !== 429 || englishLimitedBody.message !== expectedEnglish) throw new Error('English daily limit copy mismatch.');
 
+  forceGroqFallback = true;
+  const fallbackResponse = await chat(makeHeaders('gemini-fallback'), 'Use the backup provider.');
+  const fallbackBody = await fallbackResponse.json();
+  if (!fallbackResponse.ok || fallbackBody.reply !== 'NOVA AI Gemini fallback response.') throw new Error('Gemini fallback did not return a response after Groq failed.');
+  forceGroqFallback = false;
+
   maxActiveUpstream = 0;
   const queuedHeaders = makeHeaders('queued');
   await Promise.all([chat(queuedHeaders, 'Queue one'), chat(queuedHeaders, 'Queue two')]);
   if (maxActiveUpstream !== 1) throw new Error(`Expected one upstream request per Captain at a time, received ${maxActiveUpstream}.`);
   if (upstreamRequests.some((request) => request.url.includes('interactions'))) throw new Error('Remote voice/audio provider was called.');
-  if (upstreamRequests.some((request) => request.headers['x-goog-api-key'] !== 'test-secret')) throw new Error('NOVA server did not authenticate text provider correctly.');
-  if (!upstreamRequests[0].body.system_instruction?.parts?.[0]?.text?.includes('Always identify yourself only as NOVA AI')) throw new Error('NOVA identity instruction missing.');
-  console.log(JSON.stringify({ freeFirstVoice: true, remoteAudioDisabled: true, textOnlyFallback: true, perCaptainQueue: true, dailyLimit: true }));
+  const groqRequests = upstreamRequests.filter((request) => request.groqRequest);
+  const geminiRequests = upstreamRequests.filter((request) => !request.groqRequest);
+  if (!groqRequests.length || groqRequests.some((request) => request.headers.authorization !== 'Bearer groq-test-secret')) throw new Error('NOVA server did not authenticate Groq correctly.');
+  if (!geminiRequests.length || geminiRequests.some((request) => request.headers['x-goog-api-key'] !== 'gemini-test-secret')) throw new Error('NOVA server did not authenticate Gemini fallback correctly.');
+  if (!groqRequests[0].body.messages?.[0]?.content?.includes('Always identify yourself only as NOVA AI')) throw new Error('NOVA identity instruction missing.');
+  console.log(JSON.stringify({ groqPrimary: true, geminiFallback: true, remoteAudioDisabled: true, perCaptainQueue: true, dailyLimit: true }));
 } finally { cleanup(); }

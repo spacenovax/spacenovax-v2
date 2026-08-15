@@ -688,7 +688,12 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, onOpenFleet, 
     <div className="mining-track"><i style={{ width: `${pct}%` }} /><span className="track-node n1"/><span className="track-node n2"/><span className="track-node n3"/></div>
     <div className="mining-metrics">
       <span><small>{t.phase}</small><b>{t.phase} {m.phase || 1}</b></span>
-      <button type="button" className="fleet-live-metric fleet-entry-button" onClick={onOpenFleet} title={ko ? '내 함대와 초대 링크 열기' : 'Open my fleet and invite link'} aria-label={ko ? `활성 채굴자 ${activeReferrals}명, 총 레퍼럴 ${totalReferrals}명. 내 함대 열기` : `${activeReferrals} active miners out of ${totalReferrals} referrals. Open my fleet`}><Icon name="fleet" size={15}/><b>{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</b></button>
+      <button type="button" className="fleet-live-metric fleet-entry-button" onClick={onOpenFleet} title={ko ? '내 함대와 초대 링크 열기' : 'Open my fleet and invite link'} aria-label={ko ? `활성 채굴자 ${activeReferrals}명, 총 레퍼럴 ${totalReferrals}명. 내 함대 열기` : `${activeReferrals} active miners out of ${totalReferrals} referrals. Open my fleet`}>
+        <span className="fleet-metric-orbit" aria-hidden="true"><i/><Icon name="fleet" size={16}/></span>
+        <span className="fleet-metric-copy"><small>FLEET LINK</small><strong className="fleet-metric-count">{activeReferrals.toLocaleString()}<em>/</em>{totalReferrals.toLocaleString()}</strong><span className="fleet-metric-status"><i/>ACTIVE · TOTAL</span></span>
+        <span className="fleet-metric-bonus"><b>+5%</b><small>/ ACTIVE</small></span>
+        <span className="fleet-metric-open" aria-hidden="true"><Icon name="arrow" size={12}/></span>
+      </button>
       <span><small>SECURITY CIRCLE</small><b>{Number(m.securityCircleCount || user.securityCircleCount || 0)}/5 · +{Number(m.securityBonus || user.securityCircleBonus || 0)}%</b></span>
       <span><small>MISSION PASSPORT</small><b>{m.missionPassportComplete || user.missionPassportComplete ? 'VERIFIED · +5%' : 'LOCKED · +0%'}</b></span>
       <span><small>LIVE EARNED</small><b>{format(m.minedSoFar || 0, 4)}</b></span>
@@ -1156,7 +1161,9 @@ function NovaAI({ user, t, language }) {
   async function send() {
     const clean = text.trim(); if (!clean || busy) return;
     const userMessage = { id: crypto.randomUUID?.() || String(Date.now()), role: 'user', text: clean };
-    const prior = messages.slice(-12);
+    // Keep just enough context for a natural follow-up while preserving the
+    // shared beta quota for all Captains.
+    const prior = messages.slice(-6);
     setMessages((m) => [...m, userMessage]); setText(''); setBusy(true);
     abortRef.current = new AbortController();
     try {

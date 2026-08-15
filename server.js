@@ -73,7 +73,11 @@ const GAME_DAILY_LIMIT = 30;
 const GAME_SESSION_TTL_MS = 10 * 60 * 1000;
 const NOVA_DAILY_LIMIT = 10;
 const NOVA_PUBLIC_MODEL_NAME = 'NOVA Beta';
-const NOVA_DEFAULT_MODEL = 'gemini-2.5-flash';
+const NOVA_GROQ_DEFAULT_MODEL = 'llama-3.1-8b-instant';
+const NOVA_GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
+// NOVA is intentionally concise during the beta stage.  This reduces latency
+// and makes the shared free provider quota last for more Captains.
+const NOVA_RESPONSE_MAX_TOKENS = Math.max(96, Math.min(320, Number(process.env.NOVA_RESPONSE_MAX_TOKENS || 220)));
 const novaChatQueues = new Map();
 const OFFICIAL_MISSION_IDS = ['website', 'telegram', 'discord', 'x', 'youtube_subscribe'];
 const COMMUNITY_NODE_LIMIT = 1000;
@@ -137,7 +141,9 @@ function now() {
 function enqueueNovaChat(userId, job) {
   const previous = novaChatQueues.get(userId) || Promise.resolve();
   const task = previous.catch(() => undefined).then(job);
-  const tracked = task.finally(() => {
+  // Keep the next request queue alive after an upstream failure.  Returning
+  // the original task still lets the current request handle that failure.
+  const tracked = task.catch(() => undefined).finally(() => {
     if (novaChatQueues.get(userId) === tracked) novaChatQueues.delete(userId);
   });
   novaChatQueues.set(userId, tracked);
@@ -505,6 +511,9 @@ function canModerateGlobalChatRoom(data, userId, roomId) {
 }
 
 function globalChatDisplayName(user, fallback = 'Captain') {
+  // Global Chat identifies a Captain by the linked Telegram profile first.
+  // A separately chosen community nickname remains a fallback for members
+  // whose Telegram profile did not provide a display name.
   return String(user?.firstName || user?.communityNickname || fallback).trim().slice(0, 40) || fallback;
 }
 
@@ -4132,13 +4141,14 @@ app.post('/api/nova/chat', async (req, res) => {
   if (!data.settings?.novaAiEnabled) {
     return res.status(503).json({ ok: false, message: 'NOVA AI is temporarily disabled by Command.' });
   }
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const groqApiKey = String(process.env.GROQ_API_KEY || '').trim();
+  const geminiApiKey = String(process.env.GEMINI_API_KEY || '').trim();
+  if (!groqApiKey && !geminiApiKey) {
     return res.status(503).json({ ok: false, message: 'NOVA AI core is not configured.' });
   }
 
   const message = String(req.body?.message || '').trim().slice(0, 2000);
-  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-10) : [];
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
   const captain = req.body?.captainContext || {};
   const sessionUser = getSessionUser(req, data);
   const userId = sessionUser.id;
@@ -4181,7 +4191,10 @@ app.post('/api/nova/chat', async (req, res) => {
     'You are NOVA AI, the official SpaceNovaX AI commander.',
     'Always identify yourself only as NOVA AI. Never mention the underlying model provider, model family, or internal implementation.',
     'Help community Captains with SpaceNovaX, mining, missions, game strategy, Web3 education, and general questions.',
-    'Be concise, calm, futuristic, and useful. Reply in the language used by the Captain.',
+    'Reply in the language used by the Captain. Be calm, futuristic, and useful.',
+    'During this beta, answer in 2 or 3 short sentences by default. Keep the answer under about 500 Korean characters or the equivalent length in the Captain language.',
+    'Do not write an essay, a long guide, or repeat the question. If the Captain explicitly asks for a long, detailed, in-depth, or full explanation, do not provide it. Politely say in the Captain language that NOVA AI is currently in development and long-form answers are not supported yet, then ask for a shorter question.',
+    'For Korean long-form requests, use this wording: "NOVA AI는 현재 개발 단계라 장문의 답변은 아직 지원하지 않습니다. 짧은 질문으로 다시 요청해 주세요."',
     'Never request passwords, seed phrases, wallet private keys, or Telegram login codes.',
     'Do not claim that SPNX Points are guaranteed money or promise investment returns.',
     `Captain context: level=${Number(sessionUser.level || captain.level || 1)}, balance=${Number(sessionUser.balance || 0)}, miningActive=${Boolean(sessionUser.mining?.active)}, gameRewardToday=${Number(sessionUser.gameReward?.earnedToday || 0)}.`,
@@ -4203,35 +4216,78 @@ app.post('/api/nova/chat', async (req, res) => {
     },
   ];
 
-  try {
-    const model = process.env.GEMINI_MODEL || NOVA_DEFAULT_MODEL;
-    const apiBase = String(process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
-    const endpoint = `${apiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const response = await enqueueNovaChat(userId, () => fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemInstruction }] },
-        contents,
-        generationConfig: {
-          maxOutputTokens: 700,
-          temperature: 0.7,
-        },
-      }),
-    }));
-    const result = await response.json();
-    if (!response.ok) {
-      console.error('NOVA AI upstream error', response.status, result?.error?.message || 'unknown');
-      releaseReservation();
-      return res.status(502).json({ ok: false, message: 'NOVA AI is temporarily unavailable.' });
+  async function requestJson(endpoint, headers, body) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
+      let result = {};
+      try { result = await response.json(); } catch { /* keep a safe empty error object */ }
+      if (!response.ok) throw Object.assign(new Error(result?.error?.message || `provider-${response.status}`), { status: response.status });
+      return result;
+    } finally {
+      clearTimeout(timeout);
     }
+  }
+
+  async function askGroq() {
+    if (!groqApiKey) throw Object.assign(new Error('Groq is not configured.'), { code: 'GROQ_NOT_CONFIGURED' });
+    const model = process.env.GROQ_MODEL || NOVA_GROQ_DEFAULT_MODEL;
+    const apiBase = String(process.env.GROQ_API_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+    const result = await requestJson(`${apiBase}/chat/completions`, {
+      Authorization: `Bearer ${groqApiKey}`,
+      'Content-Type': 'application/json',
+    }, {
+      model,
+      messages: [
+        { role: 'system', content: systemInstruction },
+        ...contents.map((item) => ({ role: item.role === 'model' ? 'assistant' : 'user', content: item.parts[0].text })),
+      ],
+      max_tokens: NOVA_RESPONSE_MAX_TOKENS,
+      temperature: 0.55,
+    });
+    const content = result?.choices?.[0]?.message?.content;
+    const reply = Array.isArray(content) ? content.map((part) => String(part?.text || '')).join('') : String(content || '');
+    if (!reply.trim()) throw new Error('Groq returned no response.');
+    return reply.trim();
+  }
+
+  async function askGemini() {
+    if (!geminiApiKey) throw Object.assign(new Error('Gemini is not configured.'), { code: 'GEMINI_NOT_CONFIGURED' });
+    const model = process.env.GEMINI_MODEL || NOVA_GEMINI_DEFAULT_MODEL;
+    const apiBase = String(process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+    const result = await requestJson(`${apiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      'x-goog-api-key': geminiApiKey,
+      'Content-Type': 'application/json',
+    }, {
+      system_instruction: { parts: [{ text: systemInstruction }] },
+      contents,
+      generationConfig: {
+        maxOutputTokens: NOVA_RESPONSE_MAX_TOKENS,
+        temperature: 0.55,
+      },
+    });
     const reply = (result.candidates?.[0]?.content?.parts || [])
       .map((part) => String(part?.text || ''))
       .join('')
       .trim();
+    if (!reply) throw new Error('Gemini returned no response.');
+    return reply;
+  }
+
+  try {
+    let reply = '';
+    let provider = 'groq';
+    try {
+      reply = await enqueueNovaChat(userId, askGroq);
+    } catch (groqError) {
+      // Gemini is only a safety fallback.  It is not used for normal NOVA
+      // requests, which keeps its free tier available during Groq incidents.
+      if (!geminiApiKey) throw groqError;
+      console.warn('NOVA Groq unavailable; trying Gemini fallback', groqError.status || groqError.code || groqError.name);
+      provider = 'gemini';
+      reply = await enqueueNovaChat(userId, askGemini);
+    }
     if (!reply) {
       releaseReservation();
       return res.status(502).json({ ok: false, message: 'NOVA AI returned no response.' });
@@ -4241,9 +4297,10 @@ app.post('/api/nova/chat', async (req, res) => {
     if (reservation) {
       reservation.type = 'nova_chat';
       reservation.model = NOVA_PUBLIC_MODEL_NAME;
+      reservation.provider = provider;
       reservation.completedAt = now();
     } else {
-      latestData.events.push({ type: 'nova_chat', requestId, userId, dayKey, model: NOVA_PUBLIC_MODEL_NAME, at: now() });
+      latestData.events.push({ type: 'nova_chat', requestId, userId, dayKey, model: NOVA_PUBLIC_MODEL_NAME, provider, at: now() });
     }
     writeData(latestData);
     res.json({ ok: true, reply, usage: { used: recentUsage + 1, limit: NOVA_DAILY_LIMIT } });
@@ -4265,7 +4322,7 @@ app.get('/api/nova/status', (req, res) => {
   res.json({
     ok: true,
     enabled: Boolean(data.settings?.novaAiEnabled),
-    configured: Boolean(process.env.GEMINI_API_KEY),
+    configured: Boolean(process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY),
     model: NOVA_PUBLIC_MODEL_NAME,
     dailyLimit: NOVA_DAILY_LIMIT,
   });

@@ -5,6 +5,10 @@
 import * as THREE from 'three';
 
 const EARTH_RADIUS = 2;
+const CAMERA_MIN_DISTANCE = 2.9;
+const CAMERA_DEFAULT_DISTANCE = 8.3;
+const CAMERA_MAX_DISTANCE = 18; // twice the previous far-zoom limit (9)
+const LABEL_REFERENCE_DISTANCE = 9;
 const loader = new THREE.TextureLoader();
 
 // Typhoon swirl texture — a stylized spiral drawn once on a canvas. This is decorative
@@ -47,39 +51,54 @@ function createMarkerTexture() {
 }
 function createSwirlTexture() {
   if (_swirlTextureCache) return _swirlTextureCache;
-  const size = 128;
+  // A higher-resolution procedural cloud eye keeps named storm markers crisp on a
+  // desktop 4K/8K view without downloading a per-storm image feed.
+  const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   const cx = size / 2, cy = size / 2;
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  for (let arm = 0; arm < 3; arm++) {
+  const halo = ctx.createRadialGradient(cx, cy, size * 0.03, cx, cy, size * 0.5);
+  halo.addColorStop(0, 'rgba(255,255,255,0.06)');
+  halo.addColorStop(0.38, 'rgba(255,218,192,0.16)');
+  halo.addColorStop(0.75, 'rgba(255,114,86,0.09)');
+  halo.addColorStop(1, 'rgba(255,114,86,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, size, size);
+  ctx.lineCap = 'round';
+  for (let arm = 0; arm < 4; arm++) {
     ctx.beginPath();
-    const armOffset = (arm / 3) * Math.PI * 2;
-    for (let t = 0; t <= 1; t += 0.02) {
-      const angle = armOffset + t * Math.PI * 3.2;
-      const r = t * (size * 0.46);
+    const armOffset = (arm / 4) * Math.PI * 2;
+    for (let t = 0; t <= 1; t += 0.012) {
+      const angle = armOffset + t * Math.PI * 3.45;
+      const r = size * (0.045 + Math.pow(t, 0.82) * 0.42);
       const x = cx + Math.cos(angle) * r;
       const y = cy + Math.sin(angle) * r;
       if (t === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
-    ctx.lineWidth = 5 - arm * 0.8;
-    ctx.globalAlpha = 0.85 - arm * 0.15;
+    const armShade = ctx.createLinearGradient(cx, cy, cx + Math.cos(armOffset) * size * 0.48, cy + Math.sin(armOffset) * size * 0.48);
+    armShade.addColorStop(0, 'rgba(255,255,255,0.94)');
+    armShade.addColorStop(0.45, 'rgba(255,238,222,0.82)');
+    armShade.addColorStop(1, 'rgba(255,145,112,0.22)');
+    ctx.strokeStyle = armShade;
+    ctx.lineWidth = 10 - arm * 1.2;
+    ctx.globalAlpha = 0.82 - arm * 0.11;
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  // clear "eye" at the center
+  // Clear, high-contrast eye at the center.
   ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.07, 0, Math.PI * 2);
+  ctx.arc(cx, cy, size * 0.075, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = 'rgba(255,90,90,0.95)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,178,127,0.96)';
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.08, 0, Math.PI * 2);
+  ctx.arc(cx, cy, size * 0.088, 0, Math.PI * 2);
   ctx.stroke();
   _swirlTextureCache = new THREE.CanvasTexture(canvas);
+  _swirlTextureCache.colorSpace = THREE.SRGBColorSpace;
   return _swirlTextureCache;
 }
 
@@ -226,9 +245,15 @@ export default class EarthEngine {
   constructor(container, { lowPower = false, onTextureQualityChange } = {}) {
     this.container = container;
     this.lowPower = lowPower;
+    const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    this.isTouchDevice = coarsePointer || (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints || 0) > 0);
     this.onTextureQualityChange = onTextureQualityChange;
     this.textureQuality = '4K';
     this._detailLoadStarted = false;
+    this._gestureActive = false;
+    this._gestureRestoreTimer = null;
+    this._renderPixelRatio = 0;
+    this._interactionHandlers = null;
     this.markerLayers = new Map();
     this._labelTargets = new Map(); // id -> { lat, lon, onUpdate }
     this._buildScene();
@@ -241,9 +266,9 @@ export default class EarthEngine {
     const { clientWidth: w, clientHeight: h } = this.container;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-    this.camera.position.set(0, 0, 8.3); // ~35% smaller apparent globe size, more space visible around it
-    this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowPower, alpha: true });
-    this.renderer.setPixelRatio(this.lowPower ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+    this.camera.position.set(0, 0, CAMERA_DEFAULT_DISTANCE); // ~35% smaller apparent globe size, more space visible around it
+    this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowPower, alpha: true, powerPreference: this.lowPower ? 'default' : 'high-performance' });
+    this._setRenderResolution();
     this.renderer.setSize(w, h);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -360,46 +385,140 @@ export default class EarthEngine {
     this.earth.rotation.x = (this.rotation.lat * Math.PI) / 180;
   }
 
+  _desiredPixelRatio() {
+    const deviceRatio = Math.min(window.devicePixelRatio || 1, 2);
+    if (this.lowPower) return 1;
+    // The map returns to full Retina quality after the gesture. During an active
+    // touch gesture we draw fewer pixels, preventing Telegram WebView from falling
+    // behind while it is receiving two streams of pointer events.
+    if (this.isTouchDevice && this._gestureActive) return Math.min(deviceRatio, 1.35);
+    return deviceRatio;
+  }
+
+  _setRenderResolution() {
+    if (!this.renderer) return;
+    const ratio = this._desiredPixelRatio();
+    if (Math.abs(ratio - this._renderPixelRatio) < 0.01) return;
+    this._renderPixelRatio = ratio;
+    this.renderer.setPixelRatio(ratio);
+    const { clientWidth: w, clientHeight: h } = this.container;
+    if (w && h) this.renderer.setSize(w, h, false);
+  }
+
+  _setGestureActive(active) {
+    if (this._gestureActive === active) return;
+    this._gestureActive = active;
+    this._setRenderResolution();
+  }
+
+  setPerformanceMode(lowPower) {
+    const next = Boolean(lowPower);
+    if (this.lowPower === next) return;
+    this.lowPower = next;
+    this._setRenderResolution();
+  }
+
   _bindInteraction() {
     const el = this.renderer.domElement;
-    let dragging = false;
+    const pointers = new Map();
+    let dragPointerId = null;
     let last = { x: 0, y: 0 };
-    let pinchDist = null;
-    const onDown = (x, y) => { dragging = true; this.autoRotate = false; last = { x, y }; };
-    const onMove = (x, y) => {
-      if (!dragging) return;
-      const dx = x - last.x; const dy = y - last.y;
+    let pinchDistance = null;
+    let hadMultiTouch = false;
+    let lastTapAt = 0;
+    const pointerDistance = () => {
+      const [a, b] = [...pointers.values()];
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : null;
+    };
+    const beginGesture = () => {
+      this.autoRotate = false;
+      this._flight = null;
+      if (this._gestureRestoreTimer) clearTimeout(this._gestureRestoreTimer);
+      this._gestureRestoreTimer = null;
+      this._setGestureActive(true);
+    };
+    const finishGesture = () => {
+      if (pointers.size) return;
+      if (this._gestureRestoreTimer) clearTimeout(this._gestureRestoreTimer);
+      this._gestureRestoreTimer = setTimeout(() => {
+        this._gestureRestoreTimer = null;
+        this._setGestureActive(false);
+      }, 120);
+    };
+    const onPointerDown = (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      event.preventDefault();
+      try { el.setPointerCapture(event.pointerId); } catch { /* pointer capture is optional */ }
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false });
+      beginGesture();
+      if (pointers.size === 1) {
+        dragPointerId = event.pointerId;
+        last = { x: event.clientX, y: event.clientY };
+        pinchDistance = null;
+        hadMultiTouch = false;
+      } else if (pointers.size === 2) {
+        dragPointerId = null;
+        hadMultiTouch = true;
+        pinchDistance = pointerDistance();
+      }
+    };
+    const onPointerMove = (event) => {
+      const previous = pointers.get(event.pointerId);
+      if (!previous) return;
+      event.preventDefault();
+      if (Math.hypot(event.clientX - previous.x, event.clientY - previous.y) > 3) previous.moved = true;
+      previous.x = event.clientX;
+      previous.y = event.clientY;
+      if (pointers.size >= 2) {
+        const distance = pointerDistance();
+        if (distance != null && pinchDistance != null) this.zoomBy((pinchDistance - distance) * 0.0075);
+        pinchDistance = distance;
+        return;
+      }
+      if (dragPointerId !== event.pointerId) return;
+      const dx = event.clientX - last.x;
+      const dy = event.clientY - last.y;
       this.rotation.lon += dx * 0.3;
       this.rotation.lat = Math.max(-85, Math.min(85, this.rotation.lat - dy * 0.3));
-      last = { x, y };
+      last = { x: event.clientX, y: event.clientY };
       this._applyRotation();
     };
-    const onUp = () => { dragging = false; };
-    el.addEventListener('pointerdown', (e) => onDown(e.clientX, e.clientY));
-    window.addEventListener('pointermove', (e) => onMove(e.clientX, e.clientY));
-    window.addEventListener('pointerup', onUp);
-    el.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      this.zoomBy(e.deltaY * 0.003);
-    }, { passive: false });
-    el.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2) {
-        const [a, b] = e.touches;
-        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-        if (pinchDist != null) this.zoomBy((pinchDist - d) * 0.01);
-        pinchDist = d;
+    const endPointer = (event) => {
+      const pointer = pointers.get(event.pointerId);
+      if (!pointer) return;
+      const wasTap = event.pointerType === 'touch' && pointers.size === 1 && !hadMultiTouch && !pointer.moved;
+      pointers.delete(event.pointerId);
+      try { el.releasePointerCapture(event.pointerId); } catch { /* capture may already be released */ }
+      if (pointers.size === 1) {
+        const [pointerId, remaining] = [...pointers.entries()][0];
+        dragPointerId = pointerId;
+        last = { x: remaining.x, y: remaining.y };
+        pinchDistance = null;
+      } else if (!pointers.size) {
+        dragPointerId = null;
+        pinchDistance = null;
+        hadMultiTouch = false;
+        finishGesture();
       }
-    }, { passive: true });
-    el.addEventListener('touchend', () => { pinchDist = null; });
-
-    // Double-tap to zoom in (mobile UX item — spec 8)
-    let lastTapAt = 0;
-    el.addEventListener('touchend', (e) => {
-      if (e.changedTouches?.length !== 1) return;
-      const now = performance.now();
-      if (now - lastTapAt < 300) this.zoomBy(-1.1);
-      lastTapAt = now;
-    });
+      if (wasTap) {
+        const now = performance.now();
+        if (now - lastTapAt < 300) this.zoomBy(-1.1);
+        lastTapAt = now;
+      }
+    };
+    const onWheel = (event) => {
+      event.preventDefault();
+      this.autoRotate = false;
+      this._flight = null;
+      this.zoomBy(event.deltaY * 0.003);
+    };
+    this._interactionHandlers = { el, onPointerDown, onPointerMove, endPointer, onWheel };
+    el.addEventListener('pointerdown', onPointerDown, { passive: false });
+    el.addEventListener('pointermove', onPointerMove, { passive: false });
+    el.addEventListener('pointerup', endPointer);
+    el.addEventListener('pointercancel', endPointer);
+    el.addEventListener('lostpointercapture', endPointer);
+    el.addEventListener('wheel', onWheel, { passive: false });
 
     this._resizeHandler = () => {
       const { clientWidth: w, clientHeight: h } = this.container;
@@ -412,10 +531,11 @@ export default class EarthEngine {
   }
 
   zoomBy(delta) {
-    this.camera.position.z = Math.max(2.9, Math.min(9, this.camera.position.z + delta));
+    this.camera.position.z = Math.max(CAMERA_MIN_DISTANCE, Math.min(CAMERA_MAX_DISTANCE, this.camera.position.z + delta));
     this._updateTextureLOD();
   }
   _announceTextureQuality(value) {
+    if (this.textureQuality === value) return;
     this.textureQuality = value;
     this.onTextureQualityChange?.(value);
   }
@@ -461,7 +581,7 @@ export default class EarthEngine {
     const target = { lon: 20, lat: 12 };
     let deltaLon = ((target.lon - from.lon + 540) % 360) - 180;
     this._flight = { t0: performance.now(), duration: 900, from, deltaLon, deltaLat: target.lat - from.lat };
-    this.camera.position.z = 8.3;
+    this.camera.position.z = CAMERA_DEFAULT_DISTANCE;
     this._updateTextureLOD();
   }
   setAutoRotate(value) { this.autoRotate = value; }
@@ -734,7 +854,7 @@ export default class EarthEngine {
       // HTML marker overlays use this value to scale their icon and switch between
       // compact and expanded labels. It is derived from the camera only, so marker
       // labels stay legible without changing navigation or Earth interaction logic.
-      const zoomProgress = (9 - this.camera.position.z) / (9 - 2.9);
+      const zoomProgress = (LABEL_REFERENCE_DISTANCE - this.camera.position.z) / (LABEL_REFERENCE_DISTANCE - CAMERA_MIN_DISTANCE);
       out[pt.id] = {
         x,
         y,
@@ -774,6 +894,17 @@ export default class EarthEngine {
 
   dispose() {
     window.removeEventListener('resize', this._resizeHandler);
+    if (this._gestureRestoreTimer) clearTimeout(this._gestureRestoreTimer);
+    if (this._interactionHandlers) {
+      const { el, onPointerDown, onPointerMove, endPointer, onWheel } = this._interactionHandlers;
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', endPointer);
+      el.removeEventListener('pointercancel', endPointer);
+      el.removeEventListener('lostpointercapture', endPointer);
+      el.removeEventListener('wheel', onWheel);
+      this._interactionHandlers = null;
+    }
     this.renderer.dispose();
     this.fallbackDayTexture?.dispose();
     this.baseDayTexture?.dispose();

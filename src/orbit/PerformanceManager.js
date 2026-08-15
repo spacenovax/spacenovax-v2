@@ -7,7 +7,11 @@ export default class PerformanceManager {
     this.onModeChange = onModeChange;
     this.targetFps = targetFps;
     this.sampleMs = sampleMs;
-    this.lowPower = this._detectInitialLowPower();
+    // Telegram WebView often hides deviceMemory, which made capable phones start in
+    // low quality by default. Treat hardware data as a hint only; switch modes after
+    // observing the actual frame rate.
+    this.initialLowPowerHint = this._detectInitialLowPower();
+    this.lowPower = false;
     this.frames = 0;
     this.windowStart = performance.now();
     this.lastFps = targetFps;
@@ -45,7 +49,8 @@ export default class PerformanceManager {
       this.lastFps = fps;
       this.frames = 0;
       this.windowStart = performance.now();
-      const shouldBeLow = fps < this.targetFps * 0.55;
+      const threshold = this.initialLowPowerHint ? 0.72 : 0.55;
+      const shouldBeLow = fps < this.targetFps * threshold;
       if (shouldBeLow !== this.lowPower) {
         this.lowPower = shouldBeLow;
         this.onModeChange?.(this.lowPower);
