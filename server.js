@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 62842)
-Total output lines: 4697
-
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -2302,7 +2299,206 @@ app.post('/api/community/post', (req, res) => {
   data.communityPosts.push(post);
   data.events.push({ type: 'community_post', userId: user.id, postId: post.id, hasImage: Boolean(imageUrl), at: now() });
   writeData(data);
-  res.json({ ok: true, post: publicCommunityPost(data, post, user.id…2842 tokens truncated…t: now() });
+  res.json({ ok: true, post: publicCommunityPost(data, post, user.id) });
+});
+
+app.post('/api/profile/avatar', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const imageData = String(req.body?.imageData || '');
+  const match = imageData.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return res.status(400).json({ ok: false, message: 'Choose a JPEG, PNG, or WebP profile image.' });
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length || buffer.length > 600_000) return res.status(413).json({ ok: false, message: 'Profile image must be 600 KB or smaller after optimization.' });
+  fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
+  const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const filename = `avatar-${crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 16)}-${Date.now()}.${extension}`;
+  fs.writeFileSync(path.join(COMMUNITY_MEDIA_DIR, filename), buffer);
+  const previous = String(user.avatarUrl || '');
+  user.avatarUrl = `/community-media/${filename}`;
+  user.updatedAt = now();
+  data.events.push({ type: 'profile_avatar_updated', userId: user.id, at: user.updatedAt });
+  writeData(data);
+  if (previous.startsWith('/community-media/avatar-')) {
+    const previousPath = path.join(COMMUNITY_MEDIA_DIR, path.basename(previous));
+    try { if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath); } catch {}
+  }
+  res.json({ ok: true, avatarUrl: user.avatarUrl, user: publicUser(data, user) });
+});
+
+app.post('/api/profile/nickname/check', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data); const nickname = String(req.body?.nickname || '').trim().replace(/\s+/g, ' ').slice(0, 20); const normalized = nickname.normalize('NFKC').toLocaleLowerCase();
+  const valid = nickname.length >= 2 && /^[\p{L}\p{N}_ .-]+$/u.test(nickname);
+  const available = valid && !Object.values(data.users || {}).some((member) => member.id !== user.id && String(member.communityNickname || '').normalize('NFKC').toLocaleLowerCase() === normalized);
+  res.json({ ok:true, valid, available });
+});
+
+app.post('/api/profile/nickname', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data); const nickname = String(req.body?.nickname || '').trim().replace(/\s+/g, ' ').slice(0, 20); const normalized = nickname.normalize('NFKC').toLocaleLowerCase();
+  if (nickname.length < 2 || !/^[\p{L}\p{N}_ .-]+$/u.test(nickname)) return res.status(400).json({ ok:false, message:'Nickname must be 2–20 characters and use letters, numbers, spaces, _, . or -.' });
+  if (Object.values(data.users || {}).some((member) => member.id !== user.id && String(member.communityNickname || '').normalize('NFKC').toLocaleLowerCase() === normalized)) return res.status(409).json({ ok:false, message:'This nickname is already in use.' });
+  user.communityNickname = nickname; user.updatedAt = now(); data.events.push({ type:'community_nickname_updated', userId:user.id, at:user.updatedAt }); writeData(data); res.json({ ok:true, user:publicUser(data,user) });
+});
+
+app.post('/api/community/like', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || '') && item.status !== 'removed');
+  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
+  post.likes ||= [];
+  post.likes = post.likes.includes(user.id) ? post.likes.filter((id) => id !== user.id) : [...post.likes, user.id];
+  writeData(data);
+  res.json({ ok: true, liked: post.likes.includes(user.id), likes: post.likes.length });
+});
+
+app.post('/api/community/comment', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || '') && item.status === 'published');
+  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
+  const body = String(req.body?.body || '').trim().slice(0, 500);
+  if (body.length < 2) return res.status(400).json({ ok: false, message: 'Comment must contain at least two characters.' });
+  post.comments ||= [];
+  const recent = post.comments.filter((comment) => comment.authorId === user.id && comment.createdAt > now() - 60000);
+  if (recent.length >= 5) return res.status(429).json({ ok: false, message: 'Please wait before adding more comments.' });
+  const comment = { id: crypto.randomUUID(), authorId: user.id, authorName: user.firstName || 'Captain', body, createdAt: now() };
+  post.comments.push(comment);
+  if (post.comments.length > 200) post.comments = post.comments.slice(-200);
+  data.events.push({ type: 'community_comment', userId: user.id, postId: post.id, commentId: comment.id, at: comment.createdAt });
+  writeData(data);
+  res.json({ ok: true, comment, comments: post.comments.slice(-30) });
+});
+
+app.post('/api/community/report', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || ''));
+  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
+  if ((data.communityReports || []).some((report) => report.postId === post.id && report.userId === user.id)) return res.status(409).json({ ok: false, message: 'You already reported this post.' });
+  const report = { id: crypto.randomUUID(), postId: post.id, userId: user.id, reason: String(req.body?.reason || 'community_review').slice(0, 200), at: now() };
+  data.communityReports.push(report);
+  post.reports = Number(post.reports || 0) + 1;
+  if (post.reports >= 5) post.status = 'review';
+  data.events.push({ type: 'community_report', userId: user.id, postId: post.id, at: now() });
+  writeData(data);
+  res.json({ ok: true, message: 'Report submitted for administrator review.' });
+});
+
+app.post('/api/global-chat/rooms', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const applications = (data.globalChatModeratorApplications || [])
+    .filter((item) => item.userId === user.id)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  res.json({
+    ok: true,
+    rooms: GLOBAL_CHAT_ROOMS.map((room) => publicGlobalChatRoom(data, room)),
+    viewer: {
+      isVerifiedCaptain: true,
+      applications: applications.map((item) => ({
+        id: item.id,
+        roomId: item.roomId,
+        status: item.status,
+        createdAt: Number(item.createdAt || 0),
+        reviewedAt: Number(item.reviewedAt || 0),
+      })),
+    },
+    retention: {
+      messagesPerRoom: GLOBAL_CHAT_ROOM_MESSAGE_LIMIT,
+      photosPerRoom: GLOBAL_CHAT_ROOM_MEDIA_LIMIT,
+      moderatorLimit: GLOBAL_CHAT_MAX_ROOM_MODERATORS,
+    },
+  });
+});
+
+app.post('/api/global-chat/messages', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
+  const blocked = new Set(user.globalChatBlocks || []);
+  const messages = (data.globalChatMessages || [])
+    .filter((message) => message.roomId === room.id && message.status === 'published' && !blocked.has(message.authorId))
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
+    .slice(-180)
+    .map((message) => publicGlobalChatMessage(data, message));
+  const viewer = globalChatViewerState(data, user, room.id);
+  res.json({
+    ok: true,
+    room: publicGlobalChatRoom(data, room),
+    messages,
+    viewer,
+    moderation: viewer.canModerate ? {
+      activeMutes: (data.globalChatMutes || [])
+        .filter((mute) => mute.status === 'active' && mute.roomId === room.id && Number(mute.until || 0) > now())
+        .sort((a, b) => Number(a.until || 0) - Number(b.until || 0))
+        .map((mute) => ({ id: mute.id, userId: mute.userId, firstName: globalChatDisplayName(data.users?.[mute.userId], 'Captain'), until: Number(mute.until || 0), reason: mute.reason || '' })),
+    } : null,
+    rules: {
+      maxMessageLength: GLOBAL_CHAT_MAX_MESSAGE_LENGTH,
+      photoLimitBytes: GLOBAL_CHAT_MAX_IMAGE_BYTES,
+      messageWindow: GLOBAL_CHAT_SEND_WINDOW_MS / 1000,
+      maxMessagesPerWindow: GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW,
+    },
+  });
+});
+
+app.post('/api/global-chat/send', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const room = globalChatRoom(req.body?.roomId);
+  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
+  const activeMute = globalChatMutedUntil(data, user.id, room.id);
+  if (activeMute) return res.status(403).json({ ok: false, message: `Chat is temporarily paused in this room until ${new Date(activeMute.until).toLocaleString()}.` });
+
+  const body = normalizeGlobalChatText(req.body?.body);
+  const imageData = String(req.body?.imageData || '');
+  if (!body && !imageData) return res.status(400).json({ ok: false, message: 'Write a message or attach a photo.' });
+  if (body && globalChatContentBlocked(body)) return res.status(403).json({ ok: false, message: 'For your security, requests for wallet secrets, payments, impersonation, and unapproved links are blocked in Global Chat.' });
+  const recent = (data.globalChatMessages || []).filter((message) => message.authorId === user.id && Number(message.createdAt || 0) > now() - GLOBAL_CHAT_SEND_WINDOW_MS);
+  if (recent.length >= GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW) return res.status(429).json({ ok: false, message: 'Chat rate limit reached. Please wait a moment.' });
+
+  let imageUrl = '';
+  try {
+    if (imageData) imageUrl = saveGlobalChatImage(imageData);
+  } catch (error) {
+    return res.status(413).json({ ok: false, message: error.message || 'Photo upload failed.' });
+  }
+  const message = {
+    id: crypto.randomUUID(),
+    roomId: room.id,
+    authorId: user.id,
+    authorName: globalChatDisplayName(user),
+    authorAvatarUrl: user.avatarUrl || '',
+    body,
+    imageUrl,
+    imageExpired: false,
+    status: 'published',
+    reportCount: 0,
+    createdAt: now(),
+  };
+  data.globalChatMessages.push(message);
+  trimGlobalChatHistory(data);
+  data.events.push({ type: 'global_chat_message', userId: user.id, roomId: room.id, messageId: message.id, hasImage: Boolean(imageUrl), at: message.createdAt });
+  writeData(data);
+  res.status(201).json({ ok: true, message: publicGlobalChatMessage(data, message) });
+});
+
+app.post('/api/global-chat/block', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const targetId = String(req.body?.userId || '');
+  const action = String(req.body?.action || 'block');
+  if (!data.users?.[targetId] || targetId === user.id || !['block', 'unblock'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid block request.' });
+  user.globalChatBlocks ||= [];
+  user.globalChatBlocks = action === 'block'
+    ? [...new Set([...user.globalChatBlocks, targetId])]
+    : user.globalChatBlocks.filter((id) => id !== targetId);
+  data.events.push({ type: 'global_chat_block', userId: user.id, targetId, action, at: now() });
   writeData(data);
   res.json({ ok: true, blocked: action === 'block' });
 });
