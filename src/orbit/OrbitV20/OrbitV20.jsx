@@ -12,6 +12,8 @@ import PerformanceManager from '../PerformanceManager.js';
 import { BrowserSpeechProvider } from '../../nova/voice/BrowserSpeechProvider.js';
 import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination, fetchDrivingRoute } from '../api.js';
 import { getCurrentPosition, watchCurrentPosition, haversineKm, bearingDeg, compassLabel } from '../geo.js';
+import { createNavigationProfile, getNavigationProgress, guidanceSpeech, maneuverLabel, navigationMessage } from '../navigationLite.js';
+import { getLowDataMode, loadCompatibleLiteRoute, saveLiteRoute, setLowDataMode as persistLowDataMode } from '../navigationLiteStore.js';
 import { getCaptainBase, setBasePoint, addFavorite } from '../captainBase.js';
 import OrbitTopBar from './OrbitTopBar.jsx';
 import OrbitEarthView from './OrbitEarthView.jsx';
@@ -28,6 +30,7 @@ import OrbitDrivingView from './OrbitDrivingView.jsx';
 import OrbitFloatingNova from './OrbitFloatingNova.jsx';
 import OrbitBottomBar from './OrbitBottomBar.jsx';
 import OrbitSearchOverlay from './OrbitSearchOverlay.jsx';
+import OrbitMiningMap from './OrbitMiningMap.jsx';
 import './orbit-v20.css';
 
 function getOrbitClientId() {
@@ -82,7 +85,11 @@ function useCopy(language) {
     nominal: ko ? '전체 시스템 정상' : 'ALL SYSTEMS NOMINAL', stable: ko ? '안정' : 'STABLE', offline: ko ? '오프라인' : 'OFFLINE',
     captainBase: ko ? '캡틴 베이스' : 'CAPTAIN BASE', setHome: ko ? '집 저장' : 'Save Home', setWork: ko ? '회사 저장' : 'Save Work', notSet: '—',
     gpsLive: ko ? 'GPS 실시간 연결' : 'GPS LIVE', gpsLocating: ko ? 'GPS 위치 확인 중' : 'LOCATING GPS', gpsUnavailable: ko ? 'GPS 위치 확인 필요' : 'GPS CHECK REQUIRED',
-    startNavigation: ko ? '경로 안내 시작' : 'Start navigation', endNavigation: ko ? '경로 안내 종료' : 'End navigation', liveGuidance: ko ? '실시간 방향 안내' : 'LIVE GUIDANCE', arrived: ko ? '목적지 도착' : 'ARRIVED', remaining: ko ? '남은 거리' : 'REMAINING',
+    gpsSignalWeak: ko ? 'GPS 신호 약함' : 'WEAK GPS SIGNAL', gpsPermissionHint: ko ? '위치 권한을 허용한 뒤 다시 시도해 주세요.' : 'Allow location access, then try again.',
+    quickDestinations: ko ? '빠른 목적지' : 'QUICK DESTINATIONS',
+    shareRoute: ko ? '공유' : 'SHARE', routeShared: ko ? '목적지 경로를 공유했습니다.' : 'Destination route shared.', routeCopied: ko ? '목적지 경로를 복사했습니다.' : 'Destination route copied.',
+    offlineGuidance: ko ? '연결 없음 · 저장된 경로만 확인' : 'OFFLINE · CHECK SAVED ROUTE',
+    startNavigation: ko ? '목적지 이동' : 'Start navigation', endNavigation: ko ? '경로 안내 종료' : 'End navigation', liveGuidance: ko ? '실시간 방향 안내' : 'LIVE GUIDANCE', arrived: ko ? '목적지 도착' : 'ARRIVED', remaining: ko ? '남은 거리' : 'REMAINING',
   }), [ko]);
 }
 
@@ -118,6 +125,12 @@ function eventKind(category = '') {
   return 'other';
 }
 
+const TOP_TAB_PANELS = {
+  satellite: 'satellite',
+  weather: 'weather',
+  event: 'events',
+  base: 'base',
+};
 // EONET may publish a storm coordinate before an official public name is available.
 // Keep those unlabelled systems out of the captain map: a named, active system is far
 // more useful than a row of identical decorative swirls.
@@ -132,7 +145,16 @@ function officialStormName(title = '') {
   return hasName && !generic.test(name) ? name.slice(0, 28) : '';
 }
 
-export default function OrbitV20({ language, user }) {
+// OSRM returns a small initial "depart" step before the first actual turn.  The
+// navigation HUD should announce the upcoming maneuver, not repeatedly tell a
+// moving Captain that the trip has merely started.
+function nextDrivingStep(route, navigationProgress = null) {
+  if (navigationProgress?.nextStep) return navigationProgress.nextStep;
+  const steps = route?.steps || [];
+  return steps.find((step) => !['depart', 'arrive'].includes(String(step?.maneuver?.type || '').toLowerCase())) || steps[0] || null;
+}
+
+export default function OrbitV20({ language, user, onOpenMining }) {
   const t = useCopy(language);
   const containerRef = useRef(null);
   const engineRef = useRef(null);
@@ -140,6 +162,7 @@ export default function OrbitV20({ language, user }) {
   const [voiceState, setVoiceState] = useState('idle');
   const [hudPanel, setHudPanel] = useState(null);
   const [earthQuality, setEarthQuality] = useState('2K · LOADING');
+  const [satelliteLayer, setSatelliteLayer] = useState({ enabled: false, status: 'idle', date: '' });
 
   const [tab, setTab] = useState('live');
   const [clock, setClock] = useState(new Date());
@@ -159,11 +182,14 @@ export default function OrbitV20({ language, user }) {
   const [destination, setDestination] = useState(null);
   const [drivingRoute, setDrivingRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
+  const [lowDataMode, setLowDataMode] = useState(() => getLowDataMode());
+  const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [navigationActive, setNavigationActive] = useState(false);
   const [drivingViewOpen, setDrivingViewOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [miningMapOpen, setMiningMapOpen] = useState(false);
   const [searchBusy, setSearchBusy] = useState(false);
   const [recentDestinations, setRecentDestinations] = useState(() => {
     try { return JSON.parse(localStorage.getItem('spnx_orbit_recent_v1') || '[]'); } catch { return []; }
@@ -176,11 +202,18 @@ export default function OrbitV20({ language, user }) {
   const [novaInput, setNovaInput] = useState('');
   const [novaBusy, setNovaBusy] = useState(false);
   const [apiHealthy, setApiHealthy] = useState(true);
+  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
   const mountedAt = useRef(Date.now());
   const searchTimerRef = useRef(null);
   const searchRequestRef = useRef(0);
   const markerUpdateAt = useRef(0);
   const initialGpsFixRef = useRef(false);
+  const routeRequestRef = useRef(0);
+  const routeRefreshReasonRef = useRef('initial');
+  const spokenGuidanceRef = useRef(new Set());
+  const offRouteSinceRef = useRef(0);
+  const lastRerouteAtRef = useRef(0);
+  const arrivalAnnouncedRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -191,7 +224,10 @@ export default function OrbitV20({ language, user }) {
     perfRef.current = perf;
     // Start in the sharp renderer mode. Browser hardware hints are often inaccurate
     // in Telegram WebView; only a measured low FPS switches the renderer down.
-    const engine = new EarthEngine(containerRef.current, { onTextureQualityChange: setEarthQuality });
+    const engine = new EarthEngine(containerRef.current, {
+      onTextureQualityChange: setEarthQuality,
+      onSatelliteLayerChange: setSatelliteLayer,
+    });
     engineRef.current = engine;
     MasterRenderLoop.setFrameSkip(1);
     MasterRenderLoop.add('orbit-earth', (time) => engine.renderFrame(time));
@@ -217,6 +253,17 @@ export default function OrbitV20({ language, user }) {
   }, []);
 
   useEffect(() => { const c = setInterval(() => setClock(new Date()), 1000); return () => clearInterval(c); }, []);
+
+  useEffect(() => {
+    const onOnline = () => { setNetworkOnline(true); setApiHealthy(true); };
+    const onOffline = () => setNetworkOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -354,6 +401,9 @@ export default function OrbitV20({ language, user }) {
     engineRef.current?.setLabelTargets(markerTargets);
   }, [markerTargets]);
 
+  // Route calculation is intentionally event-driven, not tied to every GPS
+  // update. While driving, the existing route is followed locally and only a
+  // confirmed off-route event requests a fresh route from the gateway.
   useEffect(() => {
     let active = true;
     if (!current || !destination) {
@@ -363,22 +413,69 @@ export default function OrbitV20({ language, user }) {
       setDrivingViewOpen(false);
       return undefined;
     }
-    setRouteStatus('loading');
-    engineRef.current?.setRoute(current, destination); // clear visual fallback while the road route loads
-    fetchDrivingRoute(current, destination).then((route) => {
-      if (!active) return;
-      setDrivingRoute(route);
+    const requestId = ++routeRequestRef.current;
+    const reason = routeRefreshReasonRef.current;
+    const rerouting = reason === 'off-route' || reason === 'start-refresh';
+    setRouteStatus(rerouting ? 'rerouting' : 'loading');
+    if (!drivingRoute) engineRef.current?.setRoute(current, destination);
+    fetchDrivingRoute(current, destination, { fresh: rerouting }).then((route) => {
+      if (!active || requestId !== routeRequestRef.current) return;
+      const routeWithSession = { ...route, navigationId: `route-${Date.now()}-${requestId}`, origin: { lat: current.lat, lon: current.lon }, source: 'live' };
+      setDrivingRoute(routeWithSession);
+      // The last route is kept only on this device. It gives a captain a safe
+      // fallback while a weak connection is returning; it is not uploaded and
+      // is never presented as a full offline-map service.
+      saveLiteRoute({ route, origin: current, destination });
       setRouteStatus('ready');
+      offRouteSinceRef.current = 0;
+      spokenGuidanceRef.current.clear();
       engineRef.current?.setRoadRoute(route?.points);
     }).catch(() => {
-      if (!active) return;
-      setDrivingRoute(null);
-      setRouteStatus('unavailable');
+      if (!active || requestId !== routeRequestRef.current) return;
+      // Preserve the previously usable route when an off-route refresh has a
+      // temporary network failure. Dropping it would leave a moving captain
+      // without any visual guidance.
+      const saved = rerouting ? null : loadCompatibleLiteRoute({ current, destination });
+      if (saved) {
+        const savedRoute = {
+          ...saved.route,
+          navigationId: `saved-route-${saved.savedAt}`,
+          origin: saved.origin,
+          source: 'saved',
+          savedAt: saved.savedAt,
+        };
+        setDrivingRoute(savedRoute);
+        setRouteStatus('saved');
+        engineRef.current?.setRoadRoute(saved.route.points);
+      } else {
+        if (!rerouting) setDrivingRoute(null);
+        setRouteStatus(rerouting && drivingRoute ? 'ready' : 'unavailable');
+      }
+    }).finally(() => {
+      if (requestId === routeRequestRef.current) routeRefreshReasonRef.current = 'initial';
     });
     return () => { active = false; };
-  }, [current?.lat, current?.lon, destination?.lat, destination?.lon]);
+    // `current` is deliberately reduced to availability. Coordinates are used
+    // only when a destination is chosen or a validated reroute increments the nonce.
+  }, [Boolean(current), destination?.id, destination?.lat, destination?.lon, routeRefreshNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function runSearch(q) {
+  function requestRouteRefresh(reason = 'initial') {
+    routeRefreshReasonRef.current = reason;
+    setRouteRefreshNonce((value) => value + 1);
+  }
+
+  function toggleLowDataMode() {
+    setLowDataMode((enabled) => persistLowDataMode(!enabled));
+  }
+
+  function resetGuidanceSession() {
+    spokenGuidanceRef.current.clear();
+    offRouteSinceRef.current = 0;
+    lastRerouteAtRef.current = 0;
+    arrivalAnnouncedRef.current = false;
+  }
+
+  function runSearch(q, { near = null } = {}) {
     setSearchQuery(q);
     clearTimeout(searchTimerRef.current);
     const requestId = ++searchRequestRef.current;
@@ -392,7 +489,7 @@ export default function OrbitV20({ language, user }) {
     setSearchBusy(true);
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const results = await searchDestination(q, language);
+        const results = await searchDestination(q, language, { near });
         if (requestId === searchRequestRef.current) setSearchResults(results);
       } catch {
         if (requestId === searchRequestRef.current) setSearchResults([]);
@@ -404,6 +501,9 @@ export default function OrbitV20({ language, user }) {
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 
   function openDestinationSearch() {
+    setMiningMapOpen(false);
+    setHudPanel(null);
+    setTab('live');
     setSearchOpen(true);
     const line = t.ko
       ? 'Captain, 목적지 검색을 열었습니다. 도시, 주소, 관광지 이름을 입력하거나 최근 목적지를 선택해 주세요.'
@@ -411,10 +511,55 @@ export default function OrbitV20({ language, user }) {
     speakOrbit(line, language, setVoiceState);
   }
 
+  function selectQuickDestination(kind) {
+    const saved = kind === 'home' ? base.home : kind === 'work' ? base.work : null;
+    if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lon)) {
+      const fallbackLabel = kind === 'home' ? (t.ko ? '저장한 집' : 'Saved Home') : (t.ko ? '저장한 회사' : 'Saved Work');
+      pickDestination({
+        ...saved,
+        id: `captain-${kind}-${saved.lat.toFixed(4)}-${saved.lon.toFixed(4)}`,
+        label: saved.label || fallbackLabel,
+        country: saved.country || '',
+      });
+      return;
+    }
+    if (kind === 'home' || kind === 'work') {
+      setSearchOpen(false);
+      setHudPanel('base');
+      const slotLabel = kind === 'home' ? (t.ko ? '집' : 'home') : (t.ko ? '회사' : 'work');
+      speakOrbit(t.ko
+        ? `Captain, ${slotLabel} 위치가 아직 저장되지 않았습니다. 실제 GPS 위치를 확인한 뒤 캡틴 베이스에서 저장해 주세요.`
+        : `Captain, your ${slotLabel} is not saved yet. Confirm your live GPS position, then save it in Captain Base.`, language, setVoiceState);
+      return;
+    }
+
+    const quickSearch = {
+      hospital: { ko: '병원', en: 'hospital' },
+      gas: { ko: '주유소', en: 'fuel station' },
+      police: { ko: '경찰서', en: 'police station' },
+      airport: { ko: '공항', en: 'airport' },
+    }[kind];
+    if (!quickSearch) return;
+    const nearby = gpsState === 'live' && current
+      ? { lat: Number(current.lat.toFixed(3)), lon: Number(current.lon.toFixed(3)) }
+      : null;
+    const query = t.ko ? quickSearch.ko : quickSearch.en;
+    runSearch(query, { near: nearby });
+    speakOrbit(nearby
+      ? (t.ko ? `Captain, 현재 위치 주변의 ${quickSearch.ko}을 찾고 있습니다.` : `Captain, searching for nearby ${quickSearch.en}.`)
+      : (t.ko ? `Captain, GPS 위치를 확인할 수 없어 전 세계 ${quickSearch.ko} 검색을 시작합니다.` : `Captain, GPS is unavailable, so I am searching worldwide for ${quickSearch.en}.`), language, setVoiceState);
+  }
+
   // Navigation UX chain: Search -> Geocoding -> Camera FlyTo -> Arc Route -> Weather ->
   // Distance -> Time -> NOVA Voice, all from one selection.
   async function pickDestination(place) {
+    resetGuidanceSession();
+    setNavigationActive(false);
+    setDrivingViewOpen(false);
+    setDrivingRoute(null);
+    setRouteStatus('idle');
     setDestination(place);
+    requestRouteRefresh('destination');
     setSearchQuery('');
     setSearchResults([]);
     setSearchOpen(false);
@@ -439,30 +584,107 @@ export default function OrbitV20({ language, user }) {
 
   function startNavigation() {
     if (!current || !destination) return;
-    if (!drivingRoute) {
-      speakOrbit(t.ko ? 'Captain, 자동차 도로 경로를 계산 중입니다. 잠시 후 다시 시작해 주세요.' : 'Captain, the driving route is still calculating. Please start again in a moment.', language, setVoiceState);
+    if (gpsState !== 'live') {
+      speakOrbit(navigationMessage('locationRequired', language), language, setVoiceState);
       return;
     }
+    if (!drivingRoute) {
+      speakOrbit(navigationMessage('routeLoading', language), language, setVoiceState);
+      return;
+    }
+    resetGuidanceSession();
+    setMiningMapOpen(false);
     setNavigationActive(true);
     setDrivingViewOpen(true);
     engineRef.current?.focusRoute(current, destination, { duration: 850 });
-    const km = Math.round((drivingRoute?.distanceM || haversineKm(current, destination) * 1000) / 1000);
-    const firstStep = drivingRoute?.steps?.[0];
-    const roadName = firstStep?.name ? ` ${t.ko ? '첫 안내 도로는' : 'First road is'} ${firstStep.name}.` : '';
-    const line = t.ko
-      ? `Captain, 자동차 경로 안내를 시작합니다. ${destination.label.split(',')[0]}까지 ${km.toLocaleString()}킬로미터입니다.${roadName} 기기의 위치가 바뀌면 경로를 다시 계산합니다.`
-      : `Captain, driving guidance is active. ${destination.label.split(',')[0]} is ${km.toLocaleString()} kilometers away.${roadName} The route will recalculate as your device position changes.`;
+    const km = Math.max(1, Math.round((drivingRoute?.distanceM || haversineKm(current, destination) * 1000) / 1000));
+    const firstStep = activeDrivingStep || nextDrivingStep(drivingRoute);
+    const firstDirection = firstStep ? maneuverLabel(firstStep, language) : '';
+    const roadName = firstStep?.name ? ` ${navigationMessage('roadDirection', language, { road: firstStep.name })}` : '';
+    const startLine = routeStatus === 'saved' || drivingRoute.source === 'saved'
+      ? `${navigationMessage('startSaved', language)} `
+      : '';
+    const line = `${startLine}${navigationMessage('start', language, { destination: destination.label.split(',')[0], kilometers: km.toLocaleString() })}${firstDirection ? ` ${navigationMessage('firstInstruction', language, { direction: firstDirection })}` : ''}${roadName}`;
     speakOrbit(line, language, setVoiceState);
   }
 
   function stopNavigation() {
+    resetGuidanceSession();
     setNavigationActive(false);
     setDrivingViewOpen(false);
-    speakOrbit(t.ko ? 'Captain, 경로 안내를 종료했습니다.' : 'Captain, navigation guidance has ended.', language, setVoiceState);
+    speakOrbit(navigationMessage('ended', language), language, setVoiceState);
   }
 
-  function saveSlot(slot) { if (current) setBase({ ...setBasePoint(slot, current) }); }
-  function selectTab(id) { setTab((cur) => (cur === id ? 'live' : id)); }
+  async function submitNavigationReport({ category, note }) {
+    if (!current || !destination) throw new Error(t.ko ? '현재 위치와 목적지를 먼저 설정해 주세요.' : 'Set your current location and destination first.');
+    const result = await orbitApi('/api/orbit/navigation-report', {
+      category,
+      note: String(note || '').trim().slice(0, 300),
+      // Reports intentionally use an approximately 100m position, not a raw
+      // GPS coordinate. The server rounds again before it persists anything.
+      location: { lat: Number(current.lat.toFixed(3)), lon: Number(current.lon.toFixed(3)) },
+      destination: { label: String(destination.label || '').slice(0, 120), lat: Number(destination.lat.toFixed(3)), lon: Number(destination.lon.toFixed(3)) },
+    });
+    return result.message || navigationMessage('reportReceived', language);
+  }
+
+  async function shareRouteSafely() {
+    if (!destination) throw new Error(t.ko ? '공유할 목적지를 먼저 선택해 주세요.' : 'Choose a destination before sharing.');
+    // Do not include the Captain's current position in the share text or URL.
+    // A recipient receives only the destination pin and can decide how to route
+    // there from their own device.
+    const destinationName = destination.label?.split(',')[0] || (t.ko ? '목적지' : 'Destination');
+    const lat = Number(destination.lat.toFixed(5));
+    const lon = Number(destination.lon.toFixed(5));
+    const destinationUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lon)}#map=16/${encodeURIComponent(lat)}/${encodeURIComponent(lon)}`;
+    const text = t.ko
+      ? `NOVA Guided Navigation Lite 목적지: ${destinationName}\n${destinationUrl}\n내 현재 위치는 공유되지 않습니다.`
+      : `NOVA Guided Navigation Lite destination: ${destinationName}\n${destinationUrl}\nMy current location is not included.`;
+    if (typeof navigator.share === 'function') {
+      await navigator.share({ title: `NOVA · ${destinationName}`, text, url: destinationUrl });
+      return 'shared';
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return 'copied';
+    }
+    throw new Error(t.ko ? '이 브라우저에서는 경로 공유를 지원하지 않습니다.' : 'Route sharing is not supported in this browser.');
+  }
+
+  function saveSlot(slot) {
+    if (!current || gpsState !== 'live') {
+      setHudPanel('position');
+      speakOrbit(t.gpsPermissionHint, language, setVoiceState);
+      return;
+    }
+    const slotLabel = slot === 'home' ? (t.ko ? '집' : 'Home') : (t.ko ? '회사' : 'Work');
+    const city = currentPlace?.city || currentPlace?.country || '';
+    const point = { ...current, label: city ? `${slotLabel} · ${city}` : slotLabel, country: currentPlace?.country || '' };
+    setBase({ ...setBasePoint(slot, point) });
+  }
+  function selectTab(id) {
+    const isClosing = tab === id;
+    setTab(isClosing ? 'live' : id);
+    // The mobile screen does not keep the desktop side cards on display.  Top
+    // controls therefore open their actual card instead of acting as a cosmetic
+    // highlight only.
+    setHudPanel(isClosing ? null : (TOP_TAB_PANELS[id] || null));
+    // Satellite is a functional display mode: opening its card also loads the
+    // latest available NASA GIBS observation; closing it returns to the local
+    // high-resolution Blue Marble map.
+    if (id === 'satellite') engineRef.current?.setSatelliteImagery(!isClosing);
+  }
+
+  function openMiningMap() {
+    setHudPanel(null);
+    setSearchOpen(false);
+    setMiningMapOpen(true);
+  }
+
+  function openOfficialMining() {
+    setMiningMapOpen(false);
+    onOpenMining?.();
+  }
 
   const dragRef = useRef(null);
   function onNovaPointerDown(e) {
@@ -532,14 +754,66 @@ export default function OrbitV20({ language, user }) {
     setNovaBusy(false);
   }
 
+  const navigationProfile = useMemo(() => createNavigationProfile(drivingRoute), [drivingRoute]);
+  const navigationProgress = useMemo(() => getNavigationProgress(navigationProfile, current), [navigationProfile, current?.lat, current?.lon]);
+  const activeDrivingStep = nextDrivingStep(drivingRoute, navigationProgress);
   const directDistanceKm = current && destination ? haversineKm(current, destination) : null;
-  const distanceKm = drivingRoute ? drivingRoute.distanceM / 1000 : directDistanceKm;
-  const etaHours = drivingRoute ? drivingRoute.durationSec / 3600 : null;
+  const remainingRouteM = navigationProgress?.remainingRouteM;
+  const distanceKm = drivingRoute ? (Number.isFinite(remainingRouteM) ? remainingRouteM : drivingRoute.distanceM) / 1000 : directDistanceKm;
+  const routeRemainingRatio = drivingRoute && Number.isFinite(remainingRouteM) ? Math.max(0, Math.min(1, remainingRouteM / Math.max(1, drivingRoute.distanceM))) : 1;
+  const etaHours = drivingRoute ? (drivingRoute.durationSec * routeRemainingRatio) / 3600 : null;
   const courseDeg = current && destination ? bearingDeg(current, destination) : null;
   const arrivalRadiusM = Math.max(80, Math.min((accuracy || 40) * 2, 250));
   const hasArrived = Boolean(navigationActive && distanceKm != null && distanceKm * 1000 <= arrivalRadiusM);
+
+  // Do not burn route requests every time a phone reports a new GPS coordinate.
+  // Re-route only after the GPS has remained clearly away from the current road
+  // for several seconds. The threshold grows with reported GPS accuracy.
+  useEffect(() => {
+    if (!navigationActive || !navigationProgress || !drivingRoute || hasArrived) {
+      offRouteSinceRef.current = 0;
+      return;
+    }
+    const thresholdM = Math.max(55, Math.min(150, (accuracy || 35) * 2.2));
+    if (navigationProgress.offRouteM <= thresholdM) {
+      offRouteSinceRef.current = 0;
+      return;
+    }
+    const currentTime = Date.now();
+    if (!offRouteSinceRef.current) {
+      offRouteSinceRef.current = currentTime;
+      return;
+    }
+    if (currentTime - offRouteSinceRef.current < 6_000 || currentTime - lastRerouteAtRef.current < 12_000) return;
+    lastRerouteAtRef.current = currentTime;
+    offRouteSinceRef.current = 0;
+    speakOrbit(navigationMessage('offRoute', language), language, setVoiceState);
+    requestRouteRefresh('off-route');
+  }, [navigationActive, navigationProgress?.offRouteM, current?.lat, current?.lon, drivingRoute?.navigationId, hasArrived, accuracy, language, t.ko]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Announce the two useful advance-warning distances once per maneuver. A
+  // maneuver progresses locally on the already-fetched route, so the prompt is
+  // not delayed by a network call while the captain is driving.
+  useEffect(() => {
+    if (!navigationActive || !activeDrivingStep || hasArrived) return;
+    const distanceToManeuverM = activeDrivingStep.distanceToManeuverM;
+    if (!Number.isFinite(distanceToManeuverM) || distanceToManeuverM <= 15) return;
+    const stage = distanceToManeuverM <= 100 ? '100m' : distanceToManeuverM <= 300 ? '300m' : null;
+    if (!stage) return;
+    const key = `${drivingRoute?.navigationId || 'route'}:${activeDrivingStep.stepIndex ?? activeDrivingStep.name}:${stage}`;
+    if (spokenGuidanceRef.current.has(key)) return;
+    spokenGuidanceRef.current.add(key);
+    speakOrbit(guidanceSpeech(activeDrivingStep, distanceToManeuverM, language), language, setVoiceState);
+  }, [navigationActive, activeDrivingStep?.stepIndex, activeDrivingStep?.name, activeDrivingStep?.distanceToManeuverM, drivingRoute?.navigationId, hasArrived, language, t.ko]);
+
+  useEffect(() => {
+    if (!navigationActive || !hasArrived || arrivalAnnouncedRef.current) return;
+    arrivalAnnouncedRef.current = true;
+    speakOrbit(navigationMessage('arrived', language), language, setVoiceState);
+  }, [navigationActive, hasArrived, language, t.ko]);
+
   const air = aqiLabel(aqi, t.ko);
-  const netStable = navigator.onLine !== false && apiHealthy;
+  const netStable = networkOnline && apiHealthy;
   const dataRate = navigator.connection?.downlink ? `${navigator.connection.downlink} Mbps` : '—';
   const uptimeMs = clock.getTime() - mountedAt.current;
   const uptimeStr = `${Math.floor(uptimeMs / 3600000)}h ${Math.floor((uptimeMs % 3600000) / 60000)}m`;
@@ -557,19 +831,22 @@ export default function OrbitV20({ language, user }) {
       if (current) engineRef.current?.flyTo(current.lat, current.lon);
     },
     issTracked, otherTracked, issPosition, satellites,
+    satelliteLayer,
+    onToggleSatelliteLayer: () => engineRef.current?.setSatelliteImagery(!satelliteLayer.enabled),
     weather, currentCity: currentPlace?.city, airQualityLabel: air, aqi,
     counts: eventCounts, topEvents,
     destination, searchQuery, searchResults, distanceKm, etaHours, courseDeg, base, navigationActive, hasArrived, arrivalRadiusM, routeStatus, drivingRoute,
-    onSearchChange: runSearch, onOpenSearch: openDestinationSearch, onPick: pickDestination, onAddFavorite: () => addFavorite(destination), onClearRoute: () => setDestination(null),
+    onSearchChange: runSearch, onOpenSearch: openDestinationSearch, onPick: pickDestination, onAddFavorite: () => addFavorite(destination), onClearRoute: () => { resetGuidanceSession(); setNavigationActive(false); setDrivingViewOpen(false); setDestination(null); },
     onStartNavigation: startNavigation, onStopNavigation: stopNavigation,
     onSaveHome: () => saveSlot('home'), onSaveWork: () => saveSlot('work'),
     netStable, dataRate, uptimeStr,
   };
+  const inTelegram = Boolean(window.Telegram?.WebApp?.initData);
 
   return (
     <div className="ov20-root">
-      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={drivingRoute?.steps?.[0]} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
-      <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} />
+      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} networkOnline={networkOnline} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
+      <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} onMiningMap={openMiningMap} />
       <div className="ov20-layout">
         <OrbitEarthView
           containerRef={containerRef}
@@ -603,7 +880,7 @@ export default function OrbitV20({ language, user }) {
             <button className="ov20-drawer-close" onClick={() => setHudPanel(null)} aria-label={t.close}>×</button>
             {hudPanel === 'position' && <OrbitCurrentPosition {...panelProps} />}
             {hudPanel === 'satellite' && <OrbitSatellite {...panelProps} />}
-            {hudPanel === 'destination' && <OrbitDestination {...panelProps} />}
+            {(hudPanel === 'destination' || hudPanel === 'base') && <OrbitDestination {...panelProps} />}
             {hudPanel === 'weather' && <OrbitWeather {...panelProps} />}
             {hudPanel === 'events' && <OrbitEvents {...panelProps} />}
           </section>
@@ -620,10 +897,14 @@ export default function OrbitV20({ language, user }) {
           navigationActive={navigationActive}
           hasArrived={hasArrived}
           routeStatus={routeStatus}
-          nextStep={drivingRoute?.steps?.[0]}
+          nextStep={activeDrivingStep}
+          gpsState={gpsState}
+          accuracy={accuracy}
+          networkOnline={networkOnline}
           onSearch={openDestinationSearch}
           onStartNavigation={startNavigation}
           onStopNavigation={stopNavigation}
+          onShareRoute={shareRouteSafely}
         />
       </div>
       <OrbitFloatingNova
@@ -634,9 +915,10 @@ export default function OrbitV20({ language, user }) {
       />
       <OrbitSearchOverlay
         open={searchOpen} t={t} language={language} query={searchQuery} results={searchResults} busy={searchBusy}
-        recent={recentDestinations} onChange={runSearch} onPick={pickDestination}
+        recent={recentDestinations} base={base} onChange={runSearch} onPick={pickDestination} onQuickDestination={selectQuickDestination}
         onClose={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); }}
       />
+      {miningMapOpen && !drivingViewOpen && <OrbitMiningMap language={language} inTelegram={inTelegram} onClose={() => setMiningMapOpen(false)} onOpenMining={openOfficialMining} />}
       <OrbitBottomBar />
     </div>
   );

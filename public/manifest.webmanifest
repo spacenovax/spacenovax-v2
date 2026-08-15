@@ -1,0 +1,19 @@
+{
+  "name": "SpaceNovaX · NOVA Guided Navigation Lite",
+  "short_name": "NOVA Navigate",
+  "description": "Free, privacy-respecting global navigation from SpaceNovaX.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071421",
+  "theme_color": "#01050e",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/spnx-splash-symbol-v3.webp",
+      "sizes": "2048x2048",
+      "type": "image/webp",
+      "purpose": "any maskable"
+    }
+  ]
+}

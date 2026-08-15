@@ -2143,7 +2143,7 @@ export default function V15App() {
   }
   let page;
   if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab} language={language}/>;
-  else if (tab === 'orbit') page = <Suspense fallback={<main className="v15-page"><section className="command-card ops-module"><div className="section-heading"><div><small>EARTH NAVIGATION NETWORK</small><h2>Orbit Control</h2></div><span className="live-state"><i/>CONNECTING</span></div></section></main>}><OrbitV20 language={language} user={user}/></Suspense>;
+  else if (tab === 'orbit') page = <Suspense fallback={<main className="v15-page"><section className="command-card ops-module"><div className="section-heading"><div><small>EARTH NAVIGATION NETWORK</small><h2>Orbit Control</h2></div><span className="live-state"><i/>CONNECTING</span></div></section></main>}><OrbitV20 language={language} user={user} onOpenMining={() => setTab('home')}/></Suspense>;
   else if (tab === 'game') page = <Game user={user} t={t} language={language}/>;
   else if (tab === 'ai') page = <NovaAI user={user} t={t} language={language}/>;
   else if (tab === 'community') page = <Community user={user} setUser={setUser} language={language} setTab={setTab}/>;

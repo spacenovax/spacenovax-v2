@@ -1,7 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrowserSpeechProvider } from '../../nova/voice/BrowserSpeechProvider.js';
 
-export default function OrbitSearchOverlay({ open, t, language, query, results, busy, recent, onChange, onPick, onClose }) {
+const QUICK_DESTINATIONS = [
+  { id: 'home', icon: '⌂', ko: '집', en: 'Home' },
+  { id: 'work', icon: '▣', ko: '회사', en: 'Work' },
+  { id: 'hospital', icon: '✚', ko: '병원', en: 'Hospital' },
+  { id: 'gas', icon: '⛽', ko: '주유소', en: 'Fuel' },
+  { id: 'police', icon: '⚑', ko: '경찰', en: 'Police' },
+  { id: 'airport', icon: '✈', ko: '공항', en: 'Airport' },
+];
+
+export default function OrbitSearchOverlay({ open, t, language, query, results, busy, recent, base, onChange, onPick, onQuickDestination, onClose }) {
   const inputRef = useRef(null);
   const speechRef = useRef(null);
   const heardRef = useRef('');
@@ -23,6 +32,7 @@ export default function OrbitSearchOverlay({ open, t, language, query, results, 
 
   if (!open) return null;
   const showRecent = query.trim().length < 2 && recent.length > 0;
+  const showQuick = query.trim().length < 2;
   const showEmpty = query.trim().length >= 2 && !busy && results.length === 0;
 
   return (
@@ -48,6 +58,17 @@ export default function OrbitSearchOverlay({ open, t, language, query, results, 
       {voiceState === 'listening' && <div className="ov20-search-voice-state"><i /> {t.voiceListening}</div>}
       {voiceState === 'unsupported' && <div className="ov20-search-voice-state error">{t.voiceUnavailable}</div>}
       <div className="ov20-search-content">
+        {showQuick && <section className="ov20-quick-destinations" aria-label={t.quickDestinations}>
+          <div className="ov20-search-section-title">⚡ {t.quickDestinations}</div>
+          <div className="ov20-quick-destination-grid">
+            {QUICK_DESTINATIONS.map((place) => {
+              const isSaved = (place.id === 'home' && base?.home) || (place.id === 'work' && base?.work);
+              return <button type="button" className={`ov20-quick-destination ${isSaved ? 'saved' : ''}`} key={place.id} onClick={() => onQuickDestination?.(place.id)}>
+                <i aria-hidden="true">{place.icon}</i><b>{t.ko ? place.ko : place.en}</b>{isSaved && <em aria-label={t.ko ? '저장됨' : 'Saved'}>•</em>}
+              </button>;
+            })}
+          </div>
+        </section>}
         {busy && <div className="ov20-search-state"><i />{t.searching}</div>}
         {showRecent && <div className="ov20-search-section-title">◷ {t.recent}</div>}
         {(showRecent ? recent : results).map((place) => (

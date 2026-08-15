@@ -128,25 +128,38 @@ export function reverseGeocode(lat, lon, language = 'en') {
 
 // Destination search — relayed through our server (Nominatim usage policy requires a
 // server-side User-Agent, not a direct browser call).
-export function searchDestination(query, language = 'en') {
-  const key = `geo:${query.toLowerCase()}:${language}`;
+export function searchDestination(query, language = 'en', { near = null } = {}) {
+  // Nearby quick destinations use a coarse (~100m) position only to bias the
+  // public search.  The client does not persist it and the route API still owns
+  // any actual navigation request.
+  const hasNearbyPoint = Number.isFinite(near?.lat) && Number.isFinite(near?.lon)
+    && Math.abs(near.lat) <= 90 && Math.abs(near.lon) <= 180;
+  const nearbyLat = hasNearbyPoint ? Number(near.lat.toFixed(3)) : null;
+  const nearbyLon = hasNearbyPoint ? Number(near.lon.toFixed(3)) : null;
+  const nearKey = hasNearbyPoint ? `:${nearbyLat.toFixed(3)},${nearbyLon.toFixed(3)}` : '';
+  const key = `geo:${query.toLowerCase()}:${language}${nearKey}`;
   return cachedFetch(key, 5 * 60_000, async () => {
-    const res = await fetch(`/api/orbit/geocode?q=${encodeURIComponent(query)}&lang=${encodeURIComponent(language)}`);
+    const nearbyParams = hasNearbyPoint ? `&nearLat=${encodeURIComponent(nearbyLat)}&nearLon=${encodeURIComponent(nearbyLon)}` : '';
+    const res = await fetch(`/api/orbit/geocode?q=${encodeURIComponent(query)}&lang=${encodeURIComponent(language)}${nearbyParams}`);
     const d = await res.json();
     if (!d.ok) throw new Error(d.message || 'Destination search unavailable');
     return d.results || [];
   });
 }
 
-export function fetchDrivingRoute(from, to) {
+export function fetchDrivingRoute(from, to, { fresh = false } = {}) {
   if (!from || !to) return Promise.resolve(null);
   const key = `drive:${from.lat.toFixed(3)},${from.lon.toFixed(3)}:${to.lat.toFixed(3)},${to.lon.toFixed(3)}`;
-  return cachedFetch(key, 45_000, async () => {
+  const loadRoute = async () => {
     const params = new URLSearchParams({ fromLat: from.lat, fromLon: from.lon, toLat: to.lat, toLon: to.lon });
+    if (fresh) params.set('fresh', '1');
     const res = await fetch(`/api/orbit/route?${params}`); const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.message || 'Driving route unavailable');
     return data.route || null;
-  });
+  };
+  // A deliberate off-route refresh must never be served a cached route that
+  // starts from the old road. Normal destination selection remains cached.
+  return fresh ? loadRoute() : cachedFetch(key, 45_000, loadRoute);
 }
 
 export function fetchSpaceWeather() {

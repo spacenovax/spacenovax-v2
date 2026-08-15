@@ -41,7 +41,6 @@ export default function OrbitEarthView({ containerRef, current, markerPos, marke
             <span>LAT</span>{current.lat.toFixed(2)}°&nbsp;<span>LON</span>{current.lon.toFixed(2)}°
           </div>
         )}
-        <div className="ov20-crosshair" />
         <div className={`ov20-texture-quality ${textureQuality.startsWith('8K') ? 'detail' : ''}`}>{textureQuality}</div>
         {markerTargets.map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} />)}
         <div className="ov20-globe-controls">
