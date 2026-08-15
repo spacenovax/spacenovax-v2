@@ -18,3 +18,15 @@ NASA source: <https://earthobservatory.nasa.gov/features/BlueMarble/BlueMarble_2
 
 The files are bundled locally so the Telegram WebView and mobile browsers do not depend
 on third-party cross-origin texture requests at runtime.
+
+## On-demand NASA satellite view
+
+When the Captain selects `SATELLITE`, Orbit requests the latest available
+`MODIS_Terra_CorrectedReflectance_TrueColor` global scene from NASA Global Imagery
+Browse Services (GIBS). The app relays and caches a 2048 × 1024 WMS image for ten
+minutes, and the UI credits `NASA GIBS · MODIS Terra` with the resolved UTC date.
+This is an observed true-colour satellite scene with cloud cover, not an invented
+storm texture. It is intended for situational viewing only; road navigation and
+safety decisions must not rely on it as an official weather-warning service.
+
+GIBS / Worldview source: <https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs>

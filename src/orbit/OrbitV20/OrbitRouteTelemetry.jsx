@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 function formatEta(hours, ko) {
   if (hours == null) return '—';
@@ -8,19 +8,52 @@ function formatEta(hours, ko) {
 
 // A compact route readout for the 3D Earth. It deliberately reports an estimate rather
 // than claiming turn-by-turn transport guidance: this is a global/orbital visualisation.
-export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, routeStatus, nextStep, onSearch, onStartNavigation, onStopNavigation }) {
+export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, routeStatus, nextStep, gpsState, accuracy, networkOnline, onSearch, onStartNavigation, onStopNavigation, onShareRoute }) {
   const hasRoute = Boolean(current && destination && distanceKm != null);
   const from = currentPlace?.city || currentPlace?.country || (t.ko ? '현재 위치' : 'Current position');
   const to = destination?.label?.split(',')[0] || (t.ko ? '목적지를 선택하세요' : 'Select a destination');
+  const [shareState, setShareState] = useState('');
+  const weakGps = gpsState === 'live' && Number.isFinite(accuracy) && accuracy > 80;
+  const locationUnavailable = gpsState && gpsState !== 'live';
+  const signalNotice = !networkOnline
+    ? t.offlineGuidance
+    : locationUnavailable
+      ? t.gpsPermissionHint
+      : weakGps
+        ? `${t.gpsSignalWeak} · ±${Math.round(accuracy)}m`
+        : '';
+
+  useEffect(() => {
+    if (!shareState) return undefined;
+    const timer = window.setTimeout(() => setShareState(''), 2800);
+    return () => window.clearTimeout(timer);
+  }, [shareState]);
+
+  async function shareRoute() {
+    if (!onShareRoute) return;
+    setShareState('working');
+    try {
+      const result = await onShareRoute();
+      setShareState(result === 'copied' ? 'copied' : 'shared');
+    } catch (error) {
+      if (error?.name === 'AbortError') setShareState('');
+      else setShareState('error');
+    }
+  }
 
   return (
     <section className={`ov20-route-telemetry ${hasRoute ? 'has-route' : ''}`} aria-label="Orbit route telemetry">
       <div className="ov20-route-head">
         <span className="ov20-route-icon">⌁</span>
-        <div><small>{hasArrived ? t.arrived : navigationActive ? t.liveGuidance : 'NOVA GLOBAL NAVIGATION'}</small><b>{from} <em>→</em> {to}</b></div>
-        <button onClick={onSearch}>{hasRoute ? (t.ko ? '경로 변경' : 'CHANGE') : t.findDestination}</button>
+        <div className="ov20-route-copy"><small>{hasArrived ? t.arrived : navigationActive ? t.liveGuidance : 'NOVA GLOBAL NAVIGATION'}</small><b>{from} <em>→</em> {to}</b></div>
+        <div className="ov20-route-actions">
+          {hasRoute && !navigationActive && !hasArrived && <button className="ov20-route-share" onClick={shareRoute} aria-label={t.ko ? '현재 위치를 포함하지 않고 목적지만 공유' : 'Share destination only; your current location is not included'}>{shareState === 'working' ? '…' : `↗ ${t.shareRoute}`}</button>}
+          <button onClick={onSearch}>{hasRoute ? (t.ko ? '경로 변경' : 'CHANGE') : t.findDestination}</button>
+        </div>
       </div>
-      {hasRoute && <small className="ov20-route-road-status">{routeStatus === 'loading' ? (t.ko ? '자동차 도로 경로 계산 중…' : 'CALCULATING DRIVING ROUTE…') : routeStatus === 'ready' ? `${t.ko ? '자동차 경로' : 'DRIVING ROUTE'}${nextStep?.name ? ` · ${nextStep.name}` : ''}` : (t.ko ? '도로 경로를 불러오지 못했습니다. 직선 거리만 표시합니다.' : 'Driving route unavailable. Showing direct distance.')}</small>}
+      {hasRoute && <small className="ov20-route-road-status">{routeStatus === 'loading' ? (t.ko ? '자동차 도로 경로 계산 중…' : 'CALCULATING DRIVING ROUTE…') : routeStatus === 'rerouting' ? (t.ko ? 'NOVA가 현재 위치에서 새 경로를 탐색 중입니다…' : 'NOVA IS FINDING A NEW ROUTE…') : routeStatus === 'saved' ? (t.ko ? 'NOVA LITE 저장 경로 · 연결 후 경로 확인' : 'NOVA LITE SAVED ROUTE · CHECK WHEN ONLINE') : routeStatus === 'ready' ? `${t.ko ? 'NOVA LITE 자동차 경로' : 'NOVA LITE DRIVING ROUTE'}${nextStep?.name ? ` · ${nextStep.name}` : ''}` : (t.ko ? '도로 경로를 불러오지 못했습니다. 직선 거리만 표시합니다.' : 'Driving route unavailable. Showing direct distance.')}</small>}
+      {hasRoute && signalNotice && <small className="ov20-route-signal-note">⚠ {signalNotice}</small>}
+      {shareState && shareState !== 'working' && <small className={`ov20-route-share-state ${shareState}`}>{shareState === 'copied' ? t.routeCopied : shareState === 'shared' ? t.routeShared : (t.ko ? '경로를 공유하지 못했습니다.' : 'Could not share this route.')}</small>}
       <div className="ov20-route-metrics">
         <div><small>{t.distance}</small><b>{hasRoute ? `${Math.round(distanceKm).toLocaleString()} km` : '—'}</b></div>
         <div><small>{t.eta}</small><b>{formatEta(etaHours, t.ko)}</b></div>

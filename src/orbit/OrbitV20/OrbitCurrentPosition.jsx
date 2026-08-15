@@ -5,6 +5,7 @@ export default function OrbitCurrentPosition({ t, current, currentPlace, heading
   if (!current) return null;
   const gpsLabel = gpsState === 'live' ? t.gpsLive : gpsState === 'locating' ? t.gpsLocating : t.gpsUnavailable;
   const isLive = gpsState === 'live';
+  const weakGps = isLive && Number.isFinite(accuracy) && accuracy > 80;
   return (
     <div className="ov20-card ov20-current-card">
       <div className="ov20-card-label ov20-position-label"><span>⌖ {t.currentPosition}</span><i className={gpsState === 'live' ? 'live' : ''}>{gpsLabel}</i></div>
@@ -15,7 +16,9 @@ export default function OrbitCurrentPosition({ t, current, currentPlace, heading
       <div className="ov20-row"><span>{t.altitude}</span><b>{isLive && current.altitude ? `${Math.round(current.altitude)}m` : '—'}</b></div>
       <div className="ov20-row"><span>{t.accuracy}</span><b>{isLive && accuracy ? `${Math.round(accuracy)}m` : '—'}</b></div>
       <div className="ov20-row"><span>{t.heading}</span><b>{isLive && typeof heading === 'number' ? `${Math.round(heading)}° ${compassLabel(heading)}` : '—'}</b></div>
-      <button className="ov20-btn" onClick={onMyLocation}>⊕ {t.myLocation}</button>
+      {weakGps && <small className="ov20-gps-signal-note">⚠ {t.gpsSignalWeak} · ±{Math.round(accuracy)}m</small>}
+      {!isLive && <small className="ov20-gps-signal-note">{t.gpsPermissionHint}</small>}
+      <button type="button" className="ov20-btn" onClick={onMyLocation}>⊕ {t.myLocation}</button>
     </div>
   );
 }

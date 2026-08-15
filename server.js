@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 62842)
+Total output lines: 4697
+
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -107,6 +110,8 @@ const GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW = 8;
 const GLOBAL_CHAT_ROOM_MESSAGE_LIMIT = Math.max(200, Math.min(5000, Number(process.env.GLOBAL_CHAT_ROOM_MESSAGE_LIMIT || 1200)));
 const GLOBAL_CHAT_TOTAL_MESSAGE_LIMIT = Math.max(GLOBAL_CHAT_ROOM_MESSAGE_LIMIT, Math.min(60000, Number(process.env.GLOBAL_CHAT_TOTAL_MESSAGE_LIMIT || GLOBAL_CHAT_ROOM_MESSAGE_LIMIT * 12)));
 const GLOBAL_CHAT_ROOM_MEDIA_LIMIT = Math.max(50, Math.min(1000, Number(process.env.GLOBAL_CHAT_ROOM_MEDIA_LIMIT || 150)));
+const NAVIGATION_REPORT_DAILY_LIMIT = 8;
+const NAVIGATION_REPORT_RETENTION = 5000;
 const GLOBAL_CHAT_ROOMS = [
   { id: 'global-en', flag: '🌐', name: 'Global (English)', nativeName: 'Global', language: 'English' },
   { id: 'korea', flag: '🇰🇷', name: 'Korea', nativeName: '한국어', language: 'Korean' },
@@ -124,7 +129,7 @@ const GLOBAL_CHAT_ROOMS = [
 const GLOBAL_CHAT_ROOM_BY_ID = new Map(GLOBAL_CHAT_ROOMS.map((room) => [room.id, room]));
 const MAX_SPONSORED_PARTNERS = 5;
 const MAX_SPONSORED_BANNER_IMAGE_BYTES = 900_000;
-const SPONSORED_BANNER_PLACEMENTS = new Set(['mining-top', 'global-chat']);
+const SPONSORED_BANNER_PLACEMENTS = new Set(['mining-top', 'global-chat', 'navigation-explore']);
 
 const DEFAULT_MISSIONS = [
   { id: 'website', title: 'Visit SpaceNovaX Website', icon: '🌐', reward: 100, type: 'one_time', url: 'https://spacenovax.com', action: 'OPEN', enabled: true },
@@ -276,6 +281,10 @@ function normalizeData(data) {
   data.messageReports = data.messageReports.slice(-5000);
   data.announcements ||= [];
   data.announcements = data.announcements.slice(-500);
+  // Map issue reports never need an indefinite, precise location history.
+  // Coordinates are rounded again at write time and retention is bounded.
+  data.navigationReports ||= [];
+  data.navigationReports = data.navigationReports.slice(-NAVIGATION_REPORT_RETENTION);
   data.settings.communityNodeLimit ??= COMMUNITY_NODE_LIMIT;
   data.settings.communityNodeBonusPercent ??= COMMUNITY_NODE_BONUS_PERCENT;
   for (const [pairingHash, pairing] of Object.entries(data.nodePairings)) {
@@ -1592,7 +1601,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=()');
+  // The Orbit navigation screen requests the device position from this same
+  // origin.  `geolocation=()` blocks that request before Android/Telegram can
+  // display its permission prompt, so allow only this app origin instead.
+  res.setHeader('Permissions-Policy', 'camera=(), geolocation=(self), payment=()');
   next();
 });
 app.use((req, res, next) => {
@@ -2290,206 +2302,7 @@ app.post('/api/community/post', (req, res) => {
   data.communityPosts.push(post);
   data.events.push({ type: 'community_post', userId: user.id, postId: post.id, hasImage: Boolean(imageUrl), at: now() });
   writeData(data);
-  res.json({ ok: true, post: publicCommunityPost(data, post, user.id) });
-});
-
-app.post('/api/profile/avatar', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  const imageData = String(req.body?.imageData || '');
-  const match = imageData.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
-  if (!match) return res.status(400).json({ ok: false, message: 'Choose a JPEG, PNG, or WebP profile image.' });
-  const buffer = Buffer.from(match[2], 'base64');
-  if (!buffer.length || buffer.length > 600_000) return res.status(413).json({ ok: false, message: 'Profile image must be 600 KB or smaller after optimization.' });
-  fs.mkdirSync(COMMUNITY_MEDIA_DIR, { recursive: true });
-  const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
-  const filename = `avatar-${crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 16)}-${Date.now()}.${extension}`;
-  fs.writeFileSync(path.join(COMMUNITY_MEDIA_DIR, filename), buffer);
-  const previous = String(user.avatarUrl || '');
-  user.avatarUrl = `/community-media/${filename}`;
-  user.updatedAt = now();
-  data.events.push({ type: 'profile_avatar_updated', userId: user.id, at: user.updatedAt });
-  writeData(data);
-  if (previous.startsWith('/community-media/avatar-')) {
-    const previousPath = path.join(COMMUNITY_MEDIA_DIR, path.basename(previous));
-    try { if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath); } catch {}
-  }
-  res.json({ ok: true, avatarUrl: user.avatarUrl, user: publicUser(data, user) });
-});
-
-app.post('/api/profile/nickname/check', (req, res) => {
-  const data = readData(); const user = getSessionUser(req, data); const nickname = String(req.body?.nickname || '').trim().replace(/\s+/g, ' ').slice(0, 20); const normalized = nickname.normalize('NFKC').toLocaleLowerCase();
-  const valid = nickname.length >= 2 && /^[\p{L}\p{N}_ .-]+$/u.test(nickname);
-  const available = valid && !Object.values(data.users || {}).some((member) => member.id !== user.id && String(member.communityNickname || '').normalize('NFKC').toLocaleLowerCase() === normalized);
-  res.json({ ok:true, valid, available });
-});
-
-app.post('/api/profile/nickname', (req, res) => {
-  const data = readData(); const user = getSessionUser(req, data); const nickname = String(req.body?.nickname || '').trim().replace(/\s+/g, ' ').slice(0, 20); const normalized = nickname.normalize('NFKC').toLocaleLowerCase();
-  if (nickname.length < 2 || !/^[\p{L}\p{N}_ .-]+$/u.test(nickname)) return res.status(400).json({ ok:false, message:'Nickname must be 2–20 characters and use letters, numbers, spaces, _, . or -.' });
-  if (Object.values(data.users || {}).some((member) => member.id !== user.id && String(member.communityNickname || '').normalize('NFKC').toLocaleLowerCase() === normalized)) return res.status(409).json({ ok:false, message:'This nickname is already in use.' });
-  user.communityNickname = nickname; user.updatedAt = now(); data.events.push({ type:'community_nickname_updated', userId:user.id, at:user.updatedAt }); writeData(data); res.json({ ok:true, user:publicUser(data,user) });
-});
-
-app.post('/api/community/like', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || '') && item.status !== 'removed');
-  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
-  post.likes ||= [];
-  post.likes = post.likes.includes(user.id) ? post.likes.filter((id) => id !== user.id) : [...post.likes, user.id];
-  writeData(data);
-  res.json({ ok: true, liked: post.likes.includes(user.id), likes: post.likes.length });
-});
-
-app.post('/api/community/comment', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || '') && item.status === 'published');
-  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
-  const body = String(req.body?.body || '').trim().slice(0, 500);
-  if (body.length < 2) return res.status(400).json({ ok: false, message: 'Comment must contain at least two characters.' });
-  post.comments ||= [];
-  const recent = post.comments.filter((comment) => comment.authorId === user.id && comment.createdAt > now() - 60000);
-  if (recent.length >= 5) return res.status(429).json({ ok: false, message: 'Please wait before adding more comments.' });
-  const comment = { id: crypto.randomUUID(), authorId: user.id, authorName: user.firstName || 'Captain', body, createdAt: now() };
-  post.comments.push(comment);
-  if (post.comments.length > 200) post.comments = post.comments.slice(-200);
-  data.events.push({ type: 'community_comment', userId: user.id, postId: post.id, commentId: comment.id, at: comment.createdAt });
-  writeData(data);
-  res.json({ ok: true, comment, comments: post.comments.slice(-30) });
-});
-
-app.post('/api/community/report', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  const post = (data.communityPosts || []).find((item) => item.id === String(req.body?.postId || ''));
-  if (!post) return res.status(404).json({ ok: false, message: 'Post not found.' });
-  if ((data.communityReports || []).some((report) => report.postId === post.id && report.userId === user.id)) return res.status(409).json({ ok: false, message: 'You already reported this post.' });
-  const report = { id: crypto.randomUUID(), postId: post.id, userId: user.id, reason: String(req.body?.reason || 'community_review').slice(0, 200), at: now() };
-  data.communityReports.push(report);
-  post.reports = Number(post.reports || 0) + 1;
-  if (post.reports >= 5) post.status = 'review';
-  data.events.push({ type: 'community_report', userId: user.id, postId: post.id, at: now() });
-  writeData(data);
-  res.json({ ok: true, message: 'Report submitted for administrator review.' });
-});
-
-app.post('/api/global-chat/rooms', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  if (!requireVerifiedCaptain(user, res)) return;
-  const applications = (data.globalChatModeratorApplications || [])
-    .filter((item) => item.userId === user.id)
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  res.json({
-    ok: true,
-    rooms: GLOBAL_CHAT_ROOMS.map((room) => publicGlobalChatRoom(data, room)),
-    viewer: {
-      isVerifiedCaptain: true,
-      applications: applications.map((item) => ({
-        id: item.id,
-        roomId: item.roomId,
-        status: item.status,
-        createdAt: Number(item.createdAt || 0),
-        reviewedAt: Number(item.reviewedAt || 0),
-      })),
-    },
-    retention: {
-      messagesPerRoom: GLOBAL_CHAT_ROOM_MESSAGE_LIMIT,
-      photosPerRoom: GLOBAL_CHAT_ROOM_MEDIA_LIMIT,
-      moderatorLimit: GLOBAL_CHAT_MAX_ROOM_MODERATORS,
-    },
-  });
-});
-
-app.post('/api/global-chat/messages', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  if (!requireVerifiedCaptain(user, res)) return;
-  const room = globalChatRoom(req.body?.roomId);
-  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
-  const blocked = new Set(user.globalChatBlocks || []);
-  const messages = (data.globalChatMessages || [])
-    .filter((message) => message.roomId === room.id && message.status === 'published' && !blocked.has(message.authorId))
-    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
-    .slice(-180)
-    .map((message) => publicGlobalChatMessage(data, message));
-  const viewer = globalChatViewerState(data, user, room.id);
-  res.json({
-    ok: true,
-    room: publicGlobalChatRoom(data, room),
-    messages,
-    viewer,
-    moderation: viewer.canModerate ? {
-      activeMutes: (data.globalChatMutes || [])
-        .filter((mute) => mute.status === 'active' && mute.roomId === room.id && Number(mute.until || 0) > now())
-        .sort((a, b) => Number(a.until || 0) - Number(b.until || 0))
-        .map((mute) => ({ id: mute.id, userId: mute.userId, firstName: globalChatDisplayName(data.users?.[mute.userId], 'Captain'), until: Number(mute.until || 0), reason: mute.reason || '' })),
-    } : null,
-    rules: {
-      maxMessageLength: GLOBAL_CHAT_MAX_MESSAGE_LENGTH,
-      photoLimitBytes: GLOBAL_CHAT_MAX_IMAGE_BYTES,
-      messageWindow: GLOBAL_CHAT_SEND_WINDOW_MS / 1000,
-      maxMessagesPerWindow: GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW,
-    },
-  });
-});
-
-app.post('/api/global-chat/send', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  if (!requireVerifiedCaptain(user, res)) return;
-  const room = globalChatRoom(req.body?.roomId);
-  if (!room) return res.status(404).json({ ok: false, message: 'Global chat room not found.' });
-  const activeMute = globalChatMutedUntil(data, user.id, room.id);
-  if (activeMute) return res.status(403).json({ ok: false, message: `Chat is temporarily paused in this room until ${new Date(activeMute.until).toLocaleString()}.` });
-
-  const body = normalizeGlobalChatText(req.body?.body);
-  const imageData = String(req.body?.imageData || '');
-  if (!body && !imageData) return res.status(400).json({ ok: false, message: 'Write a message or attach a photo.' });
-  if (body && globalChatContentBlocked(body)) return res.status(403).json({ ok: false, message: 'For your security, requests for wallet secrets, payments, impersonation, and unapproved links are blocked in Global Chat.' });
-  const recent = (data.globalChatMessages || []).filter((message) => message.authorId === user.id && Number(message.createdAt || 0) > now() - GLOBAL_CHAT_SEND_WINDOW_MS);
-  if (recent.length >= GLOBAL_CHAT_MAX_MESSAGES_PER_WINDOW) return res.status(429).json({ ok: false, message: 'Chat rate limit reached. Please wait a moment.' });
-
-  let imageUrl = '';
-  try {
-    if (imageData) imageUrl = saveGlobalChatImage(imageData);
-  } catch (error) {
-    return res.status(413).json({ ok: false, message: error.message || 'Photo upload failed.' });
-  }
-  const message = {
-    id: crypto.randomUUID(),
-    roomId: room.id,
-    authorId: user.id,
-    authorName: globalChatDisplayName(user),
-    authorAvatarUrl: user.avatarUrl || '',
-    body,
-    imageUrl,
-    imageExpired: false,
-    status: 'published',
-    reportCount: 0,
-    createdAt: now(),
-  };
-  data.globalChatMessages.push(message);
-  trimGlobalChatHistory(data);
-  data.events.push({ type: 'global_chat_message', userId: user.id, roomId: room.id, messageId: message.id, hasImage: Boolean(imageUrl), at: message.createdAt });
-  writeData(data);
-  res.status(201).json({ ok: true, message: publicGlobalChatMessage(data, message) });
-});
-
-app.post('/api/global-chat/block', (req, res) => {
-  const data = readData();
-  const user = getSessionUser(req, data);
-  if (!requireVerifiedCaptain(user, res)) return;
-  const targetId = String(req.body?.userId || '');
-  const action = String(req.body?.action || 'block');
-  if (!data.users?.[targetId] || targetId === user.id || !['block', 'unblock'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid block request.' });
-  user.globalChatBlocks ||= [];
-  user.globalChatBlocks = action === 'block'
-    ? [...new Set([...user.globalChatBlocks, targetId])]
-    : user.globalChatBlocks.filter((id) => id !== targetId);
-  data.events.push({ type: 'global_chat_block', userId: user.id, targetId, action, at: now() });
+  res.json({ ok: true, post: publicCommunityPost(data, post, user.id…2842 tokens truncated…t: now() });
   writeData(data);
   res.json({ ok: true, blocked: action === 'block' });
 });
@@ -4362,6 +4175,72 @@ app.get('/api/orbit/satellites', async (req, res) => {
   }
 });
 
+// NASA GIBS near-real-time true-colour imagery.  The image includes observed cloud
+// cover and is intentionally fetched server-side: the browser receives a same-origin
+// image with a short cache window instead of every Captain directly hitting NASA.
+// We keep this to a small, bounded in-memory cache because it is a public visual layer,
+// not user data.
+const ORBIT_SATELLITE_CACHE_MS = 10 * 60 * 1000;
+const ORBIT_SATELLITE_MAX_BYTES = 2_500_000;
+const orbitSatelliteImageCache = new Map();
+function orbitUtcDate(offsetDays = 0) {
+  const date = new Date(Date.now() + offsetDays * 86_400_000);
+  return date.toISOString().slice(0, 10);
+}
+function validOrbitSatelliteDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : null;
+}
+app.get('/api/orbit/satellite-imagery', async (req, res) => {
+  const requestedDate = validOrbitSatelliteDate(req.query.date) || orbitUtcDate();
+  const metadataOnly = String(req.query.meta || '') === '1';
+  // Today's polar-orbit composite can still be assembling.  Try it first, then use
+  // the latest complete day so the Satellite control always has a useful scene.
+  const candidateDates = [requestedDate, orbitUtcDate(-1), orbitUtcDate(-2)]
+    .filter((date, index, values) => values.indexOf(date) === index);
+  try {
+    for (const date of candidateDates) {
+      const cached = orbitSatelliteImageCache.get(date);
+      if (cached && now() - cached.at < ORBIT_SATELLITE_CACHE_MS) {
+        if (metadataOnly) return res.json({ ok: true, date, source: 'NASA GIBS · MODIS Terra', cached: true, fetchedAt: new Date(cached.at).toISOString() });
+        res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=600');
+        res.setHeader('X-Orbit-Satellite-Date', date);
+        res.setHeader('X-Orbit-Satellite-Source', 'NASA-GIBS-MODIS-Terra');
+        return res.type(cached.contentType).send(cached.body);
+      }
+
+      const sourceUrl = new URL('https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi');
+      sourceUrl.search = new URLSearchParams({
+        SERVICE: 'WMS', REQUEST: 'GetMap', VERSION: '1.1.1',
+        LAYERS: 'MODIS_Terra_CorrectedReflectance_TrueColor', STYLES: '',
+        SRS: 'EPSG:4326', BBOX: '-180,-90,180,90', WIDTH: '2048', HEIGHT: '1024',
+        FORMAT: 'image/jpeg', TRANSPARENT: 'FALSE', TIME: date,
+      }).toString();
+      const response = await fetch(sourceUrl, {
+        headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (NASA GIBS satellite imagery relay)' },
+        signal: AbortSignal.timeout(18_000),
+      });
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase().split(';')[0];
+      if (!response.ok || !/^image\/(jpeg|png|webp)$/.test(contentType)) continue;
+      const body = Buffer.from(await response.arrayBuffer());
+      if (!body.length || body.length > ORBIT_SATELLITE_MAX_BYTES) continue;
+      const entry = { at: now(), contentType, body };
+      orbitSatelliteImageCache.set(date, entry);
+      while (orbitSatelliteImageCache.size > 4) orbitSatelliteImageCache.delete(orbitSatelliteImageCache.keys().next().value);
+      if (metadataOnly) return res.json({ ok: true, date, source: 'NASA GIBS · MODIS Terra', cached: false, fetchedAt: new Date(entry.at).toISOString() });
+      res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=600');
+      res.setHeader('X-Orbit-Satellite-Date', date);
+      res.setHeader('X-Orbit-Satellite-Source', 'NASA-GIBS-MODIS-Terra');
+      return res.type(contentType).send(body);
+    }
+    throw new Error('NASA GIBS imagery is temporarily unavailable');
+  } catch (error) {
+    console.error('Orbit NASA satellite imagery failed', error.message);
+    return res.status(502).json({ ok: false, message: 'Satellite imagery temporarily unavailable.' });
+  }
+});
+
 // Destination and reverse-geocoding proxy for Earth Navigation.
 const geocodeCache = new Map();
 const GEOCODE_CACHE_MS = 30 * 60 * 1000;
@@ -4369,6 +4248,8 @@ app.get('/api/orbit/geocode', async (req, res) => {
   const query = String(req.query.q || '').trim().slice(0, 160);
   const latitude = req.query.lat !== undefined ? Number(req.query.lat) : null;
   const longitude = req.query.lon !== undefined ? Number(req.query.lon) : null;
+  const nearLatitude = req.query.nearLat !== undefined ? Number(req.query.nearLat) : null;
+  const nearLongitude = req.query.nearLon !== undefined ? Number(req.query.nearLon) : null;
   const language = String(req.query.lang || 'en').toLowerCase().replace(/[^a-z-]/g, '').slice(0, 5) || 'en';
 
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
@@ -4399,11 +4280,29 @@ app.get('/api/orbit/geocode', async (req, res) => {
   }
 
   if (query.length < 2) return res.json({ ok: true, results: [] });
-  const key = `search:${query.toLowerCase()}:${language}`;
+  const nearbyRequested = req.query.nearLat !== undefined || req.query.nearLon !== undefined;
+  const nearbyValid = Number.isFinite(nearLatitude) && Number.isFinite(nearLongitude)
+    && Math.abs(nearLatitude) <= 90 && Math.abs(nearLongitude) <= 180;
+  if (nearbyRequested && !nearbyValid) return res.status(400).json({ ok: false, message: 'Invalid nearby search coordinates.' });
+  // A viewbox biases Nominatim toward the Captain's area without restricting
+  // results to that box.  Coarse coordinates are used by the browser, and this
+  // transient preference is never written to Captain data.
+  const nearbyKey = nearbyValid ? `:${nearLatitude.toFixed(2)},${nearLongitude.toFixed(2)}` : '';
+  const key = `search:${query.toLowerCase()}:${language}${nearbyKey}`;
   const cached = geocodeCache.get(key);
   if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, results: cached.value, cached: true });
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}`;
+    let nearbyViewbox = '';
+    if (nearbyValid) {
+      const latRange = 0.18;
+      const lonRange = Math.min(1.2, Math.max(0.2, latRange / Math.max(0.25, Math.cos(nearLatitude * Math.PI / 180))));
+      const left = Math.max(-180, nearLongitude - lonRange).toFixed(3);
+      const right = Math.min(180, nearLongitude + lonRange).toFixed(3);
+      const top = Math.min(90, nearLatitude + latRange).toFixed(3);
+      const bottom = Math.max(-90, nearLatitude - latRange).toFixed(3);
+      nearbyViewbox = `&viewbox=${left},${top},${right},${bottom}&bounded=0`;
+    }
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}${nearbyViewbox}`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
       signal: AbortSignal.timeout(12_000),
@@ -4429,24 +4328,86 @@ app.get('/api/orbit/geocode', async (req, res) => {
 // directly: requests are validated, cached, and reduced to the route data the UI uses.
 const ORBIT_ROUTE_CACHE_MS = 45 * 1000;
 const orbitRouteCache = new Map();
+
+// A captain can flag a bad road or unsafe turn without contributing a precise
+// movement history. Reports are for later map-quality review; they never alter
+// an active route automatically and are deliberately rate-limited.
+app.post('/api/orbit/navigation-report', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const category = String(req.body?.category || 'other');
+  const allowedCategories = new Set(['missing_road', 'wrong_route', 'road_blocked', 'unsafe', 'other']);
+  if (!allowedCategories.has(category)) return res.status(400).json({ ok: false, message: 'Invalid map report category.' });
+  const latitude = Number(req.body?.location?.lat);
+  const longitude = Number(req.body?.location?.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    return res.status(400).json({ ok: false, message: 'A valid approximate location is required.' });
+  }
+  const recentReports = (data.navigationReports || []).filter((report) => report.userId === user.id && Number(report.createdAt || 0) > now() - 24 * 60 * 60 * 1000);
+  if (recentReports.length >= NAVIGATION_REPORT_DAILY_LIMIT) {
+    return res.status(429).json({ ok: false, message: 'You have reached today’s map report limit. Thank you for helping improve navigation.' });
+  }
+  const location = { lat: Number(latitude.toFixed(3)), lon: Number(longitude.toFixed(3)) };
+  const duplicate = recentReports.some((report) => report.category === category
+    && report.location?.lat === location.lat && report.location?.lon === location.lon
+    && Number(report.createdAt || 0) > now() - 6 * 60 * 60 * 1000);
+  if (duplicate) return res.status(409).json({ ok: false, message: 'This map issue was already reported recently from this approximate area.' });
+  const note = String(req.body?.note || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const destinationLabel = String(req.body?.destination?.label || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const report = {
+    id: crypto.randomUUID(),
+    userId: user.id,
+    category,
+    note,
+    destinationLabel,
+    // 3 decimal degrees is roughly a 100m area. Do not retain raw phone GPS.
+    location,
+    status: 'pending',
+    createdAt: now(),
+  };
+  data.navigationReports.push(report);
+  data.events.push({ type: 'orbit_navigation_report', userId: user.id, reportId: report.id, category, at: report.createdAt });
+  writeData(data);
+  res.status(201).json({ ok: true, message: 'Map report received. Your exact GPS location was not stored.' });
+});
+
 app.get('/api/orbit/route', async (req, res) => {
   const fromLat = Number(req.query.fromLat); const fromLon = Number(req.query.fromLon);
   const toLat = Number(req.query.toLat); const toLon = Number(req.query.toLon);
+  const fresh = req.query.fresh === '1';
   const coordinates = [fromLat, fromLon, toLat, toLon];
   if (!coordinates.every(Number.isFinite) || Math.abs(fromLat) > 90 || Math.abs(toLat) > 90 || Math.abs(fromLon) > 180 || Math.abs(toLon) > 180) return res.status(400).json({ ok: false, message: 'Invalid route coordinates.' });
   const key = `${fromLat.toFixed(3)},${fromLon.toFixed(3)}:${toLat.toFixed(3)},${toLon.toFixed(3)}`;
   const cached = orbitRouteCache.get(key);
-  if (cached && now() - cached.at < ORBIT_ROUTE_CACHE_MS) return res.json({ ok: true, route: cached.value, cached: true });
+  if (!fresh && cached && now() - cached.at < ORBIT_ROUTE_CACHE_MS) return res.json({ ok: true, route: cached.value, cached: true });
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson&steps=true&alternatives=false`;
     const response = await fetch(url, { headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public driving route relay)' }, signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error(`OSRM responded ${response.status}`);
     const source = (await response.json()).routes?.[0];
     if (!source || !Number.isFinite(source.distance) || !Number.isFinite(source.duration)) throw new Error('No drivable route found');
-    const rawPoints = source.geometry?.coordinates || []; const stride = Math.max(1, Math.ceil(rawPoints.length / 220));
+    const rawPoints = source.geometry?.coordinates || [];
+    // Keep enough geometry for a phone GPS to be matched to the correct road
+    // segment. The previous 220-point cap made a dense city turn look like a
+    // straight shortcut and produced false off-route events.
+    const stride = Math.max(1, Math.ceil(rawPoints.length / 720));
     const points = rawPoints.filter((_, index) => index % stride === 0 || index === rawPoints.length - 1).map(([lon, lat]) => ({ lat: Number(lat), lon: Number(lon) })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
     if (points.length < 2) throw new Error('Route geometry unavailable');
-    const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step) => ({ name: String(step.name || '').slice(0, 100), distanceM: Math.round(Number(step.distance) || 0), durationSec: Math.round(Number(step.duration) || 0), maneuver: { type: String(step.maneuver?.type || 'continue').slice(0, 32), modifier: String(step.maneuver?.modifier || '').slice(0, 32) } }));
+    const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step) => {
+      const maneuverLocation = Array.isArray(step.maneuver?.location) ? step.maneuver.location : [];
+      const maneuverLon = Number(maneuverLocation[0]); const maneuverLat = Number(maneuverLocation[1]);
+      return {
+        name: String(step.name || '').slice(0, 100),
+        distanceM: Math.round(Number(step.distance) || 0),
+        durationSec: Math.round(Number(step.duration) || 0),
+        maneuver: {
+          type: String(step.maneuver?.type || 'continue').slice(0, 32),
+          modifier: String(step.maneuver?.modifier || '').slice(0, 32),
+          location: Number.isFinite(maneuverLat) && Number.isFinite(maneuverLon) ? { lat: maneuverLat, lon: maneuverLon } : null,
+        },
+      };
+    });
     const route = { distanceM: Math.round(source.distance), durationSec: Math.round(source.duration), points, steps };
     orbitRouteCache.set(key, { at: now(), value: route }); if (orbitRouteCache.size > 160) orbitRouteCache.delete(orbitRouteCache.keys().next().value);
     return res.json({ ok: true, route, cached: false });

@@ -1,6 +1,6 @@
 export const NOVA_SPEECH_LOCALES = Object.freeze({
   en: 'en-US', ko: 'ko-KR', ja: 'ja-JP', zh: 'zh-CN', es: 'es-ES',
-  pt: 'pt-BR', de: 'de-DE', fr: 'fr-FR', ru: 'ru-RU', vi: 'vi-VN', id: 'id-ID',
+  pt: 'pt-BR', de: 'de-DE', fr: 'fr-FR', ru: 'ru-RU', vi: 'vi-VN', id: 'id-ID', ar: 'ar-SA',
 });
 
 export const normalizeNOVAFontLanguage = (language) => (

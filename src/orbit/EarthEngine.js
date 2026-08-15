@@ -242,14 +242,18 @@ void main() {
 }`;
 
 export default class EarthEngine {
-  constructor(container, { lowPower = false, onTextureQualityChange } = {}) {
+  constructor(container, { lowPower = false, onTextureQualityChange, onSatelliteLayerChange } = {}) {
     this.container = container;
     this.lowPower = lowPower;
     const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
     this.isTouchDevice = coarsePointer || (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints || 0) > 0);
     this.onTextureQualityChange = onTextureQualityChange;
+    this.onSatelliteLayerChange = onSatelliteLayerChange;
     this.textureQuality = '4K';
     this._detailLoadStarted = false;
+    this._satelliteRequestId = 0;
+    this.satelliteLayer = { enabled: false, loading: false, texture: null, date: '' };
+    this._disposed = false;
     this._gestureActive = false;
     this._gestureRestoreTimer = null;
     this._renderPixelRatio = 0;
@@ -308,19 +312,24 @@ export default class EarthEngine {
       tex.needsUpdate = true;
       return tex;
     };
+    this._prepareTexture = prepareTexture;
     // Always establish a known-good 2K surface first. The previous 4K WebP was a
     // truncated file whose header advertised 4096px even though browsers could not
     // decode its pixels, leaving only the blue placeholder and night lights visible.
     // The validated 4K derivative is loaded only after this safety texture succeeds.
     loader.load('/orbit/earth-day-nasa.jpg', (fallback) => {
       this.fallbackDayTexture = prepareTexture(fallback, { srgb: true });
-      this.earthMaterial.uniforms.dayMap.value = this.fallbackDayTexture;
-      this._announceTextureQuality('2K · SAFE');
+      if (!this.satelliteLayer.enabled) {
+        this.earthMaterial.uniforms.dayMap.value = this.fallbackDayTexture;
+        this._announceTextureQuality('2K · SAFE');
+      }
       loader.load('/orbit/earth-day-4k.jpg', (tex) => {
         this.baseDayTexture = prepareTexture(tex, { srgb: true });
-        this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
-        this._announceTextureQuality('4K');
-        this._updateTextureLOD();
+        if (!this.satelliteLayer.enabled) {
+          this.earthMaterial.uniforms.dayMap.value = this.baseDayTexture;
+          this._announceTextureQuality('4K');
+          this._updateTextureLOD();
+        }
       }, undefined, (err) => {
         this._announceTextureQuality('2K · SAFE');
         console.warn('Orbit: optional 4K Earth texture failed; staying on validated 2K.', err);
@@ -562,6 +571,14 @@ export default class EarthEngine {
   }
   _updateTextureLOD() {
     if (!this.earthMaterial || !this.renderer) return;
+    // NASA's near-real-time satellite scene deliberately replaces the bundled
+    // basemap while it is enabled.  Do not let an asynchronous 4K/8K base-map
+    // load overwrite the real observation a moment after the user turns it on.
+    if (this.satelliteLayer?.enabled && this.satelliteLayer.texture) {
+      this.earthMaterial.uniforms.dayMap.value = this.satelliteLayer.texture;
+      this._announceTextureQuality('NASA · SATELLITE');
+      return;
+    }
     const wantsDetail = this.camera.position.z <= 4.6;
     const supports8K = this.renderer.capabilities.maxTextureSize >= 8192;
     if (wantsDetail && supports8K && !this.detailDayTexture) this._loadDetailTexture();
@@ -574,6 +591,82 @@ export default class EarthEngine {
     } else if (wantsDetail && !supports8K) {
       this._announceTextureQuality(this.baseDayTexture ? '4K · DEVICE LIMIT' : '2K · DEVICE LIMIT');
     }
+  }
+
+  // The NASA GIBS endpoint is relayed by our server so every mobile client uses
+  // a same-origin, short-lived cache rather than hot-linking a public data service.
+  // Its true-colour surface contains the latest available observed cloud cover;
+  // it is a satellite-view mode, not a fabricated cloud animation.
+  setSatelliteImagery(enabled, { date } = {}) {
+    const nextEnabled = Boolean(enabled);
+    const requestId = ++this._satelliteRequestId;
+    const sourceDate = /^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))
+      ? String(date)
+      : new Date().toISOString().slice(0, 10);
+
+    if (!nextEnabled) {
+      this.satelliteLayer.enabled = false;
+      this.satelliteLayer.loading = false;
+      this.onSatelliteLayerChange?.({ enabled: false, status: 'idle', date: '' });
+      this._updateTextureLOD();
+      return;
+    }
+
+    // A ready image for this UTC day can be restored immediately.  The server
+    // still refreshes its underlying NASA response every ten minutes when a new
+    // request is needed.
+    if (this.satelliteLayer.texture && this.satelliteLayer.date === sourceDate) {
+      this.satelliteLayer.enabled = true;
+      this.satelliteLayer.loading = false;
+      this.earthMaterial.uniforms.dayMap.value = this.satelliteLayer.texture;
+      this._announceTextureQuality('NASA · SATELLITE');
+      this.onSatelliteLayerChange?.({ enabled: true, status: 'ready', date: sourceDate });
+      return;
+    }
+
+    this.satelliteLayer.enabled = true;
+    this.satelliteLayer.loading = true;
+    this.onSatelliteLayerChange?.({ enabled: true, status: 'loading', date: sourceDate });
+    const failSatelliteLoad = (error, resolvedDate = sourceDate) => {
+      if (this._disposed || requestId !== this._satelliteRequestId) return;
+      this.satelliteLayer.enabled = false;
+      this.satelliteLayer.loading = false;
+      this._updateTextureLOD();
+      this.onSatelliteLayerChange?.({ enabled: false, status: 'error', date: resolvedDate });
+      console.warn('Orbit: NASA satellite imagery failed; staying on the bundled basemap.', error);
+    };
+    // Resolve metadata first.  The image response tells the server which UTC day
+    // was actually available (it can fall back from an incomplete current-day
+    // polar-orbit composite), so the label never invents a capture date.
+    fetch(`/api/orbit/satellite-imagery?date=${encodeURIComponent(sourceDate)}&meta=1`)
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok || !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date || ''))) {
+          throw new Error(payload.message || 'NASA satellite metadata unavailable');
+        }
+        return String(payload.date);
+      })
+      .then((resolvedDate) => {
+        if (this._disposed || requestId !== this._satelliteRequestId || !this.satelliteLayer.enabled) return;
+        loader.load(`/api/orbit/satellite-imagery?date=${encodeURIComponent(resolvedDate)}`, (tex) => {
+          // TextureLoader may finish after the user turned the layer off or after
+          // the Orbit view unmounted.  Dispose that stale GPU texture immediately.
+          if (this._disposed || requestId !== this._satelliteRequestId || !this.satelliteLayer.enabled) {
+            tex.dispose();
+            return;
+          }
+          const prepared = this._prepareTexture(tex, { srgb: true });
+          const previous = this.satelliteLayer.texture;
+          this.satelliteLayer.texture = prepared;
+          this.satelliteLayer.date = resolvedDate;
+          this.satelliteLayer.loading = false;
+          this.earthMaterial.uniforms.dayMap.value = prepared;
+          if (previous && previous !== prepared) previous.dispose();
+          this._announceTextureQuality('NASA · SATELLITE');
+          this.onSatelliteLayerChange?.({ enabled: true, status: 'ready', date: resolvedDate });
+        }, undefined, (error) => failSatelliteLoad(error, resolvedDate));
+      })
+      .catch((error) => failSatelliteLoad(error));
   }
   recenter() {
     this.autoRotate = false;
@@ -813,7 +906,10 @@ export default class EarthEngine {
       seen.add(p.id);
       let sprite = this._swirlSprites.get(p.id);
       if (!sprite) {
-        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.85, depthTest: false });
+        // A storm on the far side of Earth must be hidden by the globe.  Turning
+        // depth testing off makes the sprite show through the sphere while it is
+        // rotated, which reads like an orange afterimage on mobile.
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.85, depthTest: true, depthWrite: false });
         sprite = new THREE.Sprite(material);
         sprite.scale.set(0.16, 0.16, 1);
         this._swirlGroup.add(sprite);
@@ -893,6 +989,8 @@ export default class EarthEngine {
   }
 
   dispose() {
+    this._disposed = true;
+    this._satelliteRequestId += 1;
     window.removeEventListener('resize', this._resizeHandler);
     if (this._gestureRestoreTimer) clearTimeout(this._gestureRestoreTimer);
     if (this._interactionHandlers) {
@@ -909,6 +1007,7 @@ export default class EarthEngine {
     this.fallbackDayTexture?.dispose();
     this.baseDayTexture?.dispose();
     this.detailDayTexture?.dispose();
+    this.satelliteLayer?.texture?.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
   }
 }
