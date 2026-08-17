@@ -266,6 +266,14 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
+    // Preflight WebGL before constructing Three.js. Some Telegram WebViews return
+    // no WebGL context and throw before the renderer's own error handling can run.
+    const probe = document.createElement('canvas');
+    const webgl = probe.getContext('webgl2') || probe.getContext('webgl') || probe.getContext('experimental-webgl');
+    if (!webgl) {
+      setWebglUnavailable(true);
+      return undefined;
+    }
     const perf = new PerformanceManager({ onModeChange: (low) => {
       MasterRenderLoop.setFrameSkip(low ? 2 : 1);
       engineRef.current?.setPerformanceMode(low);
