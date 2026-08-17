@@ -4476,6 +4476,27 @@ app.get('/api/orbit/geocode', async (req, res) => {
     }
   }
 
+  // Coordinates are a first-class destination format. This allows a Captain to
+  // paste a pin shared from any map without relying on a provider-specific link.
+  const coordinateMatch = query.match(/^\\s*([+-]?\\d{1,2}(?:\\.\\d+)?)\\s*[,/ ]\\s*([+-]?\\d{1,3}(?:\\.\\d+)?)\\s*$/);
+  if (coordinateMatch) {
+    const coordinateLat = Number(coordinateMatch[1]);
+    const coordinateLon = Number(coordinateMatch[2]);
+    if (Number.isFinite(coordinateLat) && Number.isFinite(coordinateLon) && Math.abs(coordinateLat) <= 90 && Math.abs(coordinateLon) <= 180) {
+      return res.json({ ok: true, results: [{
+        id: `coordinate:${coordinateLat.toFixed(6)},${coordinateLon.toFixed(6)}`,
+        label: `좌표 ${coordinateLat.toFixed(6)}, ${coordinateLon.toFixed(6)}`,
+        address: '입력한 위도·경도 좌표',
+        lat: coordinateLat,
+        lon: coordinateLon,
+        country: '',
+        type: 'coordinate',
+        category: 'coordinate',
+      }], cached: false });
+    }
+    return res.status(400).json({ ok: false, message: 'Invalid coordinate destination.', results: [] });
+  }
+
   if (query.length < 2) return res.json({ ok: true, results: [] });
   const nearbyRequested = req.query.nearLat !== undefined || req.query.nearLon !== undefined;
   const nearbyValid = Number.isFinite(nearLatitude) && Number.isFinite(nearLongitude)
@@ -4533,18 +4554,40 @@ app.get('/api/orbit/geocode', async (req, res) => {
     }
 
     const seen = new Set();
+    const radians = (value) => value * Math.PI / 180;
+    const distanceFromNearby = (lat, lon) => {
+      if (!nearbyValid) return null;
+      const a = Math.sin(radians(lat - nearLatitude) / 2) ** 2
+        + Math.cos(radians(nearLatitude)) * Math.cos(radians(lat))
+        * Math.sin(radians(lon - nearLongitude) / 2) ** 2;
+      return Math.round(6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    };
     const results = (items || []).map((item) => {
       const names = item.namedetails || {};
       const localName = names[`name:${language}`] || names[`name:${language.split('-')[0]}`] || names.name || '';
       const displayParts = String(item.display_name || '').split(',');
       if (localName && displayParts.length) displayParts[0] = localName;
+      const lat = Number(item.lat);
+      const lon = Number(item.lon);
+      const address = item.address || {};
+      const addressLine = [
+        address.road && address.house_number ? `${address.road} ${address.house_number}` : address.road,
+        address.neighbourhood || address.suburb || address.village || address.town || address.city || address.county,
+        address.state,
+        address.postcode,
+      ].filter(Boolean).join(', ');
+      const category = item.category || '';
+      const type = item.type || category || 'place';
       return {
         id: String(item.place_id),
         label: displayParts.join(',').trim(),
-        lat: Number(item.lat),
-        lon: Number(item.lon),
-        country: item.address?.country || '',
-        type: item.type || item.category || '',
+        address: addressLine || displayParts.slice(1).join(',').trim(),
+        lat,
+        lon,
+        country: address.country || '',
+        type,
+        category,
+        distanceM: distanceFromNearby(lat, lon),
       };
     }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)
       && place.label && !seen.has(place.id) && (seen.add(place.id) || true)).slice(0, 12);
