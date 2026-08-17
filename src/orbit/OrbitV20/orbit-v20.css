@@ -307,3 +307,8 @@
 
 /* Live driving telemetry: speed, remaining distance, recalculated ETA and arrival time. */
 .ov20-driving-bottom.ov20-driving-live-metrics{grid-template-columns:1fr 1fr 1fr 1.1fr}.ov20-driving-live-metrics>div:first-child b{color:#67f0d0}.ov20-driving-live-metrics>div:last-child b{color:#9edcff}@media(max-width:430px){.ov20-driving-bottom.ov20-driving-live-metrics>div{padding:10px 6px}.ov20-driving-live-metrics small{font-size:8px}.ov20-driving-live-metrics b{font-size:11px}}
+
+
+.ov20-driving-actions{position:absolute;left:12px;right:12px;bottom:86px;z-index:720;display:grid;grid-template-columns:1fr 1.35fr 1.35fr;gap:8px;padding:8px;border:1px solid rgba(51,213,255,.5);border-radius:14px;background:rgba(4,15,35,.92);box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.ov20-driving-actions button{min-height:42px;border:1px solid rgba(113,189,255,.55);border-radius:10px;background:#0d2444;color:#eaf7ff;font-weight:800;font-size:12px}
+.ov20-driving-actions button.primary{background:linear-gradient(100deg,#087ff5,#6545ed);border-color:#6edfff}
