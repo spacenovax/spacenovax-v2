@@ -221,6 +221,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [destination, setDestination] = useState(null);
   const [drivingRoute, setDrivingRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
+  const [routeMode, setRouteMode] = useState('recommended');
   const [offlinePacksOpen, setOfflinePacksOpen] = useState(false);
   const [offlinePacks, setOfflinePacks] = useState(() => listOfflineRegionPacks());
   const [lowDataMode, setLowDataMode] = useState(() => getLowDataMode());
@@ -533,9 +534,9 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     const rerouting = reason === 'off-route' || reason === 'start-refresh';
     setRouteStatus(rerouting ? 'rerouting' : 'loading');
     if (!drivingRoute) engineRef.current?.setRoute(current, destination);
-    fetchDrivingRoute(current, destination, { fresh: rerouting }).then((route) => {
+    fetchDrivingRoute(current, destination, { fresh: rerouting, mode: routeMode }).then((route) => {
       if (!active || requestId !== routeRequestRef.current) return;
-      const routeWithSession = { ...route, navigationId: `route-${Date.now()}-${requestId}`, origin: { lat: current.lat, lon: current.lon }, source: 'live' };
+      const routeWithSession = { ...route, routeMode, navigationId: `route-${Date.now()}-${requestId}`, origin: { lat: current.lat, lon: current.lon }, source: 'live' };
       setDrivingRoute(routeWithSession);
       // The last route is kept only on this device. It gives a captain a safe
       // fallback while a weak connection is returning; it is not uploaded and
@@ -573,7 +574,14 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     return () => { active = false; };
     // `current` is deliberately reduced to availability. Coordinates are used
     // only when a destination is chosen or a validated reroute increments the nonce.
-  }, [Boolean(current), destination?.id, destination?.lat, destination?.lon, routeRefreshNonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [Boolean(current), destination?.id, destination?.lat, destination?.lon, routeMode, routeRefreshNonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function selectRouteMode(mode) {
+    const nextMode = ['recommended', 'toll', 'free'].includes(mode) ? mode : 'recommended';
+    if (nextMode === routeMode) return;
+    setRouteMode(nextMode);
+    if (current && destination) requestRouteRefresh('route-mode');
+  }
 
   function requestRouteRefresh(reason = 'initial') {
     routeRefreshReasonRef.current = reason;
@@ -1131,6 +1139,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           onShareRoute={shareRouteSafely}
           onOpenOfflinePacks={() => setOfflinePacksOpen(true)}
           offlinePackCount={offlinePacks.length}
+          routeMode={routeMode}
+          onRouteModeChange={selectRouteMode}
         />
       </div>
       <OrbitOfflineRegionPacks
