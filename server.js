@@ -4481,13 +4481,25 @@ app.get('/api/orbit/geocode', async (req, res) => {
   const nearbyValid = Number.isFinite(nearLatitude) && Number.isFinite(nearLongitude)
     && Math.abs(nearLatitude) <= 90 && Math.abs(nearLongitude) <= 180;
   if (nearbyRequested && !nearbyValid) return res.status(400).json({ ok: false, message: 'Invalid nearby search coordinates.' });
-  // A viewbox biases Nominatim toward the Captain's area without restricting
-  // results to that box.  Coarse coordinates are used by the browser, and this
-  // transient preference is never written to Captain data.
+
+  // Keep the address exactly as supplied first.  When a Korean address is pasted
+  // with its spaces removed, provide one conservative, suffix-aware alternative
+  // (시·군·구·읍·면·동·리·로·길).  This broadens address matching without
+  // inventing a location or silently changing the Captain's destination.
+  const spacedAddressQuery = compactQuery.replace(
+    /(특별자치시|특별시|광역시|자치도|도|시|군|구|읍|면|동|리|로|길)(?=[가-힣0-9])/g,
+    '$1 ',
+  ).replace(/\s+/g, ' ').trim();
+  const searchTerms = [...new Set([
+    query,
+    compactQuery !== query ? compactQuery : '',
+    spacedAddressQuery !== query && spacedAddressQuery !== compactQuery ? spacedAddressQuery : '',
+  ].filter(Boolean))];
   const nearbyKey = nearbyValid ? `:${nearLatitude.toFixed(2)},${nearLongitude.toFixed(2)}` : '';
-  const key = `search:${query.toLowerCase()}:${language}${nearbyKey}`;
+  const key = `search:${searchTerms.join('|').toLowerCase()}:${language}${nearbyKey}`;
   const cached = geocodeCache.get(key);
   if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, results: cached.value, cached: true });
+
   try {
     let nearbyViewbox = '';
     if (nearbyValid) {
@@ -4500,7 +4512,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
       nearbyViewbox = `&viewbox=${left},${top},${right},${bottom}&bounded=0`;
     }
     const searchNominatim = async (term) => {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(term)}${nearbyViewbox}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&namedetails=1&extratags=1&dedupe=1&limit=12&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(term)}${nearbyViewbox}`;
       const response = await fetch(url, {
         headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
         signal: AbortSignal.timeout(12_000),
@@ -4508,20 +4520,34 @@ app.get('/api/orbit/geocode', async (req, res) => {
       if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
       return response.json();
     };
-    let items = await searchNominatim(query);
-    // Addresses are commonly pasted with missing or extra spaces. If the normal
-    // search found no public-map result, retry once with spaces removed. This is
-    // a bounded fallback, not fuzzy address invention.
-    if ((!items || items.length === 0) && compactQuery.length >= 2 && compactQuery !== query) {
-      items = await searchNominatim(compactQuery);
+
+    // Search once per user input in the normal case.  Only if it returns no
+    // map result do we try one normalized address variant; that keeps the public
+    // geocoder load bounded while supporting pasted/space-free addresses.
+    let items = await searchNominatim(searchTerms[0]);
+    if ((!items || items.length === 0) && searchTerms.length > 1) {
+      for (const fallbackTerm of searchTerms.slice(1)) {
+        items = await searchNominatim(fallbackTerm);
+        if (items?.length) break;
+      }
     }
+
+    const seen = new Set();
     const results = (items || []).map((item) => {
       const names = item.namedetails || {};
       const localName = names[`name:${language}`] || names[`name:${language.split('-')[0]}`] || names.name || '';
       const displayParts = String(item.display_name || '').split(',');
       if (localName && displayParts.length) displayParts[0] = localName;
-      return { id: String(item.place_id), label: displayParts.join(',').trim(), lat: Number(item.lat), lon: Number(item.lon), country: item.address?.country || '' };
-    });
+      return {
+        id: String(item.place_id),
+        label: displayParts.join(',').trim(),
+        lat: Number(item.lat),
+        lon: Number(item.lon),
+        country: item.address?.country || '',
+        type: item.type || item.category || '',
+      };
+    }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)
+      && place.label && !seen.has(place.id) && (seen.add(place.id) || true)).slice(0, 12);
     geocodeCache.set(key, { at: now(), value: results });
     return res.json({ ok: true, results, cached: false });
   } catch (error) {
