@@ -102,6 +102,12 @@ function MapReportPanel({ t, onClose, onSubmit }) {
 }
 
 function formatEta(hours, ko) { if (hours == null) return '—'; if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}${ko ? '분' : ' min'}`; return `${Math.floor(hours)}${ko ? '시간 ' : 'h '}${Math.round((hours % 1) * 60)}${ko ? '분' : 'min'}`; }
+function formatArrivalTime(hours, ko) {
+  if (!Number.isFinite(hours) || hours < 0) return '—';
+  const at = new Date(Date.now() + hours * 3600000);
+  const time = new Intl.DateTimeFormat(ko ? 'ko-KR' : 'en-US', { hour: 'numeric', minute: '2-digit' }).format(at);
+  return ko ? time + ' 도착' : time + ' arrival';
+}
 function turnSymbol(maneuver) { if (/left/i.test(maneuver)) return '↰'; if (/right/i.test(maneuver)) return '↱'; if (/uturn/i.test(maneuver)) return '↶'; return '↑'; }
 
 export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, liveSpeedMps, guidanceSafetyState = 'ready', networkOnline, onResume, onToggleLowDataMode, onReport, onExit, onStop }) {
