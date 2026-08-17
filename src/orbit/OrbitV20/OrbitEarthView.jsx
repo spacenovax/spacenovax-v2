@@ -8,18 +8,22 @@ function MarkerIcon({ type }) {
   if (type === 'base') return <span className="ov20-marker-symbol" aria-hidden="true">⌂</span>;
   if (type === 'typhoon') return <span className="ov20-marker-symbol ov20-typhoon-symbol" aria-hidden="true">◌</span>;
   if (type === 'satellite') return <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true"><i /><i /><b /></span>;
+  if (type === 'nearby') return <span className="ov20-marker-symbol" aria-hidden="true">⌖</span>;
   if (type === 'destination') return <span className="ov20-marker-symbol" aria-hidden="true">⌖</span>;
   return <span className="ov20-marker-symbol" aria-hidden="true">●</span>;
 }
 
-function Marker({ marker, projection }) {
+function Marker({ marker, projection, onPick }) {
   if (!projection?.visible) return null;
   const expanded = projection.expanded && marker.detail;
   return (
-    <div
-      className={`ov20-marker ov20-marker-${marker.type} ${expanded ? 'expanded' : 'compact'}`}
+    <button
+      type="button"
+      className={`ov20-marker ov20-marker-${marker.type} ${expanded ? 'expanded' : 'compact'} ${marker.selectable ? 'selectable' : ''}`}
       style={{ left: projection.x, top: projection.y, '--marker-scale': projection.scale || 1 }}
       aria-label={marker.label}
+      onClick={() => marker.selectable && onPick?.(marker)}
+      disabled={!marker.selectable}
     >
       <span className="ov20-marker-pulse" />
       <span className="ov20-marker-pin"><MarkerIcon type={marker.type} /></span>
@@ -27,11 +31,11 @@ function Marker({ marker, projection }) {
         <b>{marker.label}</b>
         {expanded && <small>{marker.detail}</small>}
       </span>
-    </div>
+    </button>
   );
 }
 
-export default function OrbitEarthView({ containerRef, current, markerPos, markerTargets = [], textureQuality = '2K · LOADING', onZoomIn, onZoomOut, onRecenter }) {
+export default function OrbitEarthView({ containerRef, current, markerPos, markerTargets = [], textureQuality = '2K · LOADING', onMarkerPick, onZoomIn, onZoomOut, onRecenter }) {
   return (
     <div className="ov20-globe-col">
       <div className="ov20-globe-wrap">
@@ -42,7 +46,7 @@ export default function OrbitEarthView({ containerRef, current, markerPos, marke
           </div>
         )}
         <div className={`ov20-texture-quality ${textureQuality.startsWith('8K') ? 'detail' : ''}`}>{textureQuality}</div>
-        {markerTargets.map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} />)}
+        {markerTargets.map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} onPick={onMarkerPick} />)}
         <div className="ov20-globe-controls">
           <button className="ov20-zoom-btn" onClick={onZoomIn}>−</button>
           <button className="ov20-recenter-btn" onClick={onRecenter}>⊕</button>

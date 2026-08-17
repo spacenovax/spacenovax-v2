@@ -382,6 +382,19 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         label: t.ko ? '캡틴 베이스' : 'CAPTAIN BASE', detail: base.home.label || (t.ko ? '집' : 'HOME'),
       });
     }
+    // Nearby search pins are shown only in the destination-search view.  This keeps
+    // the globe readable during active guidance and avoids encouraging phone use while driving.
+    if (searchOpen && nearbyAnchor) {
+      nearbyPlaces.filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)).slice(0, 12).forEach((place) => {
+        targets.push({
+          id: `nearby-${place.id}`, type: 'nearby', lat: place.lat, lon: place.lon,
+          label: place.label || (t.ko ? '주변 장소' : 'NEARBY PLACE'),
+          detail: [place.type, Number.isFinite(place.distanceKm) ? (place.distanceKm < 1 ? `${Math.round(place.distanceKm * 1000)} m` : `${place.distanceKm.toFixed(1)} km`) : ''].filter(Boolean).join(' · '),
+          place,
+          selectable: true,
+        });
+      });
+    }
     events.filter((event) => event.kind === 'typhoon' && event.stormName && Number.isFinite(event.lat)).forEach((event) => {
       targets.push({
         id: `storm-${event.id}`, type: 'typhoon', lat: event.lat, lon: event.lon,
@@ -403,11 +416,25 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       });
     });
     return targets;
-  }, [base.home, current, currentPlace, destination, events, issPosition, satellites, t.ko]);
+  }, [base.home, current, currentPlace, destination, events, issPosition, nearbyAnchor, nearbyPlaces, satellites, searchOpen, t.ko]);
 
   useEffect(() => {
     engineRef.current?.setLabelTargets(markerTargets);
   }, [markerTargets]);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (!searchOpen || !nearbyAnchor || !nearbyPlaces.length) {
+      engine.clearMarkerLayer('nearby-places');
+      return;
+    }
+    engine.setMarkerLayer('nearby-places', nearbyPlaces
+      .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon))
+      .slice(0, 12)
+      .map((place) => ({ id: `nearby-${place.id}`, lat: place.lat, lon: place.lon, color: 0x5ee7ff, size: 0.03 })),
+      { size: 0.03, color: 0x5ee7ff });
+  }, [nearbyAnchor, nearbyPlaces, searchOpen]);
 
   // Route calculation is intentionally event-driven, not tied to every GPS
   // update. While driving, the existing route is followed locally and only a
@@ -896,6 +923,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           markerPos={markerPos}
           markerTargets={markerTargets}
           textureQuality={earthQuality}
+          onMarkerPick={(marker) => { if (marker.selectable && marker.place) pickDestination(marker.place); }}
           onZoomIn={() => engineRef.current?.zoomBy(0.5)}
           onZoomOut={() => engineRef.current?.zoomBy(-0.5)}
           onRecenter={() => engineRef.current?.recenter()}
