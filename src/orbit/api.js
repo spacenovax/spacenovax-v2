@@ -164,14 +164,19 @@ export function fetchNearbyPlaces(lat, lon, language = 'en') {
   });
 }
 
-export function fetchDrivingRoute(from, to, { fresh = false } = {}) {
+export function fetchDrivingRoute(from, to, { fresh = false, mode = 'recommended' } = {}) {
   if (!from || !to) return Promise.resolve(null);
-  const key = `drive:${from.lat.toFixed(3)},${from.lon.toFixed(3)}:${to.lat.toFixed(3)},${to.lon.toFixed(3)}`;
+  const routeMode = ['recommended', 'toll', 'free'].includes(mode) ? mode : 'recommended';
+  const key = `drive:${routeMode}:${from.lat.toFixed(3)},${from.lon.toFixed(3)}:${to.lat.toFixed(3)},${to.lon.toFixed(3)}`;
   const loadRoute = async () => {
-    const params = new URLSearchParams({ fromLat: from.lat, fromLon: from.lon, toLat: to.lat, toLon: to.lon });
+    const params = new URLSearchParams({ fromLat: from.lat, fromLon: from.lon, toLat: to.lat, toLon: to.lon, mode: routeMode });
     if (fresh) params.set('fresh', '1');
     const res = await fetch(`/api/orbit/route?${params}`); const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.message || 'Driving route unavailable');
+    if (!res.ok || !data.ok) {
+      const error = new Error(data.message || 'Driving route unavailable');
+      error.code = data.code || '';
+      throw error;
+    }
     return data.route || null;
   };
   // A deliberate off-route refresh must never be served a cached route that
