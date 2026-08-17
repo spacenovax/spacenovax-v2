@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 12755)
+Total output lines: 959
+
 // Orbit V21 FINAL — main container. Owns ALL state, effects, and engine wiring; every
 // other file in this folder is a presentational component that receives props from here.
 // Engines (EarthEngine, SatelliteEngine, MasterRenderLoop, PerformanceManager) and data
@@ -27,10 +30,12 @@ import OrbitWeather from './OrbitWeather.jsx';
 import OrbitEvents from './OrbitEvents.jsx';
 import OrbitRouteTelemetry from './OrbitRouteTelemetry.jsx';
 import OrbitDrivingView from './OrbitDrivingView.jsx';
+import OrbitOfflineRegionPacks from './OrbitOfflineRegionPacks.jsx';
 import OrbitFloatingNova from './OrbitFloatingNova.jsx';
 import OrbitBottomBar from './OrbitBottomBar.jsx';
 import OrbitSearchOverlay from './OrbitSearchOverlay.jsx';
 import OrbitMiningMap from './OrbitMiningMap.jsx';
+import { listOfflineRegionPacks, loadCompatibleOfflineRegionPack, removeOfflineRegionPack, saveOfflineRegionPack } from '../navigationOfflinePacks.js';
 import './orbit-v20.css';
 
 function getOrbitClientId() {
@@ -182,6 +187,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [destination, setDestination] = useState(null);
   const [drivingRoute, setDrivingRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
+  const [offlinePacksOpen, setOfflinePacksOpen] = useState(false);
+  const [offlinePacks, setOfflinePacks] = useState(() => listOfflineRegionPacks());
   const [lowDataMode, setLowDataMode] = useState(() => getLowDataMode());
   const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [navigationActive, setNavigationActive] = useState(false);
@@ -435,79 +442,13 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       // Preserve the previously usable route when an off-route refresh has a
       // temporary network failure. Dropping it would leave a moving captain
       // without any visual guidance.
-      const saved = rerouting ? null : loadCompatibleLiteRoute({ current, destination });
+      const offlinePack = rerouting ? null : loadCompatibleOfflineRegionPack({ current, destination });
+      const saved = offlinePack || (rerouting ? null : loadCompatibleLiteRoute({ current, destination }));
       if (saved) {
         const savedRoute = {
           ...saved.route,
-          navigationId: `saved-route-${saved.savedAt}`,
-          origin: saved.origin,
-          source: 'saved',
-          savedAt: saved.savedAt,
-        };
-        setDrivingRoute(savedRoute);
-        setRouteStatus('saved');
-        engineRef.current?.setRoadRoute(saved.route.points);
-      } else {
-        if (!rerouting) setDrivingRoute(null);
-        setRouteStatus(rerouting && drivingRoute ? 'ready' : 'unavailable');
-      }
-    }).finally(() => {
-      if (requestId === routeRequestRef.current) routeRefreshReasonRef.current = 'initial';
-    });
-    return () => { active = false; };
-    // `current` is deliberately reduced to availability. Coordinates are used
-    // only when a destination is chosen or a validated reroute increments the nonce.
-  }, [Boolean(current), destination?.id, destination?.lat, destination?.lon, routeRefreshNonce]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function requestRouteRefresh(reason = 'initial') {
-    routeRefreshReasonRef.current = reason;
-    setRouteRefreshNonce((value) => value + 1);
-  }
-
-  function toggleLowDataMode() {
-    setLowDataMode((enabled) => persistLowDataMode(!enabled));
-  }
-
-  function resetGuidanceSession() {
-    spokenGuidanceRef.current.clear();
-    offRouteSinceRef.current = 0;
-    lastRerouteAtRef.current = 0;
-    arrivalAnnouncedRef.current = false;
-  }
-
-  function runSearch(q, { near = null } = {}) {
-    setSearchQuery(q);
-    clearTimeout(searchTimerRef.current);
-    const requestId = ++searchRequestRef.current;
-    const coordinate = coordinateDestination(q, t.ko);
-    if (coordinate) {
-      setSearchResults([coordinate]);
-      setSearchBusy(false);
-      return;
-    }
-    if (q.trim().length < 2) { setSearchResults([]); setSearchBusy(false); return; }
-    setSearchBusy(true);
-    searchTimerRef.current = setTimeout(async () => {
-      try {
-        const results = await searchDestination(q, language, { near });
-        if (requestId === searchRequestRef.current) setSearchResults(results);
-      } catch {
-        if (requestId === searchRequestRef.current) setSearchResults([]);
-      }
-      if (requestId === searchRequestRef.current) setSearchBusy(false);
-  }, 320);
-  }
-
-  useEffect(() => () => clearTimeout(searchTimerRef.current), []);
-
-  function openDestinationSearch() {
-    setMiningMapOpen(false);
-    setHudPanel(null);
-    setTab('live');
-    setSearchOpen(true);
-    const line = t.ko
-      ? 'Captain, 목적지 검색을 열었습니다. 도시, 주소, 관광지 이름을 입력하거나 최근 목적지를 선택해 주세요.'
-      : 'Captain, destination search is open. Enter a city, address, landmark, or choose a recent destination.';
+          navigationId: `${offlinePack ? 'offline-pack' : 'saved-route'}-${saved.savedAt}`,
+ …755 tokens truncated…en. Enter a city, address, landmark, or choose a recent destination.';
     speakOrbit(line, language, setVoiceState);
   }
 
@@ -601,7 +542,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     const firstStep = activeDrivingStep || nextDrivingStep(drivingRoute);
     const firstDirection = firstStep ? maneuverLabel(firstStep, language) : '';
     const roadName = firstStep?.name ? ` ${navigationMessage('roadDirection', language, { road: firstStep.name })}` : '';
-    const startLine = routeStatus === 'saved' || drivingRoute.source === 'saved'
+    const startLine = routeStatus === 'saved' || routeStatus === 'offline_pack' || drivingRoute.source === 'saved' || drivingRoute.source === 'offline-pack'
       ? `${navigationMessage('startSaved', language)} `
       : '';
     const line = `${startLine}${navigationMessage('start', language, { destination: destination.label.split(',')[0], kilometers: km.toLocaleString() })}${firstDirection ? ` ${navigationMessage('firstInstruction', language, { direction: firstDirection })}` : ''}${roadName}`;
@@ -787,6 +728,12 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     if (currentTime - offRouteSinceRef.current < 6_000 || currentTime - lastRerouteAtRef.current < 12_000) return;
     lastRerouteAtRef.current = currentTime;
     offRouteSinceRef.current = 0;
+    if (drivingRoute.source === 'offline-pack') {
+      speakOrbit(language === 'ko' ? '오프라인 지역 경로에서 벗어났습니다. 인터넷 연결 후 새 경로를 확인해 주세요.' : 'You left the offline regional route. Reconnect to check a new route.', language, setVoiceState);
+      setNavigationActive(false);
+      setDrivingViewOpen(false);
+      return;
+    }
     speakOrbit(navigationMessage('offRoute', language), language, setVoiceState);
     requestRouteRefresh('off-route');
   }, [navigationActive, navigationProgress?.offRouteM, current?.lat, current?.lon, drivingRoute?.navigationId, hasArrived, accuracy, language, t.ko]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -905,6 +852,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           onStartNavigation={startNavigation}
           onStopNavigation={stopNavigation}
           onShareRoute={shareRouteSafely}
+          onOpenOfflinePacks={() => setOfflinePacksOpen(true)}
+          offlinePackCount={offlinePacks.length}
         />
       </div>
       <OrbitFloatingNova
@@ -912,6 +861,16 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         voiceState={voiceState} novaMsgs={novaMsgs} novaInput={novaInput} novaBusy={novaBusy}
         onPointerDown={onNovaPointerDown} onPointerMove={onNovaPointerMove} onPointerUp={onNovaPointerUp}
         onInputChange={setNovaInput} onSend={sendNova} onGuide={startOrbitGuide} onSpeak={(text) => speakOrbit(text, language, setVoiceState)}
+      />
+      <OrbitOfflineRegionPacks
+        open={offlinePacksOpen}
+        t={t}
+        route={drivingRoute}
+        destination={destination}
+        packs={offlinePacks}
+        onSave={saveCurrentOfflinePack}
+        onRemove={deleteOfflinePack}
+        onClose={() => setOfflinePacksOpen(false)}
       />
       <OrbitSearchOverlay
         open={searchOpen} t={t} language={language} query={searchQuery} results={searchResults} busy={searchBusy}
