@@ -147,6 +147,23 @@ export function searchDestination(query, language = 'en', { near = null } = {}) 
   });
 }
 
+
+// Nearby discovery — requested only after a captain searches for a place. The
+// server resolves public OSM places around that selected result; no GPS history
+// is retained by the client or service.
+export function fetchNearbyPlaces(lat, lon, language = 'en') {
+  const safeLat = Number(lat);
+  const safeLon = Number(lon);
+  if (!Number.isFinite(safeLat) || !Number.isFinite(safeLon)) return Promise.resolve([]);
+  const key = `nearby:${safeLat.toFixed(3)},${safeLon.toFixed(3)}:${language}`;
+  return cachedFetch(key, 10 * 60_000, async () => {
+    const res = await fetch(`/api/orbit/nearby-places?lat=${encodeURIComponent(safeLat.toFixed(5))}&lon=${encodeURIComponent(safeLon.toFixed(5))}&lang=${encodeURIComponent(language)}`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.message || 'Nearby places unavailable');
+    return data.places || [];
+  });
+}
+
 export function fetchDrivingRoute(from, to, { fresh = false } = {}) {
   if (!from || !to) return Promise.resolve(null);
   const key = `drive:${from.lat.toFixed(3)},${from.lon.toFixed(3)}:${to.lat.toFixed(3)},${to.lon.toFixed(3)}`;
