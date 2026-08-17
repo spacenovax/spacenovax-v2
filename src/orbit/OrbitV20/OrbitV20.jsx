@@ -950,6 +950,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   useEffect(() => {
     if (!navigationActive || !hasArrived || arrivalAnnouncedRef.current) return;
     arrivalAnnouncedRef.current = true;
+    playGpsConnectedTone();
     speakOrbit(t.ko
       ? 'Captain, 목적지에 도착하였습니다. 안내를 종료하겠습니다.'
       : 'Captain, you have arrived at your destination. NOVA is ending guidance now.', language, setVoiceState);
