@@ -954,7 +954,13 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       setDrivingViewOpen(false);
       return;
     }
-    speakOrbit(navigationMessage('offRoute', language), language, setVoiceState);
+    // Audible, local-only recovery sequence.  The route refresh below uses the
+    // newly confirmed GPS position as its origin; no location history is stored.
+    playGpsConnectedTone();
+    speakOrbit(language === 'ko'
+      ? '경로를 이탈하셨습니다. GPS를 다시 검색하겠습니다.'
+      : 'You left the route. I will search for GPS again.', language, setVoiceState);
+    setRouteStatus('rerouting');
     requestRouteRefresh('off-route');
   }, [navigationActive, navigationProgress?.offRouteM, current?.lat, current?.lon, drivingRoute?.navigationId, hasArrived, accuracy, language, t.ko]); // eslint-disable-line react-hooks/exhaustive-deps
 
