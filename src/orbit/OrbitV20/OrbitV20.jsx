@@ -765,6 +765,20 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     speakOrbit(navigationMessage('ended', language), language, setVoiceState);
   }
 
+  function testGuidanceVoice() {
+    // This stays available while parked so a Captain can verify the browser's
+    // media permission before relying on spoken road guidance.
+    orbitSpeech.stop();
+    playGpsConnectedTone();
+    speakOrbit(
+      t.ko
+        ? '띵동. GPS 연결되었습니다. 안내를 시작하겠습니다. 이것은 NOVA 음성 테스트입니다.'
+        : 'GPS connected. Starting guidance. This is a NOVA voice test.',
+      language,
+      setVoiceState,
+    );
+  }
+
   async function submitNavigationReport({ category, note }) {
     if (!current || !destination) throw new Error(t.ko ? '현재 위치와 목적지를 먼저 설정해 주세요.' : 'Set your current location and destination first.');
     const result = await orbitApi('/api/orbit/navigation-report', {
@@ -1045,7 +1059,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   return (
     <div className="ov20-root">
-      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} liveSpeedMps={liveSpeedMps} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
+      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} liveSpeedMps={liveSpeedMps} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onTestVoice={testGuidanceVoice} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
       <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} onMiningMap={openMiningMap} />
       <div className="ov20-layout">
         {webglUnavailable ? <section className="ov20-webgl-fallback" role="status">
