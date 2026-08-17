@@ -12,3 +12,6 @@
 
 /* Address search clarity and keyboard selection */
 .nova-place-list button.active{border-color:#3b9dff;background:rgba(35,135,255,.16);box-shadow:inset 3px 0 #3b9dff}.nova-place-list button em{margin-left:auto;color:#80bff1;font-size:11px;font-style:normal;font-weight:800;white-space:nowrap}.nova-search-error{color:#ffb4b4}.nova-search-tip{margin:14px 3px;color:#92b9d6;font-size:12px;line-height:1.55}.nova-search-tip b{color:#d9edff}
+
+
+.nova-language-select{max-width:118px;border:1px solid #315a7d;border-radius:8px;background:#0e2740;color:#eaf5ff;padding:7px 8px;font:inherit;font-size:12px}.nova-language-select option{background:#0e2740;color:#fff}@media(max-width:640px){.nova-nav-header span{display:none}.nova-language-select{max-width:98px;font-size:11px;padding:6px}}
