@@ -262,6 +262,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const previousGpsFixRef = useRef(null);
   const guidancePauseSpokenRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
+  const offRouteAlertedRef = useRef(false);
   const arrivalAnnouncedRef = useRef(false);
 
   useEffect(() => {
@@ -598,6 +599,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     spokenGuidanceRef.current.clear();
     offRouteSinceRef.current = 0;
     lastRerouteAtRef.current = 0;
+    offRouteAlertedRef.current = false;
     arrivalAnnouncedRef.current = false;
   }
 
@@ -956,6 +958,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     const thresholdM = Math.max(55, Math.min(150, (accuracy || 35) * 2.2));
     if (navigationProgress.offRouteM <= thresholdM) {
       offRouteSinceRef.current = 0;
+      offRouteAlertedRef.current = false;
       return;
     }
     const currentTime = Date.now();
@@ -974,10 +977,13 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     }
     // Audible, local-only recovery sequence.  The route refresh below uses the
     // newly confirmed GPS position as its origin; no location history is stored.
-    playGpsConnectedTone();
-    speakOrbit(language === 'ko'
-      ? '경로를 이탈하셨습니다. GPS를 다시 검색하겠습니다.'
-      : 'You left the route. I will search for GPS again.', language, setVoiceState);
+    if (!offRouteAlertedRef.current) {
+      offRouteAlertedRef.current = true;
+      playGpsConnectedTone();
+      speakOrbit(language === 'ko'
+        ? '경로를 이탈하셨습니다. GPS를 다시 검색하겠습니다.'
+        : 'You left the route. I will search for GPS again.', language, setVoiceState);
+    }
     setRouteStatus('rerouting');
     requestRouteRefresh('off-route');
   }, [navigationActive, navigationProgress?.offRouteM, current?.lat, current?.lon, drivingRoute?.navigationId, hasArrived, accuracy, language, t.ko]); // eslint-disable-line react-hooks/exhaustive-deps
