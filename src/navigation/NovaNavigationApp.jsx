@@ -4,100 +4,35 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './nova-navigation.css';
 
-const DEFAULT_POSITION = { lat: 37.5665, lon: 126.978, heading: 0, speed: 0 };
+const DEFAULT = { lat: 37.5665, lon: 126.978, heading: 0, speed: 0 };
+const RECENT = 'spnx-nav-recent-destinations';
+const QUICK = [['🍽️', '맛집'], ['⛽', '주유소'], ['⚡', '전기차 충전소'], ['🅿️', '주차장']];
 const vehicleIcon = (heading = 0) => L.divIcon({ className: 'nova-nav-icon', html: `<b style="transform:rotate(${heading}deg)">▲</b>`, iconSize: [42, 42], iconAnchor: [21, 21] });
 const destinationIcon = L.divIcon({ className: 'nova-nav-destination', html: '<b>◆</b>', iconSize: [34, 34], iconAnchor: [17, 17] });
-
-function MapFollow({ current, route, navigating }) {
-  const map = useMap();
-  const fitted = useRef(false);
-  useEffect(() => {
-    if (!route?.points?.length || fitted.current) return;
-    fitted.current = true;
-    map.fitBounds(route.points.map((point) => [point.lat, point.lon]), { padding: [40, 90], maxZoom: 16, animate: true });
-  }, [map, route]);
-  useEffect(() => { if (navigating && current) map.panTo([current.lat, current.lon], { animate: true, duration: .35 }); }, [map, current?.lat, current?.lon, navigating]);
-  return null;
-}
-
-function normalizeQuery(value) { return String(value || '').trim().replace(/\s+/g, ' '); }
-function formatDistance(meters = 0) { return meters >= 1000 ? `${(meters / 1000).toFixed(meters >= 10000 ? 0 : 1)} km` : `${Math.max(0, Math.round(meters))} m`; }
-function formatEta(seconds = 0) { const minutes = Math.max(1, Math.round(seconds / 60)); return minutes < 60 ? `${minutes}분` : `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`; }
-function arrivalTime(seconds = 0) { return new Date(Date.now() + seconds * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }); }
-function distanceMeters(a, b) { const r = 6371000; const dLat = (b.lat - a.lat) * Math.PI / 180; const dLon = (b.lon - a.lon) * Math.PI / 180; const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2; return 2 * r * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)); }
-
-function ping() {
-  try { const context = new (window.AudioContext || window.webkitAudioContext)(); const start = context.currentTime; [740, 980].forEach((frequency, index) => { const oscillator = context.createOscillator(); const gain = context.createGain(); oscillator.frequency.value = frequency; gain.gain.setValueAtTime(.08, start + index * .14); gain.gain.exponentialRampToValueAtTime(.001, start + index * .14 + .12); oscillator.connect(gain).connect(context.destination); oscillator.start(start + index * .14); oscillator.stop(start + index * .14 + .13); }); } catch {}
-}
-function speak(text) { if (!('speechSynthesis' in window)) return; window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'ko-KR'; utterance.rate = .98; window.speechSynthesis.speak(utterance); }
+const clean = (v) => String(v || '').trim().replace(/\s+/g, ' ');
+const distance = (m = 0) => m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)} km` : `${Math.round(m)} m`;
+const eta = (s = 0) => { const n = Math.max(1, Math.round(s / 60)); return n < 60 ? `${n}분` : `${Math.floor(n / 60)}시간 ${n % 60}분`; };
+const arrival = (s = 0) => new Date(Date.now() + s * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+function meters(a, b) { const r = 6371000, dLat = (b.lat - a.lat) * Math.PI / 180, dLon = (b.lon - a.lon) * Math.PI / 180; const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2; return 2 * r * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)); }
+function ping() { try { const c = new (window.AudioContext || window.webkitAudioContext)(), t = c.currentTime; [740, 980].forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; g.gain.setValueAtTime(.08, t + i * .14); g.gain.exponentialRampToValueAtTime(.001, t + i * .14 + .12); o.connect(g).connect(c.destination); o.start(t + i * .14); o.stop(t + i * .14 + .13); }); } catch {} }
+function speak(text) { if (!('speechSynthesis' in window)) return; window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = .98; window.speechSynthesis.speak(u); }
+function readRecent() { try { return JSON.parse(localStorage.getItem(RECENT) || '[]'); } catch { return []; } }
+function MapFollow({ current, route, navigating }) { const map = useMap(), fitted = useRef(false); useEffect(() => { fitted.current = false; }, [route]); useEffect(() => { if (!route?.points?.length || fitted.current) return; fitted.current = true; map.fitBounds(route.points.map(p => [p.lat, p.lon]), { padding: [40, 120], maxZoom: 16, animate: true }); }, [map, route]); useEffect(() => { if (navigating) map.panTo([current.lat, current.lon], { animate: true, duration: .35 }); }, [map, current, navigating]); return null; }
 
 export default function NovaNavigationApp() {
-  const [current, setCurrent] = useState(DEFAULT_POSITION);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [destination, setDestination] = useState(null);
-  const [route, setRoute] = useState(null);
-  const [navigating, setNavigating] = useState(false);
-  const [notice, setNotice] = useState('출발지와 목적지를 선택하세요.');
-  const [locationState, setLocationState] = useState('GPS 확인 필요');
-  const watchRef = useRef(null);
-  const routeRef = useRef(null);
-  const currentRef = useRef(current);
-  const destinationRef = useRef(destination);
-  const navigatingRef = useRef(navigating);
-
-  useEffect(() => { routeRef.current = route; }, [route]);
-  useEffect(() => { currentRef.current = current; }, [current]);
-  useEffect(() => { destinationRef.current = destination; }, [destination]);
-  useEffect(() => { navigatingRef.current = navigating; }, [navigating]);
-  useEffect(() => () => { if (watchRef.current != null) navigator.geolocation?.clearWatch(watchRef.current); window.speechSynthesis?.cancel(); }, []);
-  useEffect(() => {
-    const value = normalizeQuery(query);
-    if (value.length < 2) { setResults([]); return undefined; }
-    const timer = setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/orbit/geocode?q=${encodeURIComponent(value)}&lang=ko`);
-        const data = await response.json();
-        setResults(data.results || []);
-      } catch { setResults([]); }
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  function updatePosition(position) {
-    const next = { lat: position.coords.latitude, lon: position.coords.longitude, heading: Number.isFinite(position.coords.heading) ? position.coords.heading : currentRef.current.heading, speed: Math.max(0, (position.coords.speed || 0) * 3.6) };
-    setCurrent(next); setLocationState('GPS 연결됨');
-    if (navigatingRef.current && routeRef.current?.points?.length && destinationRef.current && distanceMeters(next, destinationRef.current) < 35) {
-      ping(); speak('목적지에 도착하였습니다. 안내를 종료하겠습니다.'); setNotice('목적지에 도착했습니다. 안내를 종료했습니다.'); setNavigating(false);
-      if (watchRef.current != null) { navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; }
-    }
-  }
-  function requestLocation(announce = false) {
-    if (!navigator.geolocation) { setLocationState('이 기기에서는 GPS를 지원하지 않습니다'); return; }
-    setLocationState('GPS 연결 중…');
-    navigator.geolocation.getCurrentPosition((position) => { updatePosition(position); if (announce) { ping(); speak('GPS 연결되었습니다. 안내를 시작하겠습니다.'); } }, () => setLocationState('GPS 권한을 허용해 주세요.'), { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 });
-  }
-  async function buildRoute(place) {
-    setDestination(place); setRoute(null); setNotice('경로를 계산하고 있습니다…');
-    try {
-      const response = await fetch(`/api/orbit/route?fromLat=${currentRef.current.lat}&fromLon=${currentRef.current.lon}&toLat=${place.lat}&toLon=${place.lon}`);
-      const data = await response.json();
-      if (!data.ok) throw new Error(data.message);
-      setRoute(data.route); setNotice('경로가 준비되었습니다. 안내 시작을 누르세요.');
-    } catch (error) { setNotice(error.message || '경로를 찾지 못했습니다. 다른 장소를 선택해 주세요.'); }
-  }
-  function startNavigation() {
-    if (!route || !destination) return;
-    requestLocation(true); setNavigating(true); setNotice('NOVA가 경로 안내를 시작합니다.');
-    if (navigator.geolocation && watchRef.current == null) watchRef.current = navigator.geolocation.watchPosition(updatePosition, () => setLocationState('GPS 신호를 다시 찾고 있습니다…'), { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
-  }
-  function stopNavigation() { setNavigating(false); if (watchRef.current != null) { navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; } window.speechSynthesis?.cancel(); setNotice('경로 안내를 종료했습니다.'); }
+  const [current, setCurrent] = useState(DEFAULT), [query, setQuery] = useState(''), [results, setResults] = useState([]), [destination, setDestination] = useState(null), [route, setRoute] = useState(null), [navigating, setNavigating] = useState(false), [notice, setNotice] = useState('어디로 갈까요?'), [gps, setGps] = useState('GPS 확인 필요'), [screen, setScreen] = useState('home'), [recent, setRecent] = useState(readRecent);
+  const watch = useRef(null), routeRef = useRef(null), currentRef = useRef(current), destinationRef = useRef(destination), navigatingRef = useRef(navigating);
+  useEffect(() => { routeRef.current = route; }, [route]); useEffect(() => { currentRef.current = current; }, [current]); useEffect(() => { destinationRef.current = destination; }, [destination]); useEffect(() => { navigatingRef.current = navigating; }, [navigating]);
+  useEffect(() => () => { if (watch.current != null) navigator.geolocation?.clearWatch(watch.current); window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => { const term = clean(query); if (screen !== 'search' || term.length < 2) { setResults([]); return; } const timer = setTimeout(async () => { try { const r = await fetch(`/api/orbit/geocode?q=${encodeURIComponent(term)}&lang=ko`); setResults((await r.json()).results || []); } catch { setResults([]); } }, 250); return () => clearTimeout(timer); }, [query, screen]);
+  function updatePosition(pos) { const next = { lat: pos.coords.latitude, lon: pos.coords.longitude, heading: Number.isFinite(pos.coords.heading) ? pos.coords.heading : currentRef.current.heading, speed: Math.max(0, (pos.coords.speed || 0) * 3.6) }; setCurrent(next); setGps('GPS 연결됨'); if (navigatingRef.current && routeRef.current?.points?.length && destinationRef.current && meters(next, destinationRef.current) < 35) { ping(); speak('목적지에 도착하였습니다. 안내를 종료하겠습니다.'); setNotice('목적지에 도착했습니다. 안내를 종료했습니다.'); stopNavigation(); } }
+  function requestLocation(announce = false) { if (!navigator.geolocation) return setGps('이 기기에서는 GPS를 지원하지 않습니다'); setGps('GPS 연결 중…'); navigator.geolocation.getCurrentPosition(p => { updatePosition(p); if (announce) { ping(); speak('GPS 연결되었습니다. 안내를 시작하겠습니다.'); } }, () => setGps('GPS 권한을 허용해 주세요.'), { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 }); }
+  async function buildRoute(place) { setDestination(place); setRoute(null); setScreen('route'); setNotice('경로를 계산하고 있습니다…'); try { const r = await fetch(`/api/orbit/route?fromLat=${currentRef.current.lat}&fromLon=${currentRef.current.lon}&toLat=${place.lat}&toLon=${place.lon}`); const data = await r.json(); if (!data.ok) throw new Error(data.message); setRoute(data.route); setNotice('경로가 준비되었습니다. 안내 시작을 누르세요.'); } catch (e) { setNotice(e.message || '경로를 찾지 못했습니다. 다른 장소를 선택해 주세요.'); } }
+  function selectPlace(place) { const item = { id: place.id, label: place.label, lat: place.lat, lon: place.lon }; const next = [item, ...recent.filter(p => p.id !== item.id)].slice(0, 6); setRecent(next); try { localStorage.setItem(RECENT, JSON.stringify(next)); } catch {} setQuery(item.label); setResults([]); buildRoute(item); }
+  function startNavigation() { if (!route || !destination) return; requestLocation(true); setNavigating(true); setScreen('drive'); setNotice('NOVA가 경로 안내를 시작합니다.'); if (navigator.geolocation && watch.current == null) watch.current = navigator.geolocation.watchPosition(updatePosition, () => setGps('GPS 신호를 다시 찾고 있습니다…'), { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }); }
+  function stopNavigation() { setNavigating(false); if (watch.current != null) { navigator.geolocation.clearWatch(watch.current); watch.current = null; } window.speechSynthesis?.cancel(); setScreen('home'); }
+  function search() { setDestination(null); setRoute(null); setResults([]); setQuery(''); setScreen('search'); }
   const nextStep = useMemo(() => route?.steps?.[0], [route]);
-
-  return <main className="nova-navigation-app">
-    <header className="nova-nav-header"><a href="https://app.spacenovax.com" aria-label="SpaceNovaX 앱으로 돌아가기">✦ <b>SpaceNovaX</b></a><span>NOVA GUIDED NAVIGATION LITE</span><button onClick={() => requestLocation(false)}>⌖ 내 위치</button></header>
-    <section className="nova-nav-search"><div className="nova-nav-input"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="주소, 장소 또는 지역 이름 검색" autoComplete="street-address" /><button onClick={() => setQuery('')}>×</button></div>{results.length > 0 && <div className="nova-nav-results">{results.map((place) => <button key={place.id} onClick={() => { setQuery(place.label); setResults([]); buildRoute(place); }}><b>{place.label.split(',')[0]}</b><small>{place.label}</small><i>›</i></button>)}</div>}</section>
-    <section className="nova-nav-map-wrap"><MapContainer center={[current.lat, current.lon]} zoom={13} zoomControl className="nova-nav-map"><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} attribution="© OpenStreetMap contributors" />{route?.points?.length > 1 && <><Polyline positions={route.points.map((point) => [point.lat, point.lon])} pathOptions={{ color: '#06182d', weight: 15, opacity: .9 }} /><Polyline positions={route.points.map((point) => [point.lat, point.lon])} pathOptions={{ color: '#1b8cff', weight: 8 }} /></>}<Marker position={[current.lat, current.lon]} icon={vehicleIcon(current.heading)} />{destination && <Marker position={[destination.lat, destination.lon]} icon={destinationIcon} />}<MapFollow current={current} route={route} navigating={navigating} /></MapContainer>{navigating && <div className="nova-nav-next"><strong>{/left/i.test(nextStep?.maneuver?.modifier || '') ? '↰' : /right/i.test(nextStep?.maneuver?.modifier || '') ? '↱' : '↑'}</strong><div><small>다음 안내</small><b>{nextStep?.name || '안내 경로를 따라 이동하세요'}</b></div><em>{nextStep?.distanceM ? formatDistance(nextStep.distanceM) : '—'}</em></div>}</section>
-    <section className="nova-nav-panel"><div className="nova-nav-status"><i className={locationState === 'GPS 연결됨' ? 'ok' : ''} />{locationState}<span>{notice}</span></div>{destination ? <><div className="nova-nav-destination-label"><small>목적지</small><b>{destination.label.split(',')[0]}</b><button onClick={() => { setDestination(null); setRoute(null); setQuery(''); }}>변경</button></div>{route && <div className="nova-nav-stats"><div><small>남은 거리</small><b>{formatDistance(route.distanceM)}</b></div><div><small>예상 시간</small><b>{formatEta(route.durationSec)}</b></div><div><small>도착 예정</small><b>{arrivalTime(route.durationSec)}</b></div><div><small>현재 속도</small><b>{Math.round(current.speed)} km/h</b></div></div>}<div className="nova-nav-actions">{navigating ? <button className="danger" onClick={stopNavigation}>■ 길안내 종료</button> : <button className="primary" disabled={!route} onClick={startNavigation}>▶ 길안내 시작</button>}<button onClick={() => requestLocation(false)}>⌖ GPS 재검색</button></div></> : <div className="nova-nav-empty">목적지를 검색하면 주변 장소와 이동 경로를 표시합니다.</div>}<p className="nova-nav-safety">안전 안내: 실제 도로 표지·현지 교통법규를 우선하세요. GPS 및 지도 데이터는 보조 수단입니다.</p></section>
-  </main>;
+  const map = <section className="nova-nav-map-wrap"><MapContainer center={[current.lat, current.lon]} zoom={13} zoomControl className="nova-nav-map"><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} attribution="© OpenStreetMap contributors" />{route?.points?.length > 1 && <><Polyline positions={route.points.map(p => [p.lat, p.lon])} pathOptions={{ color: '#06182d', weight: 15, opacity: .9 }} /><Polyline positions={route.points.map(p => [p.lat, p.lon])} pathOptions={{ color: '#1b8cff', weight: 8 }} /></>}<Marker position={[current.lat, current.lon]} icon={vehicleIcon(current.heading)} />{destination && <Marker position={[destination.lat, destination.lon]} icon={destinationIcon} />}<MapFollow current={current} route={route} navigating={navigating} /></MapContainer>{navigating && <div className="nova-nav-next"><strong>{/left/i.test(nextStep?.maneuver?.modifier || '') ? '↰' : /right/i.test(nextStep?.maneuver?.modifier || '') ? '↱' : '↑'}</strong><div><small>다음 안내</small><b>{nextStep?.name || '안내 경로를 따라 이동하세요'}</b></div><em>{nextStep?.distanceM ? distance(nextStep.distanceM) : '—'}</em></div>}</section>;
+  return <main className="nova-navigation-app"><header className="nova-nav-header"><a href="https://app.spacenovax.com">✦ <b>SpaceNovaX</b></a><span>NOVA GUIDED NAVIGATION LITE</span><button onClick={() => requestLocation(false)}>⌖ 내 위치</button></header>{screen === 'search' ? <section className="nova-search-screen"><div className="nova-search-bar"><button onClick={() => { setScreen('home'); setQuery(''); }}>←</button><input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="장소, 주소 또는 지역 이름 검색" /><button onClick={() => setQuery('')}>×</button></div><div className="nova-search-shortcuts"><button onClick={() => requestLocation(false)}>⌖ 내 위치</button><button onClick={() => setQuery('집')}>⌂ 집</button><button onClick={() => setQuery('회사')}>▣ 회사</button></div><div className="nova-place-list">{results.map(place => <button key={place.id} onClick={() => selectPlace(place)}><span>⌕</span><div><b>{place.label.split(',')[0]}</b><small>{place.label}</small></div><i>›</i></button>)}{!results.length && !query && <><h2>최근 목적지</h2>{recent.map(place => <button key={place.id} onClick={() => selectPlace(place)}><span>◷</span><div><b>{place.label.split(',')[0]}</b><small>{place.label}</small></div><i>›</i></button>)}{!results.length && !query && !recent.length && <p>검색한 장소가 여기에 표시됩니다.</p>}</div></section> : <>{map}<section className="nova-nav-panel">{screen === 'home' && <><button className="nova-where" onClick={search}>⌕ <b>어디로 갈까요?</b><span>›</span></button><div className="nova-quick-searches">{QUICK.map(([icon, text]) => <button key={text} onClick={() => { setQuery(text); setScreen('search'); }}>{icon} {text}</button>)}</div><div className="nova-home-sheet"><div><b>최근 목적지</b><button onClick={search}>전체 보기</button></div><div className="nova-saved-places"><button onClick={() => { setQuery('집'); setScreen('search'); }}>⌂ <span>집 등록하기</span>›</button><button onClick={() => { setQuery('회사'); setScreen('search'); }}>▣ <span>회사 등록하기</span>›</button></div>{recent.slice(0, 3).map(place => <button className="nova-recent-place" key={place.id} onClick={() => selectPlace(place)}><span>◷</span>{place.label.split(',')[0]}<i>›</i></button>)}</div></>}{screen === 'route' && <><div className="nova-route-head"><div><small>목적지</small><b>{destination?.label.split(',')[0]}</b></div><button onClick={search}>목적지 변경</button></div>{route ? <><div className="nova-route-choice selected"><small>추천 경로 · 지도 데이터 기준</small><b>{eta(route.durationSec)}</b><span>{distance(route.distanceM)} · {arrival(route.durationSec)} 도착 예정</span></div><p className="nova-route-note">실시간 교통·통행료 정보는 연결된 지역 데이터 제공 시 표시됩니다.</p><div className="nova-nav-actions"><button className="primary" onClick={startNavigation}>▶ 안내 시작</button><button onClick={search}>상세 검색</button></div></> : <div className="nova-loading">경로를 계산하고 있습니다…</div>}</>}{screen === 'drive' && <><div className="nova-drive-head"><div><small>목적지까지</small><b>{distance(route?.distanceM)}</b></div><div><small>예상 도착</small><b>{arrival(route?.durationSec)}</b></div><div><small>현재 속도</small><b>{Math.round(current.speed)} km/h</b></div></div><div className="nova-nav-actions"><button className="danger" onClick={stopNavigation}>■ 길안내 종료</button><button onClick={search}>목적지 변경</button><button onClick={() => requestLocation(false)}>⌖ GPS</button></div></>}<div className="nova-nav-status"><i className={gps === 'GPS 연결됨' ? 'ok' : ''} />{gps}<span>{notice}</span></div><p className="nova-nav-safety">안전 안내: 실제 도로 표지·현지 교통법규를 우선하세요. GPS 및 지도 데이터는 보조 수단입니다.</p></section></>}</main>;
 }
