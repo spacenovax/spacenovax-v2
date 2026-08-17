@@ -110,7 +110,7 @@ function formatArrivalTime(hours, ko) {
 }
 function turnSymbol(maneuver) { if (/left/i.test(maneuver)) return '↰'; if (/right/i.test(maneuver)) return '↱'; if (/uturn/i.test(maneuver)) return '↶'; return '↑'; }
 
-export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, liveSpeedMps, guidanceSafetyState = 'ready', networkOnline, onResume, onToggleLowDataMode, onReport, onExit, onStop }) {
+export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, liveSpeedMps, guidanceSafetyState = 'ready', networkOnline, onResume, onChangeDestination, onToggleLowDataMode, onReport, onExit, onStop }) {
   const [recenterToken, setRecenterToken] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const points = useMemo(() => (route?.points || []).map((point) => [point.lat, point.lon]), [route]);
@@ -167,6 +167,11 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
     {guidancePaused && <aside className="ov20-driving-safety-pause" role="alert"><b>{t.ko ? '음성 안내가 일시 정지되었습니다' : 'Voice guidance is paused'}</b><small>{t.ko ? 'GPS를 확인하고 안전한 곳에 정차한 뒤 다시 시작하세요. 도로 표지·현장 통제·교통법규를 우선하세요.' : 'Check GPS and resume only when safely stopped. Follow road signs, local controls, and traffic laws.'}</small><button onClick={onResume}>{t.ko ? 'GPS 확인 후 다시 시작' : 'RESUME AFTER GPS CHECK'}</button></aside>}
     <div className="ov20-driving-instruction"><strong>{turnSymbol(maneuver)}</strong><div><small>{t.ko ? '다음 안내' : 'NEXT MANEUVER'}</small><b>{road}</b>{Number.isFinite(navigationProgress?.offRouteM) && navigationProgress.offRouteM > 55 && <small className="ov20-driving-gps-note">{t.ko ? 'GPS 위치 확인 중' : 'CHECKING GPS POSITION'}</small>}{signalNote && <small className="ov20-driving-gps-note warning">⚠ {signalNote}</small>}</div><em>{Number.isFinite(maneuverDistanceM) ? `${Math.max(1, Math.round(maneuverDistanceM / 10) * 10)} m` : '—'}</em></div>
     {reportOpen && <MapReportPanel t={t} onClose={() => setReportOpen(false)} onSubmit={onReport} />}
+    <section className="ov20-driving-actions" aria-label={t.ko ? '길안내 설정' : 'Navigation settings'}>
+      <button onClick={() => setRecenterToken((value) => value + 1)}>⌖ {t.ko ? '내 위치' : 'MY LOCATION'}</button>
+      <button onClick={onChangeDestination}>⌕ {t.ko ? '목적지 변경' : 'CHANGE DESTINATION'}</button>
+      {guidancePaused ? <button className="primary" onClick={onResume}>▶ {t.ko ? '길안내 재개' : 'RESUME GUIDANCE'}</button> : <button className="primary" onClick={onStop}>■ {t.ko ? '길안내 종료' : 'END GUIDANCE'}</button>}
+    </section>
     <footer className="ov20-driving-bottom ov20-driving-live-metrics">
       <div><small>{t.ko ? '현재 속도' : 'LIVE SPEED'}</small><b>{speedKmh == null ? '—' : `${Math.round(speedKmh)} km/h`}</b></div>
       <div><small>{t.remaining}</small><b>{distanceKm == null ? '—' : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km`}</b></div>
