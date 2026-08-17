@@ -645,10 +645,15 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 
   function openDestinationSearch() {
-    // The globe is the SpaceNovaX command view.  Destination search, route
-    // selection and live guidance continue in the dedicated navigation page.
-    // Use the same webview so the Captain does not have to reopen the app.
-    window.location.assign('https://nav.spacenovax.com');
+    // Navigation needs the browser's reliable speech and media support.  When
+    // launched from the Telegram Mini App, open the dedicated site externally;
+    // otherwise keep the same-tab web navigation fallback.
+    const navigationUrl = 'https://nav.spacenovax.com';
+    if (window.Telegram?.WebApp?.openLink) {
+      window.Telegram.WebApp.openLink(navigationUrl);
+      return;
+    }
+    window.location.assign(navigationUrl);
   }
 
   function selectQuickDestination(kind) {
