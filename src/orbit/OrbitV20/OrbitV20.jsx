@@ -189,6 +189,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [lowDataMode, setLowDataMode] = useState(() => getLowDataMode());
   const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [navigationActive, setNavigationActive] = useState(false);
+  const [guidanceSafetyState, setGuidanceSafetyState] = useState('ready');
   const [drivingViewOpen, setDrivingViewOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -220,6 +221,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const routeRefreshReasonRef = useRef('initial');
   const spokenGuidanceRef = useRef(new Set());
   const offRouteSinceRef = useRef(0);
+  const lastGpsAtRef = useRef(0);
+  const guidancePauseSpokenRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const arrivalAnnouncedRef = useRef(false);
 
@@ -277,6 +280,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     let active = true;
     const applyPosition = (pos) => {
       if (!active) return;
+      lastGpsAtRef.current = Date.now();
       setCurrent(pos);
       setAccuracy(pos.accuracy || null);
       setHeading(typeof pos.heading === 'number' ? pos.heading : null);
@@ -287,7 +291,13 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       }
     };
     const useFallback = () => {
-      if (!active || initialGpsFixRef.current) return;
+      if (!active) return;
+      // After a valid fix, preserve the last known point for map context but do not
+      // treat it as live guidance data. The safety monitor pauses voice guidance.
+      if (initialGpsFixRef.current) {
+        setGpsState('lost');
+        return;
+      }
       setGpsState('unavailable');
       // Keep a neutral map center only.  This must never be presented as the
       // captain's current location when phone GPS permission is unavailable.
@@ -617,6 +627,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   // Distance -> Time -> NOVA Voice, all from one selection.
   async function pickDestination(place) {
     resetGuidanceSession();
+    guidancePauseSpokenRef.current = false;
+    setGuidanceSafetyState('ready');
     setNavigationActive(false);
     setDrivingViewOpen(false);
     setDrivingRoute(null);
@@ -656,6 +668,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       return;
     }
     resetGuidanceSession();
+    guidancePauseSpokenRef.current = false;
+    setGuidanceSafetyState('ready');
     setMiningMapOpen(false);
     setNavigationActive(true);
     setDrivingViewOpen(true);
@@ -817,6 +831,31 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     setNovaBusy(false);
   }
 
+  // A stale coordinate can look "live" in a browser after the device loses signal.
+  // Pause rather than guessing directions: the user keeps the map but must resume
+  // only after a fresh, sufficiently accurate GPS fix arrives.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!navigationActive) return;
+      if (!lastGpsAtRef.current || Date.now() - lastGpsAtRef.current > 30_000) setGpsState('stale');
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [navigationActive]);
+
+  useEffect(() => {
+    if (!navigationActive) return;
+    const unsafeGps = gpsState !== 'live' || (Number.isFinite(accuracy) && accuracy > 120);
+    if (!unsafeGps) return;
+    setNavigationActive(false);
+    setGuidanceSafetyState('paused');
+    if (!guidancePauseSpokenRef.current) {
+      guidancePauseSpokenRef.current = true;
+      speakOrbit(t.ko
+        ? 'Captain, GPS 신호 또는 정확도가 충분하지 않아 음성 경로 안내를 일시 정지합니다. 안전한 곳에 정차한 뒤 위치를 확인하고 다시 시작해 주세요.'
+        : 'Captain, NOVA paused voice guidance because the GPS signal or accuracy is not sufficient. Stop safely, confirm your location, and resume when ready.', language, setVoiceState);
+    }
+  }, [navigationActive, gpsState, accuracy, language, t.ko]);
+
   const navigationProfile = useMemo(() => createNavigationProfile(drivingRoute), [drivingRoute]);
   const navigationProgress = useMemo(() => getNavigationProgress(navigationProfile, current), [navigationProfile, current?.lat, current?.lon]);
   const activeDrivingStep = nextDrivingStep(drivingRoute, navigationProgress);
@@ -914,7 +953,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   return (
     <div className="ov20-root">
-      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} networkOnline={networkOnline} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
+      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
       <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} onMiningMap={openMiningMap} />
       <div className="ov20-layout">
         <OrbitEarthView
