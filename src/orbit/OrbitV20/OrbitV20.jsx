@@ -546,8 +546,13 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       offRouteSinceRef.current = 0;
       spokenGuidanceRef.current.clear();
       engineRef.current?.setRoadRoute(route?.points);
-    }).catch(() => {
+    }).catch((error) => {
       if (!active || requestId !== routeRequestRef.current) return;
+      if (error?.code === 'TOLL_PROVIDER_UNAVAILABLE') {
+        setDrivingRoute(null);
+        setRouteStatus('toll_unavailable');
+        return;
+      }
       // Preserve the previously usable route when an off-route refresh has a
       // temporary network failure. Dropping it would leave a moving captain
       // without any visual guidance.
