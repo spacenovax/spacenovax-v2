@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 12755)
-Total output lines: 959
-
 // Orbit V21 FINAL — main container. Owns ALL state, effects, and engine wiring; every
 // other file in this folder is a presentational component that receives props from here.
 // Engines (EarthEngine, SatelliteEngine, MasterRenderLoop, PerformanceManager) and data
@@ -448,7 +445,85 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         const savedRoute = {
           ...saved.route,
           navigationId: `${offlinePack ? 'offline-pack' : 'saved-route'}-${saved.savedAt}`,
- …755 tokens truncated…en. Enter a city, address, landmark, or choose a recent destination.';
+          origin: saved.origin,
+          source: offlinePack ? 'offline-pack' : 'saved',
+          savedAt: saved.savedAt,
+        };
+        setDrivingRoute(savedRoute);
+        setRouteStatus(offlinePack ? 'offline_pack' : 'saved');
+        engineRef.current?.setRoadRoute(saved.route.points);
+      } else {
+        if (!rerouting) setDrivingRoute(null);
+        setRouteStatus(rerouting && drivingRoute ? 'ready' : 'unavailable');
+      }
+    }).finally(() => {
+      if (requestId === routeRequestRef.current) routeRefreshReasonRef.current = 'initial';
+    });
+    return () => { active = false; };
+    // `current` is deliberately reduced to availability. Coordinates are used
+    // only when a destination is chosen or a validated reroute increments the nonce.
+  }, [Boolean(current), destination?.id, destination?.lat, destination?.lon, routeRefreshNonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function requestRouteRefresh(reason = 'initial') {
+    routeRefreshReasonRef.current = reason;
+    setRouteRefreshNonce((value) => value + 1);
+  }
+
+  function toggleLowDataMode() {
+    setLowDataMode((enabled) => persistLowDataMode(!enabled));
+  }
+
+  function saveCurrentOfflinePack() {
+    if (!current || !destination || drivingRoute?.source !== 'live') return null;
+    const pack = saveOfflineRegionPack({ route: drivingRoute, origin: current, destination });
+    setOfflinePacks(listOfflineRegionPacks());
+    return pack;
+  }
+
+  function deleteOfflinePack(id) {
+    if (removeOfflineRegionPack(id)) setOfflinePacks(listOfflineRegionPacks());
+  }
+
+  function resetGuidanceSession() {
+    spokenGuidanceRef.current.clear();
+    offRouteSinceRef.current = 0;
+    lastRerouteAtRef.current = 0;
+    arrivalAnnouncedRef.current = false;
+  }
+
+  function runSearch(q, { near = null } = {}) {
+    setSearchQuery(q);
+    clearTimeout(searchTimerRef.current);
+    const requestId = ++searchRequestRef.current;
+    const coordinate = coordinateDestination(q, t.ko);
+    if (coordinate) {
+      setSearchResults([coordinate]);
+      setSearchBusy(false);
+      return;
+    }
+    if (q.trim().length < 2) { setSearchResults([]); setSearchBusy(false); return; }
+    setSearchBusy(true);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await searchDestination(q, language, { near });
+        if (requestId === searchRequestRef.current) setSearchResults(results);
+      } catch {
+        if (requestId === searchRequestRef.current) setSearchResults([]);
+      }
+      if (requestId === searchRequestRef.current) setSearchBusy(false);
+  }, 320);
+  }
+
+  useEffect(() => () => clearTimeout(searchTimerRef.current), []);
+
+  function openDestinationSearch() {
+    setMiningMapOpen(false);
+    setHudPanel(null);
+    setTab('live');
+    setSearchOpen(true);
+    const line = t.ko
+      ? 'Captain, 목적지 검색을 열었습니다. 도시, 주소, 관광지 이름을 입력하거나 최근 목적지를 선택해 주세요.'
+      : 'Captain, destination search is open. Enter a city, address, landmark, or choose a recent destination.';
     speakOrbit(line, language, setVoiceState);
   }
 
@@ -856,12 +931,6 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           offlinePackCount={offlinePacks.length}
         />
       </div>
-      <OrbitFloatingNova
-        t={t} language={language} user={user} novaOpen={novaOpen} novaDragPos={novaDragPos}
-        voiceState={voiceState} novaMsgs={novaMsgs} novaInput={novaInput} novaBusy={novaBusy}
-        onPointerDown={onNovaPointerDown} onPointerMove={onNovaPointerMove} onPointerUp={onNovaPointerUp}
-        onInputChange={setNovaInput} onSend={sendNova} onGuide={startOrbitGuide} onSpeak={(text) => speakOrbit(text, language, setVoiceState)}
-      />
       <OrbitOfflineRegionPacks
         open={offlinePacksOpen}
         t={t}
@@ -871,6 +940,12 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         onSave={saveCurrentOfflinePack}
         onRemove={deleteOfflinePack}
         onClose={() => setOfflinePacksOpen(false)}
+      />
+      <OrbitFloatingNova
+        t={t} language={language} user={user} novaOpen={novaOpen} novaDragPos={novaDragPos}
+        voiceState={voiceState} novaMsgs={novaMsgs} novaInput={novaInput} novaBusy={novaBusy}
+        onPointerDown={onNovaPointerDown} onPointerMove={onNovaPointerMove} onPointerUp={onNovaPointerUp}
+        onInputChange={setNovaInput} onSend={sendNova} onGuide={startOrbitGuide} onSpeak={(text) => speakOrbit(text, language, setVoiceState)}
       />
       <OrbitSearchOverlay
         open={searchOpen} t={t} language={language} query={searchQuery} results={searchResults} busy={searchBusy}
