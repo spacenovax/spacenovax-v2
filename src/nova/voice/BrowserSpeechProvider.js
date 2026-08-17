@@ -8,6 +8,9 @@ export class BrowserSpeechProvider {
     this.activeRecognition = null;
     this.speechRequest = 0;
     this.pendingTimers = new Set();
+    // Keep the utterance strongly referenced. Telegram Android WebView can drop
+    // a locally-scoped utterance before playback begins.
+    this.activeUtterance = null;
     this.unlock = this.unlock.bind(this);
     if (typeof window !== 'undefined') {
       window.addEventListener('pointerdown', this.unlock, { passive: true });
@@ -42,6 +45,7 @@ export class BrowserSpeechProvider {
     this.pendingTimers.forEach((timer) => clearTimeout(timer));
     this.pendingTimers.clear();
     this.synthesis?.cancel?.();
+    this.activeUtterance = null;
     this.activeRecognition?.stop?.();
     this.activeRecognition = null;
   }
@@ -57,14 +61,15 @@ export class BrowserSpeechProvider {
       try {
         const voice = this.getVoice(language);
         const utterance = new this.Utterance(value);
+        this.activeUtterance = utterance;
         utterance.lang = voice?.lang || NOVA_SPEECH_LOCALES[normalizeNOVAFontLanguage(language)]; utterance.voice = voice || null; utterance.rate = rate; utterance.pitch = 1; utterance.volume = 1;
         let started = false;
         const retryOrFail = (reason) => { if (request !== this.speechRequest) return; if (attempt < 2) return schedule(() => play(attempt + 1), attempt === 0 ? 120 : 420); onError?.(reason || 'speech-error'); };
         const watchdog = window.setTimeout(() => { this.pendingTimers.delete(watchdog); if (!started) { this.synthesis.cancel(); retryOrFail('speech-timeout'); } }, 2200);
         this.pendingTimers.add(watchdog);
         utterance.onstart = () => { started = true; clearTimeout(watchdog); this.pendingTimers.delete(watchdog); onStart?.(); };
-        utterance.onend = () => { clearTimeout(watchdog); this.pendingTimers.delete(watchdog); onEnd?.(); };
-        utterance.onerror = (event) => { clearTimeout(watchdog); this.pendingTimers.delete(watchdog); if (!['canceled', 'interrupted'].includes(event?.error)) retryOrFail(event?.error); };
+        utterance.onend = () => { clearTimeout(watchdog); this.pendingTimers.delete(watchdog); if (this.activeUtterance === utterance) this.activeUtterance = null; onEnd?.(); };
+        utterance.onerror = (event) => { clearTimeout(watchdog); this.pendingTimers.delete(watchdog); if (this.activeUtterance === utterance) this.activeUtterance = null; if (!['canceled', 'interrupted'].includes(event?.error)) retryOrFail(event?.error); };
         this.synthesis.resume?.(); this.synthesis.speak(utterance);
       } catch (error) { retryOrFail(error?.message); }
     };
