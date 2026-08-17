@@ -299,3 +299,6 @@
 
 /* Nearby pins are interactive only while the destination search is open. */
 .ov20-marker-nearby{--marker-color:#5ee7ff;background:transparent;border:0;padding:0;font:inherit}.ov20-marker.selectable{pointer-events:auto;cursor:pointer}.ov20-marker.selectable:focus-visible{outline:2px solid #fff;outline-offset:4px;border-radius:8px}.ov20-marker:disabled{cursor:default}
+
+/* Safety pause: route remains visible, but no direction is issued from stale or weak GPS. */
+.ov20-driving-top span.paused{border-color:rgba(255,190,95,.9);color:#ffe0a2;background:rgba(103,62,10,.54)}.ov20-driving-top span.paused i{background:#ffbd59;box-shadow:0 0 10px #ffbd59}.ov20-driving-safety-pause{position:absolute;z-index:155;top:118px;left:50%;transform:translateX(-50%);width:min(94%,430px);display:grid;gap:6px;padding:12px 14px;border:1px solid rgba(255,190,95,.84);border-radius:14px;background:linear-gradient(135deg,rgba(63,37,7,.96),rgba(16,25,45,.97));box-shadow:0 14px 35px rgba(0,0,0,.52);color:#fff}.ov20-driving-safety-pause b{font-size:13px}.ov20-driving-safety-pause small{color:#ffe1a9;font-size:10px;line-height:1.45}.ov20-driving-safety-pause button{min-height:38px;border:1px solid rgba(255,210,128,.85);border-radius:9px;background:rgba(255,190,89,.15);color:#fff6df;font-size:11px;font-weight:900}.ov20-driving-safety-pause button:active{transform:scale(.98)}
