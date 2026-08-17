@@ -10,7 +10,7 @@
     "build:preview": "vite build --mode preview",
     "start": "node server.js",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs tests/orbit-integration.mjs tests/navigation-lite.mjs tests/navigation-lite-store.mjs tests/community-node-auto.mjs tests/mining-live-balance.mjs tests/referral-link-integrity.mjs tests/referral-share-copy.mjs"
+    "test": "npm run build && node --test tests/backend-integrity.mjs tests/nova-ai-gemini.mjs tests/orbit-integration.mjs tests/navigation-lite.mjs tests/navigation-lite-store.mjs tests/navigation-offline-packs.mjs tests/community-node-auto.mjs tests/mining-live-balance.mjs tests/referral-link-integrity.mjs tests/referral-share-copy.mjs"
   },
   "dependencies": {
     "@simplewebauthn/server": "^10.0.1",
