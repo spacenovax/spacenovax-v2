@@ -645,14 +645,10 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 
   function openDestinationSearch() {
-    setMiningMapOpen(false);
-    setHudPanel(null);
-    setTab('live');
-    setSearchOpen(true);
-    const line = t.ko
-      ? 'Captain, 목적지 검색을 열었습니다. 도시, 주소, 관광지 이름을 입력하거나 최근 목적지를 선택해 주세요.'
-      : 'Captain, destination search is open. Enter a city, address, landmark, or choose a recent destination.';
-    speakOrbit(line, language, setVoiceState);
+    // The globe is the SpaceNovaX command view.  Destination search, route
+    // selection and live guidance continue in the dedicated navigation page.
+    // Use the same webview so the Captain does not have to reopen the app.
+    window.location.assign('https://nav.spacenovax.com');
   }
 
   function selectQuickDestination(kind) {
