@@ -104,7 +104,7 @@ function MapReportPanel({ t, onClose, onSubmit }) {
 function formatEta(hours, ko) { if (hours == null) return '—'; if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}${ko ? '분' : ' min'}`; return `${Math.floor(hours)}${ko ? '시간 ' : 'h '}${Math.round((hours % 1) * 60)}${ko ? '분' : 'min'}`; }
 function turnSymbol(maneuver) { if (/left/i.test(maneuver)) return '↰'; if (/right/i.test(maneuver)) return '↱'; if (/uturn/i.test(maneuver)) return '↶'; return '↑'; }
 
-export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, networkOnline, onToggleLowDataMode, onReport, onExit, onStop }) {
+export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, guidanceSafetyState = 'ready', networkOnline, onResume, onToggleLowDataMode, onReport, onExit, onStop }) {
   const [recenterToken, setRecenterToken] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const points = useMemo(() => (route?.points || []).map((point) => [point.lat, point.lon]), [route]);
@@ -119,13 +119,16 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
   const isRerouting = routeStatus === 'rerouting';
   const isSavedRoute = routeStatus === 'saved' || route?.source === 'saved';
   const weakGps = gpsState === 'live' && Number.isFinite(accuracy) && accuracy > 80;
+  const guidancePaused = guidanceSafetyState === 'paused';
   const signalNote = !networkOnline
     ? t.offlineGuidance
     : weakGps
       ? `${t.gpsSignalWeak} · ±${Math.round(accuracy)}m`
       : '';
-  const statusLabel = isRerouting
-    ? (t.ko ? '경로 재탐색 중' : 'REROUTING')
+  const statusLabel = guidancePaused
+    ? (t.ko ? '안전 정지 · GPS 확인 필요' : 'SAFETY PAUSE · CHECK GPS')
+    : isRerouting
+      ? (t.ko ? '경로 재탐색 중' : 'REROUTING')
     : isSavedRoute
       ? (t.ko ? '저장 경로 · 연결 확인 필요' : 'SAVED ROUTE · CHECK ONLINE')
       : (t.ko ? 'NOVA LITE · GPS 안내' : 'NOVA LITE · GPS GUIDANCE');
@@ -141,7 +144,8 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
       <MapCamera current={current} points={points} recenterToken={recenterToken} lowDataMode={lowDataMode} />
       <MapControls onRecenter={() => setRecenterToken((value) => value + 1)} onExit={onExit} lowDataMode={lowDataMode} onToggleLowDataMode={onToggleLowDataMode} onOpenReport={() => setReportOpen((open) => !open)} />
     </MapContainer>
-    <header className="ov20-driving-top"><button onClick={onExit}>‹ {t.ko ? '지구본' : 'GLOBE'}</button><span className={isRerouting ? 'rerouting' : isSavedRoute ? 'saved' : ''}><i /> {statusLabel}</span><button onClick={onStop}>■ {t.ko ? '종료' : 'END'}</button></header>
+    <header className="ov20-driving-top"><button onClick={onExit}>‹ {t.ko ? '지구본' : 'GLOBE'}</button><span className={guidancePaused ? 'paused' : isRerouting ? 'rerouting' : isSavedRoute ? 'saved' : ''}><i /> {statusLabel}</span><button onClick={onStop}>■ {t.ko ? '종료' : 'END'}</button></header>
+    {guidancePaused && <aside className="ov20-driving-safety-pause" role="alert"><b>{t.ko ? '음성 안내가 일시 정지되었습니다' : 'Voice guidance is paused'}</b><small>{t.ko ? 'GPS를 확인하고 안전한 곳에 정차한 뒤 다시 시작하세요. 도로 표지·현장 통제·교통법규를 우선하세요.' : 'Check GPS and resume only when safely stopped. Follow road signs, local controls, and traffic laws.'}</small><button onClick={onResume}>{t.ko ? 'GPS 확인 후 다시 시작' : 'RESUME AFTER GPS CHECK'}</button></aside>}
     <div className="ov20-driving-instruction"><strong>{turnSymbol(maneuver)}</strong><div><small>{t.ko ? '다음 안내' : 'NEXT MANEUVER'}</small><b>{road}</b>{Number.isFinite(navigationProgress?.offRouteM) && navigationProgress.offRouteM > 55 && <small className="ov20-driving-gps-note">{t.ko ? 'GPS 위치 확인 중' : 'CHECKING GPS POSITION'}</small>}{signalNote && <small className="ov20-driving-gps-note warning">⚠ {signalNote}</small>}</div><em>{Number.isFinite(maneuverDistanceM) ? `${Math.max(1, Math.round(maneuverDistanceM / 10) * 10)} m` : '—'}</em></div>
     {reportOpen && <MapReportPanel t={t} onClose={() => setReportOpen(false)} onSubmit={onReport} />}
     <footer className="ov20-driving-bottom"><div><small>{t.remaining}</small><b>{distanceKm == null ? '—' : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km`}</b></div><div><small>ETA</small><b>{formatEta(etaHours, t.ko)}</b></div><div><small>{t.ko ? '목적지' : 'DESTINATION'}</small><b>{destination.label?.split(',')[0]}</b></div></footer>
