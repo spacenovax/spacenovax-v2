@@ -47,7 +47,7 @@ export default function OrbitRouteTelemetry({ t, current, currentPlace, destinat
         <span className="ov20-route-icon">⌁</span>
         <div className="ov20-route-copy"><small>{hasArrived ? t.arrived : navigationActive ? t.liveGuidance : 'NOVA GLOBAL NAVIGATION'}</small><b>{from} <em>→</em> {to}</b></div>
         <div className="ov20-route-actions">
-          {onOpenOfflinePacks && <button className="ov20-route-offline-btn" onClick={onOpenOfflinePacks} aria-label={t.ko ? '오프라인 지역 경로팩 관리' : 'Manage offline regional route packs'}>▣ {offlinePackCount}/3</button>}
+          {onOpenOfflinePacks && <button className="ov20-route-offline-btn" onClick={onOpenOfflinePacks} aria-label={t.ko ? '오프라인 지역 경로팩 관리' : 'Manage offline regional route packs'}>▣ ${offlinePackCount}/3</button>}
           {hasRoute && !navigationActive && !hasArrived && <button className="ov20-route-share" onClick={shareRoute} aria-label={t.ko ? '현재 위치를 포함하지 않고 목적지만 공유' : 'Share destination only; your current location is not included'}>{shareState === 'working' ? '…' : `↗ ${t.shareRoute}`}</button>}
           <button onClick={onSearch}>{hasRoute ? (t.ko ? '경로 변경' : 'CHANGE') : t.findDestination}</button>
         </div>
