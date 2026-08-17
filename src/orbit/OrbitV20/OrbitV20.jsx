@@ -27,10 +27,12 @@ import OrbitWeather from './OrbitWeather.jsx';
 import OrbitEvents from './OrbitEvents.jsx';
 import OrbitRouteTelemetry from './OrbitRouteTelemetry.jsx';
 import OrbitDrivingView from './OrbitDrivingView.jsx';
+import OrbitOfflineRegionPacks from './OrbitOfflineRegionPacks.jsx';
 import OrbitFloatingNova from './OrbitFloatingNova.jsx';
 import OrbitBottomBar from './OrbitBottomBar.jsx';
 import OrbitSearchOverlay from './OrbitSearchOverlay.jsx';
 import OrbitMiningMap from './OrbitMiningMap.jsx';
+import { listOfflineRegionPacks, loadCompatibleOfflineRegionPack, removeOfflineRegionPack, saveOfflineRegionPack } from '../navigationOfflinePacks.js';
 import './orbit-v20.css';
 
 function getOrbitClientId() {
@@ -182,6 +184,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [destination, setDestination] = useState(null);
   const [drivingRoute, setDrivingRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
+  const [offlinePacksOpen, setOfflinePacksOpen] = useState(false);
+  const [offlinePacks, setOfflinePacks] = useState(() => listOfflineRegionPacks());
   const [lowDataMode, setLowDataMode] = useState(() => getLowDataMode());
   const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [navigationActive, setNavigationActive] = useState(false);
@@ -435,17 +439,18 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       // Preserve the previously usable route when an off-route refresh has a
       // temporary network failure. Dropping it would leave a moving captain
       // without any visual guidance.
-      const saved = rerouting ? null : loadCompatibleLiteRoute({ current, destination });
+      const offlinePack = rerouting ? null : loadCompatibleOfflineRegionPack({ current, destination });
+      const saved = offlinePack || (rerouting ? null : loadCompatibleLiteRoute({ current, destination }));
       if (saved) {
         const savedRoute = {
           ...saved.route,
-          navigationId: `saved-route-${saved.savedAt}`,
+          navigationId: `${offlinePack ? 'offline-pack' : 'saved-route'}-${saved.savedAt}`,
           origin: saved.origin,
-          source: 'saved',
+          source: offlinePack ? 'offline-pack' : 'saved',
           savedAt: saved.savedAt,
         };
         setDrivingRoute(savedRoute);
-        setRouteStatus('saved');
+        setRouteStatus(offlinePack ? 'offline_pack' : 'saved');
         engineRef.current?.setRoadRoute(saved.route.points);
       } else {
         if (!rerouting) setDrivingRoute(null);
@@ -466,6 +471,17 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   function toggleLowDataMode() {
     setLowDataMode((enabled) => persistLowDataMode(!enabled));
+  }
+
+  function saveCurrentOfflinePack() {
+    if (!current || !destination || drivingRoute?.source !== 'live') return null;
+    const pack = saveOfflineRegionPack({ route: drivingRoute, origin: current, destination });
+    setOfflinePacks(listOfflineRegionPacks());
+    return pack;
+  }
+
+  function deleteOfflinePack(id) {
+    if (removeOfflineRegionPack(id)) setOfflinePacks(listOfflineRegionPacks());
   }
 
   function resetGuidanceSession() {
@@ -601,7 +617,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     const firstStep = activeDrivingStep || nextDrivingStep(drivingRoute);
     const firstDirection = firstStep ? maneuverLabel(firstStep, language) : '';
     const roadName = firstStep?.name ? ` ${navigationMessage('roadDirection', language, { road: firstStep.name })}` : '';
-    const startLine = routeStatus === 'saved' || drivingRoute.source === 'saved'
+    const startLine = routeStatus === 'saved' || routeStatus === 'offline_pack' || drivingRoute.source === 'saved' || drivingRoute.source === 'offline-pack'
       ? `${navigationMessage('startSaved', language)} `
       : '';
     const line = `${startLine}${navigationMessage('start', language, { destination: destination.label.split(',')[0], kilometers: km.toLocaleString() })}${firstDirection ? ` ${navigationMessage('firstInstruction', language, { direction: firstDirection })}` : ''}${roadName}`;
@@ -787,6 +803,12 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     if (currentTime - offRouteSinceRef.current < 6_000 || currentTime - lastRerouteAtRef.current < 12_000) return;
     lastRerouteAtRef.current = currentTime;
     offRouteSinceRef.current = 0;
+    if (drivingRoute.source === 'offline-pack') {
+      speakOrbit(language === 'ko' ? '오프라인 지역 경로에서 벗어났습니다. 인터넷 연결 후 새 경로를 확인해 주세요.' : 'You left the offline regional route. Reconnect to check a new route.', language, setVoiceState);
+      setNavigationActive(false);
+      setDrivingViewOpen(false);
+      return;
+    }
     speakOrbit(navigationMessage('offRoute', language), language, setVoiceState);
     requestRouteRefresh('off-route');
   }, [navigationActive, navigationProgress?.offRouteM, current?.lat, current?.lon, drivingRoute?.navigationId, hasArrived, accuracy, language, t.ko]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -905,8 +927,20 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           onStartNavigation={startNavigation}
           onStopNavigation={stopNavigation}
           onShareRoute={shareRouteSafely}
+          onOpenOfflinePacks={() => setOfflinePacksOpen(true)}
+          offlinePackCount={offlinePacks.length}
         />
       </div>
+      <OrbitOfflineRegionPacks
+        open={offlinePacksOpen}
+        t={t}
+        route={drivingRoute}
+        destination={destination}
+        packs={offlinePacks}
+        onSave={saveCurrentOfflinePack}
+        onRemove={deleteOfflinePack}
+        onClose={() => setOfflinePacksOpen(false)}
+      />
       <OrbitFloatingNova
         t={t} language={language} user={user} novaOpen={novaOpen} novaDragPos={novaDragPos}
         voiceState={voiceState} novaMsgs={novaMsgs} novaInput={novaInput} novaBusy={novaBusy}
