@@ -110,7 +110,7 @@ function formatArrivalTime(hours, ko) {
 }
 function turnSymbol(maneuver) { if (/left/i.test(maneuver)) return '↰'; if (/right/i.test(maneuver)) return '↱'; if (/uturn/i.test(maneuver)) return '↶'; return '↑'; }
 
-export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, liveSpeedMps, guidanceSafetyState = 'ready', networkOnline, onResume, onToggleLowDataMode, onReport, onExit, onStop }) {
+export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, liveSpeedMps, guidanceSafetyState = 'ready', networkOnline, onResume, onTestVoice, onToggleLowDataMode, onReport, onExit, onStop }) {
   const [recenterToken, setRecenterToken] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const points = useMemo(() => (route?.points || []).map((point) => [point.lat, point.lon]), [route]);
@@ -172,6 +172,7 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
       <div><small>{t.remaining}</small><b>{distanceKm == null ? '—' : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km`}</b></div>
       <div><small>{t.ko ? '예상 시간' : 'ETA'}</small><b>{formatEta(navigationEtaHours, t.ko)}</b></div>
       <div><small>{t.ko ? '예상 도착' : 'ARRIVAL'}</small><b>{formatArrivalTime(navigationEtaHours, t.ko)}</b></div>
+      <button type="button" className="ov20-driving-voice-test" onClick={onTestVoice}>🔊 {t.ko ? '음성 테스트' : 'VOICE TEST'}</button>
     </footer>
   </section>;
 }
