@@ -340,8 +340,8 @@ export default class EarthEngine {
     }, undefined, (err) => console.error('Orbit: validated night texture failed.', err));
     this.earth = new THREE.Mesh(earthGeo, this.earthMaterial);
     this.scene.add(this.earth);
-    this.navigationGrid = buildGrid();
-    this.earth.add(this.navigationGrid);
+    // Keep the satellite surface clean. The former latitude/longitude overlay read as a checkerboard at close zoom, so navigation coordinates stay in the HUD only.
+    this.navigationGrid = null;
 
     // Orbit is a navigation map, not a cinematic space scene.  Do not add an
     // atmosphere shell: it can blue-wash coastlines and city lights on mobile OLEDs.
