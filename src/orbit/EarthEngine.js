@@ -685,13 +685,17 @@ export default class EarthEngine {
   get cameraState() { return this._flight ? 'flying' : 'idle'; }
 
   flyTo(lat, lon, { duration = 900, onArrive } = {}) {
+    // Never allow an invalid GPS value to poison the camera rotation. A NaN
+    // rotation makes the WebGL canvas appear as a black screen in mobile webviews.
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
     this.autoRotate = false;
     const targetLon = -lon - 90; // convert target lon to the rotation.lon frame used by _applyRotation
     const targetLat = Math.max(-85, Math.min(85, lat));
     const from = { lon: this.rotation.lon, lat: this.rotation.lat };
     // shortest angular path for longitude
     let deltaLon = ((targetLon - from.lon + 540) % 360) - 180;
-    this._flight = { t0: performance.now(), duration, from, deltaLon, deltaLat: targetLat - from.lat, onArrive };
+    this._flight = { t0: performance.now(), duration: Math.max(0, Number(duration) || 900), from, deltaLon, deltaLat: targetLat - from.lat, onArrive };
+    return true;
   }
 
   _stepFlight(time) {
