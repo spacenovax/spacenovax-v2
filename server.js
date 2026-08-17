@@ -4520,6 +4520,61 @@ app.get('/api/orbit/geocode', async (req, res) => {
   }
 });
 
+
+// Nearby-place discovery for a selected neighborhood/address. This is intentionally
+// an on-demand, cached request: it returns a small list of public OSM essentials,
+// not a tracking feed and not a proprietary map-data replacement.
+const nearbyPlaceCache = new Map();
+const NEARBY_PLACE_CACHE_MS = 10 * 60 * 1000;
+app.get('/api/orbit/nearby-places', async (req, res) => {
+  const latitude = Number(req.query.lat);
+  const longitude = Number(req.query.lon);
+  const language = String(req.query.lang || 'en').toLowerCase().replace(/[^a-z-]/g, '').slice(0, 5) || 'en';
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    return res.status(400).json({ ok: false, message: 'Valid coordinates are required.' });
+  }
+  const cacheKey = `${latitude.toFixed(3)},${longitude.toFixed(3)}:${language}`;
+  const cached = nearbyPlaceCache.get(cacheKey);
+  if (cached && now() - cached.at < NEARBY_PLACE_CACHE_MS) return res.json({ ok: true, places: cached.value, cached: true });
+  try {
+    const query = `[out:json][timeout:12];(nwr(around:5000,${latitude.toFixed(5)},${longitude.toFixed(5)})[amenity~"^(hospital|clinic|pharmacy|fuel|police|parking|bus_station|bank)$"];nwr(around:5000,${latitude.toFixed(5)},${longitude.toFixed(5)})[tourism~"^(attraction|museum|hotel)$"];nwr(around:5000,${latitude.toFixed(5)},${longitude.toFixed(5)})[shop~"^(supermarket|convenience)$"];);out center tags 36;`;
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
+      body: new URLSearchParams({ data: query }).toString(),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(`Overpass responded ${response.status}`);
+    const payload = await response.json();
+    const radians = (value) => value * Math.PI / 180;
+    const kmFrom = (lat, lon) => {
+      const a = Math.sin(radians(lat - latitude) / 2) ** 2 + Math.cos(radians(latitude)) * Math.cos(radians(lat)) * Math.sin(radians(lon - longitude) / 2) ** 2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+    const kind = (tags = {}) => tags.amenity || tags.tourism || tags.shop || 'place';
+    const iconByKind = { hospital: '✚', clinic: '✚', pharmacy: '✚', fuel: '⛽', police: '⚑', parking: 'P', bus_station: '▣', bank: '¤', attraction: '★', museum: '★', hotel: '⌂', supermarket: '▤', convenience: '▤' };
+    const seen = new Set();
+    const places = (payload.elements || []).map((item) => {
+      const lat = Number(item.lat ?? item.center?.lat);
+      const lon = Number(item.lon ?? item.center?.lon);
+      const tags = item.tags || {};
+      const localName = tags[`name:${language}`] || tags[`name:${language.split('-')[0]}`] || tags.name || '';
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || !localName) return null;
+      const type = kind(tags);
+      const key = `${localName}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return { id: `nearby-${item.type}-${item.id}`, label: localName, subtitle: [tags['addr:street'], tags['addr:city']].filter(Boolean).join(', '), lat, lon, type, icon: iconByKind[type] || '⌖', distanceKm: kmFrom(lat, lon) };
+    }).filter(Boolean).sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 12);
+    nearbyPlaceCache.set(cacheKey, { at: now(), value: places });
+    while (nearbyPlaceCache.size > 120) nearbyPlaceCache.delete(nearbyPlaceCache.keys().next().value);
+    return res.json({ ok: true, places, cached: false });
+  } catch (error) {
+    console.error('Orbit nearby-place discovery failed', error.message);
+    return res.status(502).json({ ok: false, message: 'Nearby places are temporarily unavailable.', places: [] });
+  }
+});
+
 // Driving route proxy for Earth Navigation. The browser never calls a routing host
 // directly: requests are validated, cached, and reduced to the route data the UI uses.
 const ORBIT_ROUTE_CACHE_MS = 45 * 1000;

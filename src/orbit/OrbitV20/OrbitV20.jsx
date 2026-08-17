@@ -10,7 +10,7 @@ import MasterRenderLoop from '../MasterRenderLoop.js';
 import SatelliteEngine from '../SatelliteEngine.js';
 import PerformanceManager from '../PerformanceManager.js';
 import { BrowserSpeechProvider } from '../../nova/voice/BrowserSpeechProvider.js';
-import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination, fetchDrivingRoute } from '../api.js';
+import { fetchWeather, fetchAirQuality, fetchEarthquakes, fetchEonetEvents, reverseGeocode, searchDestination, fetchNearbyPlaces, fetchDrivingRoute } from '../api.js';
 import { getCurrentPosition, watchCurrentPosition, haversineKm, bearingDeg, compassLabel } from '../geo.js';
 import { createNavigationProfile, getNavigationProgress, guidanceSpeech, maneuverLabel, navigationMessage } from '../navigationLite.js';
 import { getLowDataMode, loadCompatibleLiteRoute, saveLiteRoute, setLowDataMode as persistLowDataMode } from '../navigationLiteStore.js';
@@ -192,6 +192,9 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [drivingViewOpen, setDrivingViewOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState([]);
+  const [nearbyAnchor, setNearbyAnchor] = useState(null);
+  const [nearbyBusy, setNearbyBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [miningMapOpen, setMiningMapOpen] = useState(false);
   const [searchBusy, setSearchBusy] = useState(false);
@@ -501,14 +504,27 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       setSearchBusy(false);
       return;
     }
-    if (q.trim().length < 2) { setSearchResults([]); setSearchBusy(false); return; }
+    if (q.trim().length < 2) {
+      setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); setSearchBusy(false); return;
+    }
     setSearchBusy(true);
     searchTimerRef.current = setTimeout(async () => {
       try {
         const results = await searchDestination(q, language, { near });
-        if (requestId === searchRequestRef.current) setSearchResults(results);
+        if (requestId !== searchRequestRef.current) return;
+        setSearchResults(results);
+        const anchor = results[0] || null;
+        setNearbyAnchor(anchor);
+        setNearbyPlaces([]);
+        if (anchor) {
+          setNearbyBusy(true);
+          fetchNearbyPlaces(anchor.lat, anchor.lon, language)
+            .then((places) => { if (requestId === searchRequestRef.current) setNearbyPlaces(places); })
+            .catch(() => { if (requestId === searchRequestRef.current) setNearbyPlaces([]); })
+            .finally(() => { if (requestId === searchRequestRef.current) setNearbyBusy(false); });
+        } else setNearbyBusy(false);
       } catch {
-        if (requestId === searchRequestRef.current) setSearchResults([]);
+        if (requestId === searchRequestRef.current) { setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); }
       }
       if (requestId === searchRequestRef.current) setSearchBusy(false);
   }, 320);
@@ -949,8 +965,9 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       />
       <OrbitSearchOverlay
         open={searchOpen} t={t} language={language} query={searchQuery} results={searchResults} busy={searchBusy}
+        nearby={nearbyPlaces} nearbyAnchor={nearbyAnchor} nearbyBusy={nearbyBusy}
         recent={recentDestinations} base={base} onChange={runSearch} onPick={pickDestination} onQuickDestination={selectQuickDestination}
-        onClose={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); }}
+        onClose={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); }}
       />
       {miningMapOpen && !drivingViewOpen && <OrbitMiningMap language={language} inTelegram={inTelegram} onClose={() => setMiningMapOpen(false)} onOpenMining={openOfficialMining} />}
       <OrbitBottomBar />
