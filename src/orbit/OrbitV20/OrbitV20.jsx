@@ -1049,7 +1049,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   return (
     <div className="ov20-root">
-      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} liveSpeedMps={liveSpeedMps} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
+      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} liveSpeedMps={liveSpeedMps} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onChangeDestination={() => { setDrivingViewOpen(false); openDestinationSearch(); }} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
       <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} onMiningMap={openMiningMap} />
       <div className="ov20-layout">
         {webglUnavailable ? <section className="ov20-webgl-fallback" role="status">
