@@ -4615,6 +4615,7 @@ app.get('/api/orbit/nearby-places', async (req, res) => {
 // directly: requests are validated, cached, and reduced to the route data the UI uses.
 const ORBIT_ROUTE_CACHE_MS = 45 * 1000;
 const orbitRouteCache = new Map();
+const GOOGLE_ROUTES_API_KEY = String(process.env.GOOGLE_ROUTES_API_KEY || '').trim();
 
 // A captain can flag a bad road or unsafe turn without contributing a precise
 // movement history. Reports are for later map-quality review; they never alter
@@ -4691,16 +4692,85 @@ app.post('/api/admin/navigation-reports/review', requireAdmin, (req, res) => {
   res.json({ ok: true, report: { id: report.id, status: report.status, reviewedAt: report.reviewedAt } });
 });
 
+function decodeGooglePolyline(encoded = '') {
+  const points = []; let index = 0; let lat = 0; let lon = 0;
+  while (index < encoded.length) {
+    let shift = 0; let result = 0; let byte;
+    do { byte = encoded.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20 && index <= encoded.length);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { byte = encoded.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20 && index <= encoded.length);
+    lon += (result & 1) ? ~(result >> 1) : (result >> 1);
+    points.push({ lat: lat / 1e5, lon: lon / 1e5 });
+  }
+  return points;
+}
+
+async function fetchGoogleDrivingRoute({ fromLat, fromLon, toLat, toLon, mode, language }) {
+  const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': GOOGLE_ROUTES_API_KEY,
+      'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.travelAdvisory.tollInfo,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction,routes.legs.steps.polyline.encodedPolyline',
+    },
+    body: JSON.stringify({
+      origin: { location: { latLng: { latitude: fromLat, longitude: fromLon } } },
+      destination: { location: { latLng: { latitude: toLat, longitude: toLon } } },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_AWARE',
+      languageCode: language,
+      routeModifiers: { avoidTolls: mode === 'free' },
+      extraComputations: ['TOLLS'],
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Google Routes responded ${response.status}`);
+  const source = (await response.json()).routes?.[0];
+  if (!source?.polyline?.encodedPolyline || !Number.isFinite(source.distanceMeters)) throw new Error('Google Routes returned no drivable route');
+  const parseDuration = (value) => Math.round(Number(String(value || '0s').replace('s', '')) || 0);
+  const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step) => ({
+    name: String(step.navigationInstruction?.instructions || '').slice(0, 100),
+    distanceM: Math.round(Number(step.distanceMeters) || 0),
+    durationSec: parseDuration(step.staticDuration),
+    lanes: [],
+    maneuver: { type: 'continue', modifier: '', location: null },
+  }));
+  const prices = (source.travelAdvisory?.tollInfo?.estimatedPrice || []).map((price) => ({
+    currency: String(price.currencyCode || ''),
+    amount: Number(price.units || 0) + Number(price.nanos || 0) / 1e9,
+  })).filter((price) => price.currency && Number.isFinite(price.amount));
+  return {
+    distanceM: Math.round(source.distanceMeters),
+    durationSec: parseDuration(source.duration),
+    points: decodeGooglePolyline(source.polyline.encodedPolyline),
+    steps,
+    toll: { available: true, prices },
+    provider: 'google-routes',
+  };
+}
+
 app.get('/api/orbit/route', async (req, res) => {
   const fromLat = Number(req.query.fromLat); const fromLon = Number(req.query.fromLon);
   const toLat = Number(req.query.toLat); const toLon = Number(req.query.toLon);
   const fresh = req.query.fresh === '1';
+  const mode = ['recommended', 'toll', 'free'].includes(String(req.query.mode || '')) ? String(req.query.mode) : 'recommended';
+  const language = String(req.query.lang || 'en').replace(/[^a-z-]/gi, '').slice(0, 5) || 'en';
   const coordinates = [fromLat, fromLon, toLat, toLon];
   if (!coordinates.every(Number.isFinite) || Math.abs(fromLat) > 90 || Math.abs(toLat) > 90 || Math.abs(fromLon) > 180 || Math.abs(toLon) > 180) return res.status(400).json({ ok: false, message: 'Invalid route coordinates.' });
-  const key = `${fromLat.toFixed(3)},${fromLon.toFixed(3)}:${toLat.toFixed(3)},${toLon.toFixed(3)}`;
+  const key = `${mode}:${fromLat.toFixed(3)},${fromLon.toFixed(3)}:${toLat.toFixed(3)},${toLon.toFixed(3)}`;
   const cached = orbitRouteCache.get(key);
   if (!fresh && cached && now() - cached.at < ORBIT_ROUTE_CACHE_MS) return res.json({ ok: true, route: cached.value, cached: true });
   try {
+    if (mode !== 'recommended') {
+      if (!GOOGLE_ROUTES_API_KEY) {
+        return res.status(409).json({ ok: false, code: 'TOLL_PROVIDER_UNAVAILABLE', message: 'Toll and toll-free routing needs verified road-pricing data. Use the recommended route until Google Routes is connected.' });
+      }
+      const route = await fetchGoogleDrivingRoute({ fromLat, fromLon, toLat, toLon, mode, language });
+      if (route.points.length < 2) throw new Error('Google Routes geometry unavailable');
+      orbitRouteCache.set(key, { at: now(), value: route }); if (orbitRouteCache.size > 160) orbitRouteCache.delete(orbitRouteCache.keys().next().value);
+      return res.json({ ok: true, route, cached: false });
+    }
     const url = `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson&steps=true&alternatives=false`;
     const response = await fetch(url, { headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public driving route relay)' }, signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error(`OSRM responded ${response.status}`);

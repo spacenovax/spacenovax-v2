@@ -307,3 +307,10 @@
 
 /* Live driving telemetry: speed, remaining distance, recalculated ETA and arrival time. */
 .ov20-driving-bottom.ov20-driving-live-metrics{grid-template-columns:1fr 1fr 1fr 1.1fr}.ov20-driving-live-metrics>div:first-child b{color:#67f0d0}.ov20-driving-live-metrics>div:last-child b{color:#9edcff}@media(max-width:430px){.ov20-driving-bottom.ov20-driving-live-metrics>div{padding:10px 6px}.ov20-driving-live-metrics small{font-size:8px}.ov20-driving-live-metrics b{font-size:11px}}
+
+
+/* Road preference controls: compact, touch-safe, and visible before guidance begins. */
+.ov20-route-mode-selector{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:10px 0 8px}
+.ov20-route-mode-selector button{min-height:38px;padding:7px 6px;border:1px solid rgba(93,201,255,.34);border-radius:9px;background:rgba(4,20,42,.72);color:#cdeeff;font:700 11px/1.15 system-ui,sans-serif}
+.ov20-route-mode-selector button.active{border-color:#5edcff;background:linear-gradient(135deg,rgba(18,104,197,.92),rgba(21,203,235,.65));color:#fff;box-shadow:0 0 16px rgba(43,190,255,.28)}
+.ov20-route-toll-note{display:block;margin:0 0 8px;color:#9ed6ff;font-size:11px;line-height:1.45}
