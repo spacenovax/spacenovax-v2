@@ -691,7 +691,14 @@ export default class EarthEngine {
     this.autoRotate = false;
     const targetLon = -lon - 90; // convert target lon to the rotation.lon frame used by _applyRotation
     const targetLat = Math.max(-85, Math.min(85, lat));
-    const from = { lon: this.rotation.lon, lat: this.rotation.lat };
+    // Recover an already-corrupted camera state before calculating the flight.
+    // Telegram WebView can otherwise retain NaN rotation values after a failed frame.
+    const from = {
+      lon: Number.isFinite(this.rotation.lon) ? this.rotation.lon : -90,
+      lat: Number.isFinite(this.rotation.lat) ? this.rotation.lat : 0,
+    };
+    this.rotation.lon = from.lon;
+    this.rotation.lat = from.lat;
     // shortest angular path for longitude
     let deltaLon = ((targetLon - from.lon + 540) % 360) - 180;
     this._flight = { t0: performance.now(), duration: Math.max(0, Number(duration) || 900), from, deltaLon, deltaLat: targetLat - from.lat, onArrive };
