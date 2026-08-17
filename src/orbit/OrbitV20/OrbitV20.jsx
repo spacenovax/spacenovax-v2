@@ -207,6 +207,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [currentPlace, setCurrentPlace] = useState(null);
   const [heading, setHeading] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
+  const [liveSpeedMps, setLiveSpeedMps] = useState(null);
   const [gpsState, setGpsState] = useState('locating');
   const [gpsRetry, setGpsRetry] = useState(0);
   const [issTracked, setIssTracked] = useState(0);
@@ -257,6 +258,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const spokenGuidanceRef = useRef(new Set());
   const offRouteSinceRef = useRef(0);
   const lastGpsAtRef = useRef(0);
+  const previousGpsFixRef = useRef(null);
   const guidancePauseSpokenRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const arrivalAnnouncedRef = useRef(false);
@@ -316,6 +318,20 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     const applyPosition = (pos) => {
       if (!active) return;
       lastGpsAtRef.current = Date.now();
+      const previousFix = previousGpsFixRef.current;
+      let measuredSpeedMps = Number.isFinite(pos.speedMps) && pos.speedMps >= 0 ? pos.speedMps : null;
+      // Some mobile browsers omit GeolocationCoordinates.speed. Derive a
+      // conservative local value from consecutive GPS fixes instead of guessing.
+      if (measuredSpeedMps == null && previousFix) {
+        const elapsedSeconds = (pos.capturedAt - previousFix.capturedAt) / 1000;
+        if (elapsedSeconds >= 1 && elapsedSeconds <= 20) {
+          const metres = haversineKm(previousFix, pos) * 1000;
+          const combinedAccuracy = Math.max(Number(pos.accuracy || 0), Number(previousFix.accuracy || 0));
+          if (metres > combinedAccuracy * 0.35) measuredSpeedMps = metres / elapsedSeconds;
+        }
+      }
+      previousGpsFixRef.current = pos;
+      setLiveSpeedMps(Number.isFinite(measuredSpeedMps) ? Math.min(measuredSpeedMps, 70) : null);
       setCurrent(pos);
       setAccuracy(pos.accuracy || null);
       setHeading(typeof pos.heading === 'number' ? pos.heading : null);
@@ -1003,7 +1019,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   return (
     <div className="ov20-root">
-      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
+      {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} liveSpeedMps={liveSpeedMps} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
       <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} onMiningMap={openMiningMap} />
       <div className="ov20-layout">
         <OrbitEarthView

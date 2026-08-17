@@ -104,7 +104,7 @@ function MapReportPanel({ t, onClose, onSubmit }) {
 function formatEta(hours, ko) { if (hours == null) return '—'; if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}${ko ? '분' : ' min'}`; return `${Math.floor(hours)}${ko ? '시간 ' : 'h '}${Math.round((hours % 1) * 60)}${ko ? '분' : 'min'}`; }
 function turnSymbol(maneuver) { if (/left/i.test(maneuver)) return '↰'; if (/right/i.test(maneuver)) return '↱'; if (/uturn/i.test(maneuver)) return '↶'; return '↑'; }
 
-export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, guidanceSafetyState = 'ready', networkOnline, onResume, onToggleLowDataMode, onReport, onExit, onStop }) {
+export default function OrbitDrivingView({ t, current, destination, route, etaHours, distanceKm, nextStep, navigationProgress, routeStatus, lowDataMode, gpsState, accuracy, liveSpeedMps, guidanceSafetyState = 'ready', networkOnline, onResume, onToggleLowDataMode, onReport, onExit, onStop }) {
   const [recenterToken, setRecenterToken] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const points = useMemo(() => (route?.points || []).map((point) => [point.lat, point.lon]), [route]);
@@ -121,6 +121,16 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
   const weakGps = gpsState === 'live' && Number.isFinite(accuracy) && accuracy > 80;
   const guidancePaused = guidanceSafetyState === 'paused';
   const guidanceArrived = guidanceSafetyState === 'arrived';
+  const speedKmh = Number.isFinite(liveSpeedMps) && liveSpeedMps >= 0 ? liveSpeedMps * 3.6 : null;
+  const reliableLiveSpeed = Number.isFinite(speedKmh) && speedKmh >= 4 && speedKmh <= 180
+    && (!Number.isFinite(accuracy) || accuracy <= 65)
+    && (!current.capturedAt || Date.now() - current.capturedAt <= 20_000);
+  const liveEtaHours = reliableLiveSpeed && Number.isFinite(distanceKm) ? distanceKm / speedKmh : null;
+  // Blend GPS speed with the route's road-time estimate, capped to avoid a single
+  // noisy GPS fix producing an unsafe or wildly optimistic arrival prediction.
+  const navigationEtaHours = liveEtaHours != null && etaHours != null
+    ? Math.max(etaHours * 0.65, Math.min(etaHours * 1.65, etaHours * 0.55 + liveEtaHours * 0.45))
+    : (liveEtaHours ?? etaHours);
   const signalNote = !networkOnline
     ? t.offlineGuidance
     : weakGps
@@ -151,6 +161,11 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
     {guidancePaused && <aside className="ov20-driving-safety-pause" role="alert"><b>{t.ko ? '음성 안내가 일시 정지되었습니다' : 'Voice guidance is paused'}</b><small>{t.ko ? 'GPS를 확인하고 안전한 곳에 정차한 뒤 다시 시작하세요. 도로 표지·현장 통제·교통법규를 우선하세요.' : 'Check GPS and resume only when safely stopped. Follow road signs, local controls, and traffic laws.'}</small><button onClick={onResume}>{t.ko ? 'GPS 확인 후 다시 시작' : 'RESUME AFTER GPS CHECK'}</button></aside>}
     <div className="ov20-driving-instruction"><strong>{turnSymbol(maneuver)}</strong><div><small>{t.ko ? '다음 안내' : 'NEXT MANEUVER'}</small><b>{road}</b>{Number.isFinite(navigationProgress?.offRouteM) && navigationProgress.offRouteM > 55 && <small className="ov20-driving-gps-note">{t.ko ? 'GPS 위치 확인 중' : 'CHECKING GPS POSITION'}</small>}{signalNote && <small className="ov20-driving-gps-note warning">⚠ {signalNote}</small>}</div><em>{Number.isFinite(maneuverDistanceM) ? `${Math.max(1, Math.round(maneuverDistanceM / 10) * 10)} m` : '—'}</em></div>
     {reportOpen && <MapReportPanel t={t} onClose={() => setReportOpen(false)} onSubmit={onReport} />}
-    <footer className="ov20-driving-bottom"><div><small>{t.remaining}</small><b>{distanceKm == null ? '—' : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km`}</b></div><div><small>ETA</small><b>{formatEta(etaHours, t.ko)}</b></div><div><small>{t.ko ? '목적지' : 'DESTINATION'}</small><b>{destination.label?.split(',')[0]}</b></div></footer>
+    <footer className="ov20-driving-bottom ov20-driving-live-metrics">
+      <div><small>{t.ko ? '현재 속도' : 'LIVE SPEED'}</small><b>{speedKmh == null ? '—' : `${Math.round(speedKmh)} km/h`}</b></div>
+      <div><small>{t.remaining}</small><b>{distanceKm == null ? '—' : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km`}</b></div>
+      <div><small>{t.ko ? '예상 시간' : 'ETA'}</small><b>{formatEta(navigationEtaHours, t.ko)}</b></div>
+      <div><small>{t.ko ? '예상 도착' : 'ARRIVAL'}</small><b>{formatArrivalTime(navigationEtaHours, t.ko)}</b></div>
+    </footer>
   </section>;
 }
