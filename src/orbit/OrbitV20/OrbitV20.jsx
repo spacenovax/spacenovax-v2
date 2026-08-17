@@ -62,6 +62,33 @@ function speakOrbit(text, language, onStateChange) {
   return orbitSpeech.speak({ text, language, rate: 1, onStart: () => onStateChange?.('playing'), onEnd: () => onStateChange?.('idle'), onError: () => onStateChange?.('idle') });
 }
 
+// Short local-only "ding-dong" confirmation. No audio asset, API request, or
+// location data is involved; browsers may suppress it until a user taps Start.
+function playGpsConnectedTone() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return false;
+    const context = new AudioContextClass();
+    const play = (at, frequency) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, at);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.12, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.18);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.2);
+    };
+    const startAt = context.currentTime + 0.02;
+    play(startAt, 880);
+    play(startAt + 0.16, 1174.66);
+    window.setTimeout(() => context.close?.().catch?.(() => {}), 700);
+    return true;
+  } catch { return false; }
+}
+
 // i18n only — Korean stays 100% Korean, English stays 100% English, no mixing.
 function useCopy(language) {
   const ko = language === 'ko';
@@ -681,8 +708,12 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     const startLine = routeStatus === 'saved' || routeStatus === 'offline_pack' || drivingRoute.source === 'saved' || drivingRoute.source === 'offline-pack'
       ? `${navigationMessage('startSaved', language)} `
       : '';
-    const line = `${startLine}${navigationMessage('start', language, { destination: destination.label.split(',')[0], kilometers: km.toLocaleString() })}${firstDirection ? ` ${navigationMessage('firstInstruction', language, { direction: firstDirection })}` : ''}${roadName}`;
-    speakOrbit(line, language, setVoiceState);
+    const routeLine = `${startLine}${navigationMessage('start', language, { destination: destination.label.split(',')[0], kilometers: km.toLocaleString() })}${firstDirection ? ` ${navigationMessage('firstInstruction', language, { direction: firstDirection })}` : ''}${roadName}`;
+    playGpsConnectedTone();
+    const connectionLine = t.ko
+      ? 'Captain, GPS 연결되었습니다. 안내를 시작하겠습니다. '
+      : 'Captain, GPS connected. Starting guidance. ';
+    speakOrbit(`${connectionLine}${routeLine}`, language, setVoiceState);
   }
 
   function stopNavigation() {
@@ -919,7 +950,13 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   useEffect(() => {
     if (!navigationActive || !hasArrived || arrivalAnnouncedRef.current) return;
     arrivalAnnouncedRef.current = true;
-    speakOrbit(navigationMessage('arrived', language), language, setVoiceState);
+    speakOrbit(t.ko
+      ? 'Captain, 목적지에 도착하였습니다. 안내를 종료하겠습니다.'
+      : 'Captain, you have arrived at your destination. NOVA is ending guidance now.', language, setVoiceState);
+    // Stop further maneuvers immediately, while retaining the map for a safe
+    // final confirmation of the destination.
+    setNavigationActive(false);
+    setGuidanceSafetyState('arrived');
   }, [navigationActive, hasArrived, language, t.ko]);
 
   const air = aqiLabel(aqi, t.ko);

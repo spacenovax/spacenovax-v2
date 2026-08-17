@@ -120,14 +120,17 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
   const isSavedRoute = routeStatus === 'saved' || route?.source === 'saved';
   const weakGps = gpsState === 'live' && Number.isFinite(accuracy) && accuracy > 80;
   const guidancePaused = guidanceSafetyState === 'paused';
+  const guidanceArrived = guidanceSafetyState === 'arrived';
   const signalNote = !networkOnline
     ? t.offlineGuidance
     : weakGps
       ? `${t.gpsSignalWeak} · ±${Math.round(accuracy)}m`
       : '';
-  const statusLabel = guidancePaused
-    ? (t.ko ? '안전 정지 · GPS 확인 필요' : 'SAFETY PAUSE · CHECK GPS')
-    : isRerouting
+  const statusLabel = guidanceArrived
+    ? (t.ko ? '목적지 도착 · 안내 종료' : 'ARRIVED · GUIDANCE ENDED')
+    : guidancePaused
+      ? (t.ko ? '안전 정지 · GPS 확인 필요' : 'SAFETY PAUSE · CHECK GPS')
+      : isRerouting
       ? (t.ko ? '경로 재탐색 중' : 'REROUTING')
     : isSavedRoute
       ? (t.ko ? '저장 경로 · 연결 확인 필요' : 'SAVED ROUTE · CHECK ONLINE')
@@ -144,7 +147,7 @@ export default function OrbitDrivingView({ t, current, destination, route, etaHo
       <MapCamera current={current} points={points} recenterToken={recenterToken} lowDataMode={lowDataMode} />
       <MapControls onRecenter={() => setRecenterToken((value) => value + 1)} onExit={onExit} lowDataMode={lowDataMode} onToggleLowDataMode={onToggleLowDataMode} onOpenReport={() => setReportOpen((open) => !open)} />
     </MapContainer>
-    <header className="ov20-driving-top"><button onClick={onExit}>‹ {t.ko ? '지구본' : 'GLOBE'}</button><span className={guidancePaused ? 'paused' : isRerouting ? 'rerouting' : isSavedRoute ? 'saved' : ''}><i /> {statusLabel}</span><button onClick={onStop}>■ {t.ko ? '종료' : 'END'}</button></header>
+    <header className="ov20-driving-top"><button onClick={onExit}>‹ {t.ko ? '지구본' : 'GLOBE'}</button><span className={guidanceArrived ? 'arrived' : guidancePaused ? 'paused' : isRerouting ? 'rerouting' : isSavedRoute ? 'saved' : ''}><i /> {statusLabel}</span><button onClick={onStop}>■ {t.ko ? '종료' : 'END'}</button></header>
     {guidancePaused && <aside className="ov20-driving-safety-pause" role="alert"><b>{t.ko ? '음성 안내가 일시 정지되었습니다' : 'Voice guidance is paused'}</b><small>{t.ko ? 'GPS를 확인하고 안전한 곳에 정차한 뒤 다시 시작하세요. 도로 표지·현장 통제·교통법규를 우선하세요.' : 'Check GPS and resume only when safely stopped. Follow road signs, local controls, and traffic laws.'}</small><button onClick={onResume}>{t.ko ? 'GPS 확인 후 다시 시작' : 'RESUME AFTER GPS CHECK'}</button></aside>}
     <div className="ov20-driving-instruction"><strong>{turnSymbol(maneuver)}</strong><div><small>{t.ko ? '다음 안내' : 'NEXT MANEUVER'}</small><b>{road}</b>{Number.isFinite(navigationProgress?.offRouteM) && navigationProgress.offRouteM > 55 && <small className="ov20-driving-gps-note">{t.ko ? 'GPS 위치 확인 중' : 'CHECKING GPS POSITION'}</small>}{signalNote && <small className="ov20-driving-gps-note warning">⚠ {signalNote}</small>}</div><em>{Number.isFinite(maneuverDistanceM) ? `${Math.max(1, Math.round(maneuverDistanceM / 10) * 10)} m` : '—'}</em></div>
     {reportOpen && <MapReportPanel t={t} onClose={() => setReportOpen(false)} onSubmit={onReport} />}
