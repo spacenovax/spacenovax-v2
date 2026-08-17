@@ -4441,7 +4441,8 @@ app.get('/api/orbit/satellite-imagery', async (req, res) => {
 const geocodeCache = new Map();
 const GEOCODE_CACHE_MS = 30 * 60 * 1000;
 app.get('/api/orbit/geocode', async (req, res) => {
-  const query = String(req.query.q || '').trim().slice(0, 160);
+  const query = String(req.query.q || '').normalize('NFKC').replace(/[，、;；]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+  const compactQuery = query.replace(/\s+/g, '');
   const latitude = req.query.lat !== undefined ? Number(req.query.lat) : null;
   const longitude = req.query.lon !== undefined ? Number(req.query.lon) : null;
   const nearLatitude = req.query.nearLat !== undefined ? Number(req.query.nearLat) : null;
@@ -4498,13 +4499,22 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const bottom = Math.max(-90, nearLatitude - latRange).toFixed(3);
       nearbyViewbox = `&viewbox=${left},${top},${right},${bottom}&bounded=0`;
     }
-    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}${nearbyViewbox}`;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
-    const items = await response.json();
+    const searchNominatim = async (term) => {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(term)}${nearbyViewbox}`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
+      return response.json();
+    };
+    let items = await searchNominatim(query);
+    // Addresses are commonly pasted with missing or extra spaces. If the normal
+    // search found no public-map result, retry once with spaces removed. This is
+    // a bounded fallback, not fuzzy address invention.
+    if ((!items || items.length === 0) && compactQuery.length >= 2 && compactQuery !== query) {
+      items = await searchNominatim(compactQuery);
+    }
     const results = (items || []).map((item) => {
       const names = item.namedetails || {};
       const localName = names[`name:${language}`] || names[`name:${language.split('-')[0]}`] || names.name || '';
