@@ -199,6 +199,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [voiceState, setVoiceState] = useState('idle');
   const [hudPanel, setHudPanel] = useState(null);
   const [earthQuality, setEarthQuality] = useState('2K · LOADING');
+  const [webglUnavailable, setWebglUnavailable] = useState(false);
   const [satelliteLayer, setSatelliteLayer] = useState({ enabled: false, status: 'idle', date: '' });
 
   const [tab, setTab] = useState('live');
@@ -272,11 +273,20 @@ export default function OrbitV20({ language, user, onOpenMining }) {
     perfRef.current = perf;
     // Start in the sharp renderer mode. Browser hardware hints are often inaccurate
     // in Telegram WebView; only a measured low FPS switches the renderer down.
-    const engine = new EarthEngine(containerRef.current, {
-      onTextureQualityChange: setEarthQuality,
-      onSatelliteLayerChange: setSatelliteLayer,
-    });
-    engineRef.current = engine;
+    let engine;
+    try {
+      engine = new EarthEngine(containerRef.current, {
+        onTextureQualityChange: setEarthQuality,
+        onSatelliteLayerChange: setSatelliteLayer,
+      });
+      engineRef.current = engine;
+    } catch (error) {
+      // Some Telegram WebViews disable WebGL. Keep navigation usable rather
+      // than letting the renderer exception replace the whole app with black.
+      console.warn('Orbit WebGL unavailable; using 2D fallback.', error);
+      setWebglUnavailable(true);
+      return undefined;
+    }
     MasterRenderLoop.setFrameSkip(1);
     MasterRenderLoop.add('orbit-earth', (time) => engine.renderFrame(time));
     MasterRenderLoop.add('orbit-perf', () => perfRef.current?.tick());
@@ -1028,7 +1038,11 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       {drivingViewOpen && <OrbitDrivingView t={t} current={current} destination={destination} route={drivingRoute} etaHours={etaHours} distanceKm={distanceKm} nextStep={activeDrivingStep} navigationProgress={navigationProgress} routeStatus={routeStatus} lowDataMode={lowDataMode} gpsState={gpsState} accuracy={accuracy} liveSpeedMps={liveSpeedMps} guidanceSafetyState={guidanceSafetyState} networkOnline={networkOnline} onResume={startNavigation} onToggleLowDataMode={toggleLowDataMode} onReport={submitNavigationReport} onExit={() => setDrivingViewOpen(false)} onStop={stopNavigation} />}
       <OrbitTopBar tab={tab} onSelect={selectTab} t={t} onSearch={openDestinationSearch} onMiningMap={openMiningMap} />
       <div className="ov20-layout">
-        <OrbitEarthView
+        {webglUnavailable ? <section className="ov20-webgl-fallback" role="status">
+          <b>{t.ko ? '2D 위치 모드' : '2D LOCATION MODE'}</b>
+          <p>{t.ko ? '이 기기에서는 3D 지구를 열 수 없어 안전한 2D 위치 안내를 사용합니다.' : '3D Earth is unavailable on this device. Using safe 2D location guidance.'}</p>
+          <button onClick={() => { setGpsRetry((value) => value + 1); }}>{t.ko ? 'GPS 위치 다시 확인' : 'CHECK GPS AGAIN'}</button>
+        </section> : <OrbitEarthView
           containerRef={containerRef}
           current={current}
           markerPos={markerPos}
@@ -1038,7 +1052,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           onZoomIn={() => engineRef.current?.zoomBy(0.5)}
           onZoomOut={() => engineRef.current?.zoomBy(-0.5)}
           onRecenter={() => engineRef.current?.recenter()}
-        />
+        />}
         <div className="ov20-col left ov20-desktop-panels">
           <OrbitLeftPanel {...panelProps} />
         </div>
