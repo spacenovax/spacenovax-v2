@@ -296,3 +296,6 @@
 
 /* Destination discovery filters: tap targets stay large enough for one-handed use. */
 .ov20-nearby-filters{display:flex;gap:7px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none}.ov20-nearby-filters::-webkit-scrollbar{display:none}.ov20-nearby-filters button{flex:0 0 auto;min-height:34px;border:1px solid rgba(86,157,202,.45);border-radius:10px;background:rgba(8,26,48,.82);color:#b9cadc;padding:0 10px;font-size:10px;font-weight:800;white-space:nowrap}.ov20-nearby-filters button i{margin-right:4px;font-style:normal;color:#76e9ff}.ov20-nearby-filters button.active{border-color:#35e6c6;background:linear-gradient(120deg,rgba(13,151,152,.42),rgba(54,89,229,.42));box-shadow:0 0 14px rgba(49,224,208,.18);color:#fff}.ov20-nearby-filters button.active i{color:#9bffe5}
+
+/* Nearby pins are interactive only while the destination search is open. */
+.ov20-marker-nearby{--marker-color:#5ee7ff;background:transparent;border:0;padding:0;font:inherit}.ov20-marker.selectable{pointer-events:auto;cursor:pointer}.ov20-marker.selectable:focus-visible{outline:2px solid #fff;outline-offset:4px;border-radius:8px}.ov20-marker:disabled{cursor:default}
