@@ -702,7 +702,9 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       location: { lat: Number(current.lat.toFixed(3)), lon: Number(current.lon.toFixed(3)) },
       destination: { label: String(destination.label || '').slice(0, 120), lat: Number(destination.lat.toFixed(3)), lon: Number(destination.lon.toFixed(3)) },
     });
-    return result.message || navigationMessage('reportReceived', language);
+    return result.reportId
+      ? `${result.message || navigationMessage('reportReceived', language)} ${t.ko ? '접수 번호' : 'Receipt'}: ${result.reportId.slice(0, 8).toUpperCase()} · ${t.ko ? '상태: 접수됨' : 'Status: received'}`
+      : (result.message || navigationMessage('reportReceived', language));
   }
 
   async function shareRouteSafely() {

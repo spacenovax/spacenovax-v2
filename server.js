@@ -4620,7 +4620,39 @@ app.post('/api/orbit/navigation-report', (req, res) => {
   data.navigationReports.push(report);
   data.events.push({ type: 'orbit_navigation_report', userId: user.id, reportId: report.id, category, at: report.createdAt });
   writeData(data);
-  res.status(201).json({ ok: true, message: 'Map report received. Your exact GPS location was not stored.' });
+  res.status(201).json({ ok: true, status: report.status, reportId: report.id, message: 'Map report received. Your exact GPS location was not stored.' });
+});
+
+// Admin review keeps navigation reports advisory. A report can never modify a route,
+// map tile, or traffic claim directly; a verified administrator records every review.
+app.get('/api/admin/navigation-reports', requireAdmin, (req, res) => {
+  const data = readData();
+  const requestedStatus = String(req.query.status || '');
+  const allowedStatuses = new Set(['pending', 'in_review', 'resolved', 'dismissed']);
+  if (requestedStatus && !allowedStatuses.has(requestedStatus)) return res.status(400).json({ ok: false, message: 'Invalid report status.' });
+  const reports = (data.navigationReports || [])
+    .filter((report) => !requestedStatus || report.status === requestedStatus)
+    .slice()
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .slice(0, 250)
+    .map(({ userId, ...report }) => ({ ...report, reporter: userId ? 'verified_captain' : 'unknown' }));
+  res.json({ ok: true, reports });
+});
+
+app.post('/api/admin/navigation-reports/review', requireAdmin, (req, res) => {
+  const data = readData();
+  const report = (data.navigationReports || []).find((item) => item.id === String(req.body?.reportId || ''));
+  const status = String(req.body?.status || '');
+  const allowedStatuses = new Set(['in_review', 'resolved', 'dismissed']);
+  if (!report || !allowedStatuses.has(status)) return res.status(400).json({ ok: false, message: 'Invalid navigation report review.' });
+  const reviewNote = String(req.body?.reviewNote || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  report.status = status;
+  report.reviewedAt = now();
+  report.reviewedBy = req.admin.id;
+  report.reviewNote = reviewNote;
+  data.events.push({ type: 'admin_navigation_report_review', adminId: req.admin.id, reportId: report.id, status, at: report.reviewedAt });
+  writeData(data);
+  res.json({ ok: true, report: { id: report.id, status: report.status, reviewedAt: report.reviewedAt } });
 });
 
 app.get('/api/orbit/route', async (req, res) => {
