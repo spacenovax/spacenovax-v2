@@ -4716,10 +4716,13 @@ app.get('/api/orbit/route', async (req, res) => {
     const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step) => {
       const maneuverLocation = Array.isArray(step.maneuver?.location) ? step.maneuver.location : [];
       const maneuverLon = Number(maneuverLocation[0]); const maneuverLat = Number(maneuverLocation[1]);
+      const laneSet = (step.intersections || []).find((intersection) => Array.isArray(intersection.lanes) && intersection.lanes.length)?.lanes || [];
+      const lanes = laneSet.slice(0, 8).map((lane) => ({ indications: Array.isArray(lane.indications) ? lane.indications.map(String).slice(0, 3) : [], valid: lane.valid === true }));
       return {
         name: String(step.name || '').slice(0, 100),
         distanceM: Math.round(Number(step.distance) || 0),
         durationSec: Math.round(Number(step.duration) || 0),
+        lanes,
         maneuver: {
           type: String(step.maneuver?.type || 'continue').slice(0, 32),
           modifier: String(step.maneuver?.modifier || '').slice(0, 32),
