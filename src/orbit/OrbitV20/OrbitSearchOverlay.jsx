@@ -1,6 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrowserSpeechProvider } from '../../nova/voice/BrowserSpeechProvider.js';
 
+const NEARBY_CATEGORIES = [
+  { id: 'all', icon: '⌖', ko: '전체', en: 'All' },
+  { id: 'hospital', icon: '✚', ko: '병원', en: 'Health' },
+  { id: 'fuel', icon: '⛽', ko: '주유', en: 'Fuel' },
+  { id: 'parking', icon: 'Ⓟ', ko: '주차', en: 'Parking' },
+  { id: 'pharmacy', icon: '⚕', ko: '약국', en: 'Pharmacy' },
+  { id: 'police', icon: '⚑', ko: '경찰', en: 'Police' },
+];
+
+function matchesNearbyCategory(place, category) {
+  if (category === 'all') return true;
+  const haystack = [place.type, place.label, place.subtitle].filter(Boolean).join(' ').toLowerCase();
+  const aliases = { hospital: ['hospital', 'clinic', 'doctors', 'health', '병원', '의원'], fuel: ['fuel', 'gas', '주유', '충전'], parking: ['parking', '주차'], pharmacy: ['pharmacy', '약국'], police: ['police', '경찰'] };
+  return (aliases[category] || [category]).some((word) => haystack.includes(word));
+}
+
 const QUICK_DESTINATIONS = [
   { id: 'home', icon: '⌂', ko: '집', en: 'Home' },
   { id: 'work', icon: '▣', ko: '회사', en: 'Work' },
@@ -10,7 +26,7 @@ const QUICK_DESTINATIONS = [
   { id: 'airport', icon: '✈', ko: '공항', en: 'Airport' },
 ];
 
-export default function OrbitSearchOverlay({ open, t, language, query, results, busy, nearby = [], nearbyAnchor, nearbyBusy, recent, base, onChange, onPick, onQuickDestination, onClose }) {
+export default function OrbitSearchOverlay({ open, t, language, query, results, busy, nearby = [], nearbyAnchor, nearbyBusy, nearbyCategory = 'all', onNearbyCategoryChange, recent, base, onChange, onPick, onQuickDestination, onClose }) {
   const inputRef = useRef(null);
   const speechRef = useRef(null);
   const heardRef = useRef('');
@@ -35,6 +51,7 @@ export default function OrbitSearchOverlay({ open, t, language, query, results, 
   const showQuick = query.trim().length < 2;
   const showEmpty = query.trim().length >= 2 && !busy && results.length === 0;
   const showNearby = query.trim().length >= 2 && Boolean(nearbyAnchor);
+  const visibleNearby = nearby.filter((place) => matchesNearbyCategory(place, nearbyCategory));
 
   return (
     <div className="ov20-search-overlay" role="dialog" aria-modal="true" aria-label={t.searchTitle}>
@@ -81,8 +98,15 @@ export default function OrbitSearchOverlay({ open, t, language, query, results, 
         ))}
         {showNearby && <section className="ov20-nearby-places" aria-label={t.ko ? '주변 주요 장소' : 'Nearby essential places'}>
           <div className="ov20-search-section-title">⌖ {t.ko ? `${nearbyAnchor.label.split(',')[0]} 주변 주요 장소` : `NEARBY ${nearbyAnchor.label.split(',')[0]}`}</div>
+          <div className="ov20-nearby-filters" role="group" aria-label={t.ko ? '주변 장소 분류' : 'Nearby place categories'}>
+            {NEARBY_CATEGORIES.map((category) => (
+              <button key={category.id} type="button" className={nearbyCategory === category.id ? 'active' : ''} onClick={() => onNearbyCategoryChange?.(category.id)}>
+                <i aria-hidden="true">{category.icon}</i>{t.ko ? category.ko : category.en}
+              </button>
+            ))}
+          </div>
           {nearbyBusy && <div className="ov20-search-state"><i />{t.ko ? '주변 장소를 찾고 있습니다…' : 'Finding nearby places…'}</div>}
-          {!nearbyBusy && nearby.map((place) => (
+          {!nearbyBusy && visibleNearby.map((place) => (
             <button className="ov20-place-result ov20-nearby-place" key={place.id} onClick={() => onPick(place)}>
               <span className="pin">{place.icon || '⌖'}</span>
               <span><b>{place.label}</b><small>{[place.type, place.subtitle, Number.isFinite(place.distanceKm) ? `${place.distanceKm < 1 ? Math.round(place.distanceKm * 1000) + ' m' : place.distanceKm.toFixed(1) + ' km'}` : ''].filter(Boolean).join(' · ')}</small></span>
@@ -90,6 +114,7 @@ export default function OrbitSearchOverlay({ open, t, language, query, results, 
             </button>
           ))}
           {!nearbyBusy && nearby.length === 0 && <small className="ov20-nearby-empty">{t.ko ? '공개 지도에서 주변 주요 장소를 찾지 못했습니다.' : 'No nearby essential places were found in public map data.'}</small>}
+          {!nearbyBusy && nearby.length > 0 && visibleNearby.length === 0 && <small className="ov20-nearby-empty">{t.ko ? '이 분류의 장소를 찾지 못했습니다. 전체를 선택해 보세요.' : 'No places in this category. Try All.'}</small>}
         </section>}
                 {showEmpty && <div className="ov20-search-empty">⌕<b>{t.noResults}</b><small>{t.searchHint}</small></div>}
       </div>
