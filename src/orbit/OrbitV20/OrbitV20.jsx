@@ -195,6 +195,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
   const [nearbyAnchor, setNearbyAnchor] = useState(null);
   const [nearbyBusy, setNearbyBusy] = useState(false);
+  const [nearbyCategory, setNearbyCategory] = useState('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [miningMapOpen, setMiningMapOpen] = useState(false);
   const [searchBusy, setSearchBusy] = useState(false);
@@ -495,22 +496,25 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   }
 
   function runSearch(q, { near = null } = {}) {
+    const normalizedQuery = String(q || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
     setSearchQuery(q);
     clearTimeout(searchTimerRef.current);
     const requestId = ++searchRequestRef.current;
-    const coordinate = coordinateDestination(q, t.ko);
+    const coordinate = coordinateDestination(normalizedQuery, t.ko);
     if (coordinate) {
       setSearchResults([coordinate]);
+      setNearbyCategory('all');
       setSearchBusy(false);
       return;
     }
-    if (q.trim().length < 2) {
-      setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); setSearchBusy(false); return;
+    if (normalizedQuery.length < 2) {
+      setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); setNearbyCategory('all'); setSearchBusy(false); return;
     }
+    const currentNear = current ? { lat: current.lat, lon: current.lon } : null;
     setSearchBusy(true);
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const results = await searchDestination(q, language, { near });
+        const results = await searchDestination(normalizedQuery, language, { near: near || currentNear });
         if (requestId !== searchRequestRef.current) return;
         setSearchResults(results);
         const anchor = results[0] || null;
@@ -965,9 +969,9 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       />
       <OrbitSearchOverlay
         open={searchOpen} t={t} language={language} query={searchQuery} results={searchResults} busy={searchBusy}
-        nearby={nearbyPlaces} nearbyAnchor={nearbyAnchor} nearbyBusy={nearbyBusy}
+        nearby={nearbyPlaces} nearbyAnchor={nearbyAnchor} nearbyBusy={nearbyBusy} nearbyCategory={nearbyCategory} onNearbyCategoryChange={setNearbyCategory}
         recent={recentDestinations} base={base} onChange={runSearch} onPick={pickDestination} onQuickDestination={selectQuickDestination}
-        onClose={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); }}
+        onClose={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); setNearbyPlaces([]); setNearbyAnchor(null); setNearbyBusy(false); setNearbyCategory('all'); }}
       />
       {miningMapOpen && !drivingViewOpen && <OrbitMiningMap language={language} inTelegram={inTelegram} onClose={() => setMiningMapOpen(false)} onOpenMining={openOfficialMining} />}
       <OrbitBottomBar />
