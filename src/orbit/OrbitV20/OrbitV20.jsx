@@ -69,22 +69,30 @@ function playGpsConnectedTone() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return false;
     const context = new AudioContextClass();
-    const play = (at, frequency) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(frequency, at);
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.12, at + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.18);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(at);
-      oscillator.stop(at + 0.2);
+    const playTone = () => {
+      const play = (at, frequency) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, at);
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(0.18, at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.2);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start(at);
+        oscillator.stop(at + 0.22);
+      };
+      const startAt = context.currentTime + 0.02;
+      play(startAt, 880);
+      play(startAt + 0.17, 1174.66);
+      window.setTimeout(() => context.close?.().catch?.(() => {}), 800);
     };
-    const startAt = context.currentTime + 0.02;
-    play(startAt, 880);
-    play(startAt + 0.16, 1174.66);
-    window.setTimeout(() => context.close?.().catch?.(() => {}), 700);
+    // Telegram and other mobile webviews often create audio contexts suspended.
+    // Start is a direct user tap, so explicitly resume before scheduling the tone.
+    const resumed = context.resume?.();
+    if (resumed?.then) resumed.then(playTone).catch(() => context.close?.().catch?.(() => {}));
+    else playTone();
+    window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
     return true;
   } catch { return false; }
 }
@@ -654,6 +662,8 @@ export default function OrbitV20({ language, user, onOpenMining }) {
   // Distance -> Time -> NOVA Voice, all from one selection.
   async function pickDestination(place) {
     resetGuidanceSession();
+    // Cancel any older NOVA narration so the GPS connection confirmation is immediate.
+    orbitSpeech.stop();
     guidancePauseSpokenRef.current = false;
     setGuidanceSafetyState('ready');
     setNavigationActive(false);
