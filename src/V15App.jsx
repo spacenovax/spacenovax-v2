@@ -564,6 +564,54 @@ function voiceLabel(state, language, idleKo, idleEn) {
   return ko ? idleKo : idleEn;
 }
 
+const VOICE_DELAY_COPY = {
+  en: 'Voice guidance is delayed by Telegram’s in-app environment. Please try again shortly or use text guidance.',
+  ko: '텔레그램 앱 내 환경 정책으로 음성 안내가 지연되고 있습니다. 잠시 후 다시 시도하거나 텍스트 안내를 이용해 주세요.',
+  ja: 'Telegramアプリ内の環境により音声案内が遅れています。しばらくしてから再試行するか、テキスト案内をご利用ください。',
+  zh: '受 Telegram 应用内环境影响，语音引导正在延迟。请稍后重试或使用文字引导。',
+  es: 'La guía por voz se está retrasando por el entorno integrado de Telegram. Inténtalo de nuevo en breve o usa la guía de texto.',
+  pt: 'A orientação por voz está atrasada devido ao ambiente integrado do Telegram. Tente novamente em instantes ou use a orientação por texto.',
+  de: 'Die Sprachführung verzögert sich aufgrund der integrierten Telegram-Umgebung. Bitte versuchen Sie es in Kürze erneut oder nutzen Sie die Textführung.',
+  fr: 'Le guidage vocal est retardé par l’environnement intégré de Telegram. Réessayez dans un instant ou utilisez le guidage textuel.',
+  ru: 'Голосовая навигация задерживается из-за встроенной среды Telegram. Повторите попытку позже или используйте текстовую подсказку.',
+  vi: 'Hướng dẫn bằng giọng nói đang bị chậm do môi trường tích hợp của Telegram. Vui lòng thử lại sau hoặc dùng hướng dẫn bằng văn bản.',
+  id: 'Panduan suara terlambat karena lingkungan terintegrasi Telegram. Silakan coba lagi sebentar atau gunakan panduan teks.',
+  ar: 'يتأخر الإرشاد الصوتي بسبب بيئة Telegram المدمجة. يُرجى المحاولة بعد قليل أو استخدام الإرشاد النصي.',
+};
+
+function NovaVoiceDelayNotice({ language }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    let delayTimer;
+    let dismissTimer;
+    const show = () => {
+      window.clearTimeout(delayTimer);
+      window.clearTimeout(dismissTimer);
+      setVisible(true);
+      dismissTimer = window.setTimeout(() => setVisible(false), 9000);
+    };
+    const update = (event) => {
+      const status = event.detail?.status;
+      if (status === 'loading') {
+        window.clearTimeout(delayTimer);
+        delayTimer = window.setTimeout(show, 4500);
+      } else if (status === 'error') {
+        show();
+      } else if (status === 'playing' || status === 'complete' || status === 'stopped') {
+        window.clearTimeout(delayTimer);
+      }
+    };
+    window.addEventListener('nova-voice-status', update);
+    return () => {
+      window.clearTimeout(delayTimer);
+      window.clearTimeout(dismissTimer);
+      window.removeEventListener('nova-voice-status', update);
+    };
+  }, []);
+  if (!visible) return null;
+  return <aside className="nova-voice-delay-notice" role="status" aria-live="polite"><Icon name="speaker" size={18}/><p>{VOICE_DELAY_COPY[language] || VOICE_DELAY_COPY.en}</p><button onClick={() => setVisible(false)} aria-label="Close voice notice"><Icon name="close" size={15}/></button></aside>;
+}
+
 function Icon({ name, size = 22 }) {
   const paths = {
     home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9 20v-6h6v6"/></>,
