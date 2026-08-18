@@ -839,6 +839,7 @@ function CaptainTelegramOnboarding({ language }) {
   // The bot receives the same code through Telegram's official start parameter.
   const referralCode = (window.location.pathname.match(/^\\/join\\/([A-Za-z0-9]{1,32})\\/?$/)?.[1] || '').toUpperCase();
   const telegramUrl = referralCode ? `${OFFICIAL_TELEGRAM_BOT_URL}?start=${encodeURIComponent(referralCode)}` : OFFICIAL_TELEGRAM_BOT_URL;
+  const telegramInstallUrl = 'https://telegram.org/apps';
   const openTelegram = () => {
     const telegram = window.Telegram?.WebApp;
     if (typeof telegram?.openTelegramLink === 'function') telegram.openTelegramLink(telegramUrl);
@@ -850,7 +851,8 @@ function CaptainTelegramOnboarding({ language }) {
       <span>{korean ? 'SPACENOVAX 시작 안내' : 'SPACENOVAX GETTING STARTED'}</span>
       <h2>{korean ? '채굴을 시작하려면 캡틴 ID가 필요합니다' : 'A Captain ID is required to start mining'}</h2>
       <p>{korean ? '웹에서는 서비스 내용을 둘러볼 수 있습니다. SPNX Points 채굴과 보상 기록은 공식 Telegram Mini App에서 생성되는 캡틴 ID로만 보호됩니다.' : 'You can explore SpaceNovaX on the web. Mining and reward records are protected through a Captain ID created in the official Telegram Mini App.'}</p>
-      <ol><li>{korean ? '공식 Telegram 봇을 엽니다.' : 'Open the official Telegram bot.'}</li><li>{korean ? 'START 또는 앱 열기를 누릅니다.' : 'Tap START or Open App.'}</li><li>{korean ? '캡틴 ID가 자동 생성되면 채굴을 시작합니다.' : 'Your Captain ID is created automatically; then start mining.'}</li></ol>
+      <ol><li>{korean ? 'Telegram이 없다면 먼저 공식 앱을 설치합니다.' : 'If you do not have Telegram, install the official app first.'}</li><li>{korean ? '공식 Telegram 봇을 엽니다.' : 'Open the official Telegram bot.'}</li><li>{korean ? 'START 또는 앱 열기를 누릅니다.' : 'Tap START or Open App.'}</li><li>{korean ? '캡틴 ID가 자동 생성되면 채굴을 시작합니다.' : 'Your Captain ID is created automatically; then start mining.'}</li></ol>
+      <a className="captain-telegram-install" href={telegramInstallUrl} target="_blank" rel="noreferrer"><Icon name="external" size={15}/>{korean ? 'Telegram 공식 앱 설치' : 'Install the official Telegram app'}</a>
       <button className="captain-onboarding-action" onClick={openTelegram}><Icon name="telegram" size={18}/>{korean ? '공식 Telegram에서 캡틴 ID 만들기' : 'Create Captain ID in Telegram'}<Icon name="external" size={15}/></button>
       <a className="captain-onboarding-link" href={telegramUrl} target="_blank" rel="noreferrer">{korean ? '링크 열기 / 복사하기' : 'Open or copy the Telegram link'}{referralCode && <b> · REF {referralCode}</b>}</a>
       <small>{korean ? '보안 안내: 비밀번호·지갑 개인키·Telegram 인증 코드는 절대 입력하지 마세요.' : 'Security: Never enter a password, wallet private key, or Telegram login code.'}</small>
