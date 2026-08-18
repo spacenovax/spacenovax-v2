@@ -2243,6 +2243,7 @@ export default function V15App() {
   return <>
     {!launched && <Splash done={() => setLaunched(true)}/>}
     <div className={`v15-shell ${launched ? 'ready' : ''}`}><Header user={user} language={language} setLanguage={setLanguage} t={t} onPreview={() => setPreviewOpen(true)} onMessages={() => setTab('messages')} onAnnouncements={() => setTab('announcements')}/>{user.latestAnnouncement?.showBanner && <button className={`global-announcement-banner priority-${user.latestAnnouncement.priority || 'normal'}`} onClick={() => setTab('announcements')}><strong>NEW · {language === 'ko' ? '공지' : 'NOTICE'}</strong><span>{user.latestAnnouncement.title}</span><Icon name="arrow" size={15}/></button>}{page}<Nav tab={tab} setTab={setTab} t={t}/>{tab !== 'orbit' && <NovaGuide tab={tab} language={language} setTab={setTab}/>}</div>
+    <NovaVoiceDelayNotice language={language}/>
     <PreviewPanel open={previewOpen && launched} close={() => setPreviewOpen(false)} t={t}/>
   </>;
 }
