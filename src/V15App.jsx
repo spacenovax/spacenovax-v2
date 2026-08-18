@@ -10,6 +10,7 @@ const OrbitV20 = lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'));
 // Direct game loading prevents Telegram Android WebView from rendering the old
 // two-level cross-origin iframe chain as a blank/black game screen.
 const GAME_URL = import.meta.env.VITE_GAME_URL || 'https://nova-x1-genesis-defense.kit372002.chatgpt.site';
+const OFFICIAL_TELEGRAM_BOT_URL = 'https://t.me/SpaceNovaXAdminBot';
 const PREVIEW_BUILD = import.meta.env.VITE_PREVIEW_BUILD === 'true' || new URLSearchParams(window.location.search).get('preview') === '1';
 const LANGUAGES = [
   ['en', 'English'], ['ko', '한국어'], ['ja', '日本語'], ['zh', '中文'],
@@ -832,7 +833,27 @@ function SponsoredBannerSlot({ placement, language }) {
   </section>;
 }
 
-function Home({ user, t, onStart, onClaim, busy, setTab, language }) {
+function CaptainTelegramOnboarding({ language }) {
+  const korean = language === 'ko';
+  const openTelegram = () => {
+    const telegram = window.Telegram?.WebApp;
+    if (typeof telegram?.openTelegramLink === 'function') telegram.openTelegramLink(OFFICIAL_TELEGRAM_BOT_URL);
+    else window.open(OFFICIAL_TELEGRAM_BOT_URL, '_blank', 'noopener,noreferrer');
+  };
+  return <section className="captain-onboarding-card" aria-label={korean ? '캡틴 ID 시작 안내' : 'Captain ID getting started'}>
+    <div className="captain-onboarding-orbit" aria-hidden="true">✦</div>
+    <div className="captain-onboarding-copy">
+      <span>{korean ? 'SPACENOVAX 시작 안내' : 'SPACENOVAX GETTING STARTED'}</span>
+      <h2>{korean ? '채굴을 시작하려면 캡틴 ID가 필요합니다' : 'A Captain ID is required to start mining'}</h2>
+      <p>{korean ? '웹에서는 서비스 내용을 둘러볼 수 있습니다. SPNX Points 채굴과 보상 기록은 공식 Telegram Mini App에서 생성되는 캡틴 ID로만 보호됩니다.' : 'You can explore SpaceNovaX on the web. Mining and reward records are protected through a Captain ID created in the official Telegram Mini App.'}</p>
+      <ol><li>{korean ? '공식 Telegram 봇을 엽니다.' : 'Open the official Telegram bot.'}</li><li>{korean ? 'START 또는 앱 열기를 누릅니다.' : 'Tap START or Open App.'}</li><li>{korean ? '캡틴 ID가 자동 생성되면 채굴을 시작합니다.' : 'Your Captain ID is created automatically; then start mining.'}</li></ol>
+      <button className="captain-onboarding-action" onClick={openTelegram}><Icon name="telegram" size={18}/>{korean ? '공식 Telegram에서 캡틴 ID 만들기' : 'Create Captain ID in Telegram'}<Icon name="external" size={15}/></button>
+      <small>{korean ? '보안 안내: 비밀번호·지갑 개인키·Telegram 인증 코드는 절대 입력하지 마세요.' : 'Security: Never enter a password, wallet private key, or Telegram login code.'}</small>
+    </div>
+  </section>;
+}
+
+function Home({ user, t, onStart, onClaim, busy, setTab, language, requiresCaptain }) {
   const live = useLiveMiningView(user);
   const liveUser = { ...user, mining: live.mining };
   const [balanceInteger, balanceFraction = ''] = format(live.displayBalance, 5).split('.');
@@ -854,6 +875,7 @@ function Home({ user, t, onStart, onClaim, busy, setTab, language }) {
       <div className="station-brand"><span>SPACENOVAX ORBITAL COMMAND</span><b>SpaceNova<span>X</span></b><small>EARTH SECTOR · COMMAND BASE HQ-01</small></div>
       <div className="captain-strip"><span><small>{t.captain}</small><b>{user.firstName || 'Space Explorer'}</b></span><span><small>LEVEL</small><b>{user.level || 1}</b></span><span><small>{t.status}</small><b>{user.isGuest ? t.guest : 'TELEGRAM VERIFIED'}</b></span></div>
     </section>
+    {requiresCaptain && <CaptainTelegramOnboarding language={language}/>} 
     <SponsoredBannerSlot placement="mining-top" language={language}/>
     <MiningCore user={liveUser} t={t} onStart={onStart} onClaim={onClaim} onOpenGlobalChat={() => setTab('global-chat')} onOpenFleet={() => setTab('fleet')} busy={busy}/>
     <section className="command-card home-mission-banner" onClick={() => setTab('missions')}>
@@ -2107,10 +2129,11 @@ export default function V15App() {
   const [user, setUser] = useState(fallbackUser);
   const [busy, setBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(PREVIEW_BUILD);
+  const [sessionReady, setSessionReady] = useState(false);
   const t = COPY[language] || COPY.en;
   const setLanguage = (value) => { localStorage.setItem('spnx_language', value); setLanguageState(value); document.documentElement.lang = value; };
   const sync = useCallback(async () => {
-    try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {}
+    try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {} finally { setSessionReady(true); }
   }, []);
   useEffect(() => {
     document.documentElement.lang = language;
@@ -2142,7 +2165,7 @@ export default function V15App() {
     setBusy(false);
   }
   let page;
-  if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab} language={language}/>;
+  if (tab === 'home') page = <Home user={user} t={t} onStart={() => miningAction('/api/mining/start')} onClaim={() => miningAction('/api/mining/claim')} busy={busy} setTab={setTab} language={language} requiresCaptain={sessionReady && Boolean(user.isGuest) && !Boolean(window.Telegram?.WebApp?.initData)}/>;
   else if (tab === 'orbit') page = <Suspense fallback={<main className="v15-page"><section className="command-card ops-module"><div className="section-heading"><div><small>EARTH NAVIGATION NETWORK</small><h2>Orbit Control</h2></div><span className="live-state"><i/>CONNECTING</span></div></section></main>}><OrbitV20 language={language} user={user} onOpenMining={() => setTab('home')}/></Suspense>;
   else if (tab === 'game') page = <Game user={user} t={t} language={language}/>;
   else if (tab === 'ai') page = <NovaAI user={user} t={t} language={language}/>;
