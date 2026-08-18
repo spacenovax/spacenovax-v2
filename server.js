@@ -178,6 +178,8 @@ function createInitialData() {
       globalChatMutes: [],
       sponsoredBanners: [],
       sponsoredBannerClicks: {},
+      developerGithubConnections: [],
+      developerSecurityReports: [],
       communityNodes: {},
       nodePairings: {},
       personalMessages: [],
@@ -270,6 +272,10 @@ function normalizeData(data) {
   data.sponsoredBanners ||= [];
   data.sponsoredBanners = data.sponsoredBanners.slice(-50);
   data.sponsoredBannerClicks ||= {};
+  data.developerGithubConnections ||= [];
+  data.developerGithubConnections = data.developerGithubConnections.slice(-5000);
+  data.developerSecurityReports ||= [];
+  data.developerSecurityReports = data.developerSecurityReports.slice(-5000);
   data.communityNodes ||= {};
   data.nodePairings ||= {};
   data.personalMessages ||= [];
@@ -1634,6 +1640,48 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? '' : 'Chan
 const ADMIN_TOKEN_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex');
 const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000;
 const adminLoginAttempts = new Map();
+// External developer repositories are intentionally isolated from the official
+// SpaceNovaX source and deployment.  The GitHub App must be configured with
+// Metadata: Read-only and Contents: Read-only only.  This server never asks
+// GitHub for a write scope and will reject an official repository even when a
+// developer tries to submit its URL manually.
+const GITHUB_APP_SLUG = String(process.env.GITHUB_DEVELOPER_APP_SLUG || '').trim();
+const GITHUB_DEVELOPER_CONNECT_SECRET = String(process.env.GITHUB_DEVELOPER_CONNECT_SECRET || process.env.SESSION_SECRET || '').trim();
+const GITHUB_DEVELOPER_STATE_TTL_MS = 10 * 60 * 1000;
+const OFFICIAL_GITHUB_REPOSITORIES = new Set(['spacenovax/spacenovax-v2', 'spacenovax/spacenovax-server-v2']);
+
+function githubConnectConfigured() {
+  return Boolean(GITHUB_APP_SLUG && GITHUB_DEVELOPER_CONNECT_SECRET && IS_PRODUCTION);
+}
+
+function signDeveloperGithubState(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', GITHUB_DEVELOPER_CONNECT_SECRET).update(body).digest('base64url');
+  return `${body}.${signature}`;
+}
+
+function verifyDeveloperGithubState(state = '') {
+  const [body, signature] = String(state).split('.');
+  if (!body || !signature || !GITHUB_DEVELOPER_CONNECT_SECRET) return null;
+  const expected = crypto.createHmac('sha256', GITHUB_DEVELOPER_CONNECT_SECRET).update(body).digest('base64url');
+  if (!safeEqual(signature, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!payload?.userId || !payload?.expiresAt || Number(payload.expiresAt) < now()) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function normalizeGithubRepository(value = '') {
+  let url;
+  try { url = new URL(String(value).trim()); } catch { return null; }
+  if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== 'github.com') return null;
+  const parts = url.pathname.replace(/^\/+|\/+$/g, '').split('/');
+  if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_.-]{1,100}$/.test(part))) return null;
+  const fullName = `${parts[0]}/${parts[1]}`;
+  if (OFFICIAL_GITHUB_REPOSITORIES.has(fullName.toLowerCase())) return null;
+  return { owner: parts[0], repository: parts[1], fullName, url: `https://github.com/${fullName}` };
+}
 
 function safeEqual(left, right) {
   const a = Buffer.from(String(left));
@@ -1729,6 +1777,89 @@ app.post('/api/session', (req, res) => {
   data.events.push({ type: 'session', userId: user.id, at: now() });
   writeData(data);
   res.json({ ok: true, user: publicUser(data, user) });
+});
+
+// Developer GitHub connection: GitHub App installation only.  This route
+// deliberately does not use OAuth `repo` scope, Personal Access Tokens, or
+// any official SpaceNovaX repository credentials.
+app.post('/api/developer/github/connect', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  if (!githubConnectConfigured()) {
+    return res.status(503).json({ ok: false, code: 'GITHUB_APP_NOT_CONFIGURED', message: 'Developer GitHub Connect is awaiting administrator configuration.' });
+  }
+  const state = signDeveloperGithubState({ userId: user.id, nonce: crypto.randomBytes(16).toString('hex'), expiresAt: now() + GITHUB_DEVELOPER_STATE_TTL_MS });
+  const installUrl = `https://github.com/apps/${encodeURIComponent(GITHUB_APP_SLUG)}/installations/new?state=${encodeURIComponent(state)}`;
+  res.json({ ok: true, installUrl, permissions: ['metadata:read', 'contents:read'], officialRepositoryAccess: false, deploymentAccess: false });
+});
+
+app.get('/api/developer/github/callback', (req, res) => {
+  const state = verifyDeveloperGithubState(req.query?.state);
+  const installationId = String(req.query?.installation_id || '').replace(/[^0-9]/g, '').slice(0, 32);
+  if (!state || !installationId) return res.status(400).type('html').send('<h1>GitHub connection could not be verified.</h1><p>Please return to the developer portal and try again.</p>');
+  const data = readData();
+  const user = data.users?.[state.userId];
+  if (!user || user.banned) return res.status(403).type('html').send('<h1>Developer connection unavailable.</h1>');
+  const existing = data.developerGithubConnections.find((item) => item.userId === user.id && item.installationId === installationId && item.status === 'pending_repository');
+  if (!existing) data.developerGithubConnections.push({ id: crypto.randomUUID(), userId: user.id, installationId, status: 'pending_repository', permissions: ['metadata:read', 'contents:read'], createdAt: now(), updatedAt: now() });
+  data.events.push({ type: 'developer_github_installation_connected', userId: user.id, at: now() });
+  writeData(data);
+  res.redirect(`${PUBLIC_APP_ORIGIN}/?developer=github-connected`);
+});
+
+app.get('/api/developer/github/connections', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const connections = data.developerGithubConnections.filter((item) => item.userId === user.id).map(({ installationId, ...safe }) => safe);
+  res.json({ ok: true, githubAppConfigured: githubConnectConfigured(), permissions: ['metadata:read', 'contents:read'], connections });
+});
+
+app.post('/api/developer/github/repository', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const repository = normalizeGithubRepository(req.body?.repositoryUrl);
+  if (!repository) return res.status(400).json({ ok: false, message: 'Use a valid non-official GitHub repository URL.' });
+  const connection = data.developerGithubConnections.find((item) => item.userId === user.id && item.status === 'pending_repository');
+  if (!connection) return res.status(409).json({ ok: false, message: 'Install the read-only SpaceNovaX Developer GitHub App first.' });
+  connection.repository = repository;
+  connection.status = 'pending_review';
+  connection.updatedAt = now();
+  data.events.push({ type: 'developer_repository_submitted', userId: user.id, connectionId: connection.id, at: now() });
+  writeData(data);
+  res.json({ ok: true, connection: { id: connection.id, repository, status: connection.status, permissions: connection.permissions } });
+});
+
+app.post('/api/developer/github/disconnect', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const id = String(req.body?.connectionId || '');
+  const connection = data.developerGithubConnections.find((item) => item.id === id && item.userId === user.id && item.status !== 'revoked');
+  if (!connection) return res.status(404).json({ ok: false, message: 'Developer connection not found.' });
+  connection.status = 'revoked'; connection.revokedAt = now(); connection.updatedAt = now();
+  data.events.push({ type: 'developer_github_disconnected', userId: user.id, connectionId: connection.id, at: now() });
+  writeData(data);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/developer/github', requireAdmin, (req, res) => {
+  const data = readData();
+  res.json({ ok: true, connections: data.developerGithubConnections.map((item) => ({ ...item, installationId: undefined, user: publicUser(data, data.users?.[item.userId] || { id: item.userId, firstName: 'Unknown' }) })) });
+});
+
+app.post('/api/admin/developer/github/review', requireAdmin, (req, res) => {
+  const data = readData();
+  const connection = data.developerGithubConnections.find((item) => item.id === String(req.body?.connectionId || ''));
+  const action = String(req.body?.action || '');
+  if (!connection || !['approve', 'reject', 'revoke'].includes(action)) return res.status(400).json({ ok: false, message: 'Invalid developer review request.' });
+  connection.status = action === 'approve' ? 'verified' : action === 'revoke' ? 'revoked' : 'rejected';
+  connection.reviewedAt = now(); connection.reviewedBy = req.admin.id; connection.updatedAt = now();
+  data.events.push({ type: `admin_developer_repository_${action}`, adminId: req.admin.id, userId: connection.userId, connectionId: connection.id, at: now() });
+  writeData(data);
+  res.json({ ok: true, status: connection.status });
 });
 
 app.post('/api/messages', (req, res) => {
