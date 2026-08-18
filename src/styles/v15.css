@@ -438,3 +438,17 @@
 
 /* Keep standard desktop selection and browser copy tools available throughout the app. */
 @media (pointer:fine){.v15-shell,.v15-shell *{-webkit-user-select:text;user-select:text}}
+
+
+/* TON vesting & SPNX staking are display-only until audited testnet contracts
+   and TON Connect are enabled. No user key or live asset is handled here. */
+.staking-command{border-color:rgba(99,240,177,.34)!important;background:linear-gradient(135deg,rgba(34,166,115,.2),rgba(8,26,45,.84))!important}
+.staking-command.selected{box-shadow:inset 0 0 22px rgba(77,246,173,.16),0 0 18px rgba(77,246,173,.14)!important}
+.spnx-staking-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:15px 0}
+.spnx-staking-grid article{display:grid;gap:6px;min-height:98px;padding:13px;border:1px solid rgba(95,238,175,.24);border-radius:15px;background:linear-gradient(145deg,rgba(7,40,42,.86),rgba(12,17,40,.92))}
+.spnx-staking-grid small{color:#85f8c4;font-size:8px;font-weight:1000;letter-spacing:.09em}
+.spnx-staking-grid b{color:#effff7;font-size:18px}
+.spnx-staking-grid span{color:#91afae;font-size:8px;font-weight:800}
+.staking-fee-notice{padding:12px 13px!important;border:1px solid rgba(255,194,83,.3);border-radius:13px;background:rgba(122,78,18,.13);color:#d9c89e!important}
+.ton-wallet-form{border-color:rgba(67,202,255,.32)!important}
+@media(max-width:520px){.spnx-staking-grid{grid-template-columns:1fr 1fr}.spnx-staking-grid article{min-height:88px}}

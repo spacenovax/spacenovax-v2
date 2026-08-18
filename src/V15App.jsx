@@ -1806,7 +1806,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const wu = WALLET_UI_COPY[language] || WALLET_UI_COPY.en;
   const liveMining = useLiveMiningView(user);
   const livePointsBalance = liveMining.displayBalance;
-  const [wallet, setWallet] = useState(user.solanaWallet || '');
+  const [wallet, setWallet] = useState(user.tonWallet || '');
   const [notice, setNotice] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [walletSecurity, setWalletSecurity] = useState(null);
@@ -1904,29 +1904,12 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       setWalletSecurity(data.security); setWalletLocked(false); setNotice('NOVA Wallet opened with device biometrics.');
     } catch (error) { setNotice(error.message || 'Device biometric authentication was not completed. Use your PIN.'); } finally { setBiometricBusy(false); }
   }
-  async function connectAndVerify() {
-    if (PREVIEW_BUILD) return setNotice('Preview validation passed. No production wallet was changed.');
-    const provider = window.solana;
-    if (!provider?.connect || !provider?.signMessage) return setNotice('Install Phantom or a compatible Solana wallet that supports message signing.');
-    setVerifying(true);
-    try {
-      const connection = await provider.connect();
-      const address = String(connection.publicKey || provider.publicKey || '');
-      setWallet(address);
-      const challenge = await api('/api/wallet/challenge', { method: 'POST', body: { wallet: address } });
-      const signed = await provider.signMessage(new TextEncoder().encode(challenge.message), 'utf8');
-      const bytes = signed.signature || signed;
-      let binary = '';
-      for (const byte of bytes) binary += String.fromCharCode(byte);
-      const signature = `base64:${btoa(binary)}`;
-      const data = await api('/api/wallet/verify', { method: 'POST', body: { wallet: address, signature } });
-      if (data.user) setUser((current) => ({ ...current, ...data.user }));
-      setNotice('Wallet ownership verified. SpaceNovaX never receives your private key.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setVerifying(false);
-    }
+  function connectAndVerify() {
+    // This is intentionally not a key import. Mainnet wallet actions remain
+    // disabled until the TON Connect testnet flow and audited contracts exist.
+    setNotice(language === 'ko'
+      ? 'TON Connect는 테스트넷 검증과 보안 검토 후 활성화됩니다. 시드 문구나 개인키를 입력하지 마세요.'
+      : 'TON Connect activates after testnet validation and security review. Never enter a seed phrase or private key.');
   }
   if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-onboarding">
     <div className="wallet-security-scan"/><div className="section-heading"><div><small>{wu.genesis}</small><h2>{walletSecurity?.pinConfigured ? wu.unlock : wu.initialize}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>{wu.secure}</span></div>
@@ -1956,6 +1939,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       <button className={walletPanel === 'history' ? 'selected' : ''} onClick={() => setWalletPanel('history')}><Icon name="chart"/>{wu.history} <small>{wu.serverLedger}</small></button>
       <button className={walletPanel === 'swap' ? 'selected swap-command' : 'swap-command'} onClick={() => setWalletPanel('swap')}><Icon name="bolt"/>{wu.swap} <small>{wu.kycGated}</small></button>
       <button className={walletPanel === 'nft' ? 'selected nft-command' : 'nft-command'} onClick={() => setWalletPanel('nft')}><Icon name="mission"/>{wu.nft} <small>{wu.insideWallet}</small></button>
+      <button className={walletPanel === 'staking' ? 'selected staking-command' : 'staking-command'} onClick={() => setWalletPanel('staking')}><Icon name="bolt"/>{language === 'ko' ? '스테이킹' : 'STAKING'} <small>SPNX LOCK & EARN</small></button>
       <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>{wu.security} <small>{wu.pinProtected}</small></button>
     </div>
     <section className="nova-wallet-operation">
@@ -1965,11 +1949,12 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       {walletPanel === 'history' && <><small>HISTORY · SERVER LEDGER</small><b>Your settled SPNX Points activity is protected on the server.</b><p>Mining, mission and game settlements appear in the activity ledger. Live token transactions will be added only after official asset activation.</p></>}
       {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>{walletSecurity?.biometricAvailable ? 'Device biometric access is registered for this Wallet.' : 'Your Wallet is protected with a six-digit PIN.'}</b><p>PIN or registered device biometrics can open the Wallet. Biometrics stay on your device; SpaceNovaX stores only a verification public key. Never share a seed phrase, private key or PIN with anyone.</p>{!walletSecurity?.biometricAvailable && <button className="wallet-security-action" disabled={biometricBusy || !biometricSupported} onClick={registerWalletBiometric}><Icon name="shield"/>{biometricBusy ? 'REGISTERING DEVICE…' : biometricSupported ? 'REGISTER FACE ID / FINGERPRINT' : 'DEVICE BIOMETRICS NOT AVAILABLE'}</button>}<button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
       {walletPanel === 'swap' && <><small>SWAP · KYC SECURITY GATE</small><b>SPNX swap will activate only after KYC approval and official live-asset release.</b><p>Before then, no exchange rate, liquidity, quote or transfer can be executed. The final Swap flow will require PIN reconfirmation, KYC status, server validation and a signed transaction.</p></>}
-      {walletPanel === 'convert' && <><small>SPNX POINTS → SPNX · KYC SECURITY GATE</small><b>Your live SPNX Points balance will be eligible for conversion only after KYC approval and the official SPNX launch.</b><p>No conversion rate, token issuance, balance reduction or transaction is executed today. When activation is announced, this command will require KYC, PIN re-authentication, server validation and an auditable conversion record.</p><button className="wallet-security-action" disabled><Icon name="shield"/>KYC & TOKEN LAUNCH REQUIRED</button></>}
+      {walletPanel === 'convert' && <><small>SPNX POINTS → SPNX · VESTING GATE</small><b>{language === 'ko' ? 'KYC 승인 후 전환된 SPNX는 즉시 10%만 수령 가능하며, 이후 3개월마다 10%씩 해제됩니다.' : 'After KYC approval, 10% of converted SPNX is claimable immediately and 10% unlocks every three months.'}</b><p>{language === 'ko' ? '잠긴 SPNX는 계약 밖으로 이동·매도·스테이킹할 수 없습니다. 수령 가능한 분량만 TON 지갑으로 신청할 수 있으며, 네트워크 수수료는 사용자가 부담합니다.' : 'Locked SPNX cannot move, trade or stake outside the contract. Only unlocked amounts can be claimed to a TON wallet; the user pays network fees.'}</p><button className="wallet-security-action" disabled><Icon name="shield"/>TON TESTNET REQUIRED</button></>}
+      {walletPanel === 'staking' && <><small>SPNX STAKING · TON TESTNET PREPARATION</small><b>{language === 'ko' ? '수령 완료된 SPNX만 선택 스테이킹할 수 있습니다.' : 'Only claimed SPNX can be staked by choice.'}</b><p>{language === 'ko' ? '자동 락업 물량은 이동·매도·스테이킹할 수 없습니다. 스테이킹 보상은 고정 보상 풀에서 지급되며, APR은 복리·원금·가격 수익을 보장하지 않습니다.' : 'Automatic vesting allocations cannot move, trade or stake. Rewards come from a fixed pool; APR does not guarantee compounding, principal, or market value.'}</p><div className="spnx-staking-grid">{[['FLEX','ANYTIME','1% APR'],['NOVA 90','90 DAYS','3% APR'],['NOVA 180','180 DAYS','5% APR'],['NOVA 365','365 DAYS','8% APR']].map(([name,term,rate]) => <article key={name}><small>{name}</small><b>{rate}</b><span>{language === 'ko' ? (term === 'ANYTIME' ? '언제든 해제' : term.replace(' DAYS','일')) : term}</span></article>)}</div><p className="staking-fee-notice">{language === 'ko' ? '예치·보상 수령·해제는 TON 네트워크 거래입니다. 거래 전에 연결 지갑의 필요 TON·현재 TON·부족 TON을 확인하며, 충분한 TON 잔액이 없으면 진행할 수 없습니다.' : 'Stake, reward claim and unlock are TON network transactions. Before each action the app will show required, current and missing TON; insufficient TON blocks the transaction.'}</p><button className="wallet-security-action" disabled><Icon name="shield"/>{language === 'ko' ? '테스트넷 계약 검증 후 활성화' : 'ACTIVATES AFTER TESTNET VALIDATION'}</button></>}
       {walletPanel === 'nft' && <><small>NOVA NFT VAULT · INSIDE NOVA WALLET</small><b>Your future collectibles, mission badges and game assets will live here.</b><p>The NFT Vault belongs inside NOVA Wallet. Minting, transfers and Marketplace trading remain disabled until the official network and KYC release.</p></>}
     </section>
-    <div className="conversion-card conversion-locked"><div><b>{w.unlock}</b><p>KYC approval is required for SPNX Points transfers, Marketplace payments, future SPNX / USDT / SOL / USDC assets and withdrawals. Until then, this Wallet is view-only.</p></div><button disabled>KYC REQUIRED<Icon name="shield"/></button></div>
-    <div className="wallet-form"><label>SOLANA WALLET ADDRESS · FUTURE SETTLEMENT</label><input readOnly value={wallet} placeholder="Connect Phantom or a compatible Solana wallet"/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{verifying ? 'VERIFYING SIGNATURE…' : user.walletVerified ? 'WALLET VERIFIED' : 'CONNECT & VERIFY WALLET'}</button><p className="privacy-note"><Icon name="shield" size={15}/>Never enter a seed phrase or private key. Supported assets and live price data activate only after the official launch.</p></div>
+    <div className="conversion-card conversion-locked"><div><b>{language === 'ko' ? 'TON 기반 SPNX 전환·베스팅 정책' : 'TON-based SPNX conversion & vesting policy'}</b><p>{language === 'ko' ? 'KYC 승인 전환분은 즉시 10%, 이후 3개월마다 10%씩 해제됩니다. 잠긴 SPNX는 이동·매도·스테이킹할 수 없습니다.' : 'KYC-approved conversion batches unlock 10% immediately and 10% every three months. Locked SPNX cannot move, trade, or stake.'}</p></div><button disabled>TESTNET FIRST<Icon name="shield"/></button></div>
+    <div className="wallet-form ton-wallet-form"><label>TON WALLET · TON CONNECT</label><input readOnly value={wallet} placeholder={language === 'ko' ? 'TON Connect 테스트넷 검증 후 지갑 연결' : 'Wallet connection activates after TON Connect testnet validation'}/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{language === 'ko' ? 'TON CONNECT 준비 중' : 'TON CONNECT PREPARING'}</button><p className="privacy-note"><Icon name="shield" size={15}/>{language === 'ko' ? '시드 문구·개인키는 절대 입력하지 마세요. 수령·예치·해제 때에는 지갑에서 직접 서명하며, 필요한 TON 가스비는 사용자가 부담합니다.' : 'Never enter a seed phrase or private key. Claims, staking and unlocks are signed in your wallet; required TON gas fees are paid by the user.'}</p></div>
     {notice && <p className="module-notice">{notice}</p>}
   </section></main>;
 }
