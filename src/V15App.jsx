@@ -2188,6 +2188,14 @@ export default function V15App() {
   const [previewOpen, setPreviewOpen] = useState(PREVIEW_BUILD);
   const [sessionReady, setSessionReady] = useState(false);
   const t = COPY[language] || COPY.en;
+  // Desktop users must retain the browser's native right-click and copy tools.
+  // This runs in capture phase so embedded UI handlers cannot suppress the menu.
+  useEffect(() => {
+    if (!window.matchMedia?.('(pointer: fine)').matches) return undefined;
+    const preserveNativeContextMenu = (event) => event.stopPropagation();
+    window.addEventListener('contextmenu', preserveNativeContextMenu, true);
+    return () => window.removeEventListener('contextmenu', preserveNativeContextMenu, true);
+  }, []);
   const setLanguage = (value) => { localStorage.setItem('spnx_language', value); setLanguageState(value); document.documentElement.lang = value; };
   const sync = useCallback(async () => {
     try { const data = await api('/api/session', { method: 'POST', body: {} }); if (data.user) setUser({ ...fallbackUser, ...data.user, mining: { ...fallbackUser.mining, ...(data.user.mining || {}) } }); } catch {} finally { setSessionReady(true); }

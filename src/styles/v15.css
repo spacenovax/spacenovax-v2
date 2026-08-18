@@ -435,3 +435,6 @@
 
 /* Voice fallback: a visible, localized message when Telegram's webview delays free browser speech. */
 .nova-voice-delay-notice{position:fixed;z-index:1001;left:50%;bottom:82px;transform:translateX(-50%);display:flex;align-items:flex-start;gap:10px;width:min(92vw,560px);padding:13px 14px;border:1px solid #32cfff;border-radius:14px;background:rgba(4,18,37,.96);box-shadow:0 12px 34px rgba(0,0,0,.42),0 0 22px rgba(20,201,255,.18);color:#eaf8ff}.nova-voice-delay-notice>svg{flex:0 0 auto;margin-top:2px;color:#48d7ff}.nova-voice-delay-notice p{flex:1;margin:0;line-height:1.45;font-size:13px;font-weight:650}.nova-voice-delay-notice button{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;padding:0;border:0;border-radius:9px;background:rgba(255,255,255,.09);color:#d9f7ff;cursor:pointer}.nova-voice-delay-notice button:hover{background:rgba(72,215,255,.2)}@media(max-width:520px){.nova-voice-delay-notice{bottom:76px;padding:11px 12px;gap:8px}.nova-voice-delay-notice p{font-size:11px}.nova-voice-delay-notice button{flex-basis:25px;width:25px;height:25px}}
+
+/* Keep standard desktop selection and browser copy tools available throughout the app. */
+@media (pointer:fine){.v15-shell,.v15-shell *{-webkit-user-select:text;user-select:text}}
