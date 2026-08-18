@@ -27,7 +27,8 @@
     "satellite.js": "^5.0.0",
     "three": "^0.160.0",
     "tweetnacl": "^1.0.3",
-    "vite": "latest"
+    "vite": "latest",
+    "@tonconnect/ui-react": "latest"
   },
   "description": "SpaceNovaX V15 English-first mining command network with multilingual UI, NOVA AI and official game portal"
 }
