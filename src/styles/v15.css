@@ -471,3 +471,11 @@
 .marketplace-command.selected{box-shadow:inset 0 0 22px rgba(255,190,76,.14),0 0 18px rgba(255,190,76,.13)!important}
 .payments-command{border-color:rgba(151,119,255,.34)!important;background:linear-gradient(135deg,rgba(87,53,157,.23),rgba(8,26,45,.84))!important}
 .payments-command.selected{box-shadow:inset 0 0 22px rgba(164,130,255,.16),0 0 18px rgba(164,130,255,.13)!important}
+
+
+/* TON Connect testnet: a visible connection is not a verified wallet record
+   and must never imply that an asset, claim, or key has been accepted. */
+.ton-testnet-state{display:flex;align-items:center;gap:7px;margin:10px 0 0!important;color:#8fb7c7!important;font-size:8px!important}
+.ton-testnet-state i{width:7px;height:7px;border-radius:50%;background:#7890a2;box-shadow:0 0 7px rgba(120,144,162,.5)}
+.ton-testnet-state i.connected-unverified{background:#6ff2b2;box-shadow:0 0 9px rgba(80,244,169,.72)}
+.ton-testnet-state i.mainnet-rejected{background:#ff849a;box-shadow:0 0 9px rgba(255,105,137,.62)}
