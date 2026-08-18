@@ -837,7 +837,9 @@ function CaptainTelegramOnboarding({ language }) {
   const korean = language === 'ko';
   // Preserve a referral when a Captain arrives from a shared app.spacenovax.com/join/CODE link.
   // The bot receives the same code through Telegram's official start parameter.
-  const referralCode = (window.location.pathname.match(/^\\/join\\/([A-Za-z0-9]{1,32})\\/?$/)?.[1] || '').toUpperCase();
+  const pathParts = String(window.location.pathname || '').split('/').filter(Boolean);
+  const possibleReferralCode = pathParts[0] === 'join' ? pathParts[1] || '' : '';
+  const referralCode = /^[A-Za-z0-9]{1,32}$/.test(possibleReferralCode) ? possibleReferralCode.toUpperCase() : '';
   const telegramUrl = referralCode ? `${OFFICIAL_TELEGRAM_BOT_URL}?start=${encodeURIComponent(referralCode)}` : OFFICIAL_TELEGRAM_BOT_URL;
   const telegramInstallUrl = 'https://telegram.org/apps';
   const openTelegram = () => {
