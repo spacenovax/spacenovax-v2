@@ -3,6 +3,7 @@ import './styles/v15.css';
 import './styles/node-status.css';
 import { NovaAIRouter } from './nova/index.js';
 import { WALLET_UI_COPY } from './i18n/wallet.js';
+import { NOVA_WALLET_ARCHITECTURE } from './wallet/architecture.js';
 import { buildReferralInvitation, copyReferralText, shareReferralInvitation } from './referralInvite.js';
 
 const OrbitV20 = lazy(() => import('./orbit/OrbitV20/OrbitV20.jsx'));
@@ -1943,7 +1944,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       <button className={walletPanel === 'security' ? 'selected' : ''} onClick={() => setWalletPanel('security')}><Icon name="shield"/>{wu.security} <small>{wu.pinProtected}</small></button>
     </div>
     <section className="nova-wallet-operation">
-      {walletPanel === 'overview' && <><small>WALLET COMMAND DECK</small><b>Choose an action to manage your NOVA Wallet.</b><p>Every asset, transfer request and security action is recorded through the server-authoritative SpaceNovaX ledger.</p></>}
+      {walletPanel === 'overview' && <><small>NOVA WALLET · MODULAR V1</small><b>{language === 'ko' ? '기존 기록을 유지하며 새 모듈을 추가하는 지갑 구조입니다.' : 'A wallet architecture that adds modules without replacing existing records.'}</b><p>{language === 'ko' ? 'SPNX Points 원장, TON 지갑 연결, 전환·락업, 수령, 스테이킹, 보안은 분리되어 관리됩니다. 이미 확정된 락업 일정과 수령 기록은 새 기능 추가로 변경되지 않습니다.' : 'The SPNX Points ledger, TON connection, conversion and vesting, claims, staking, and security are separated. New features cannot change settled vesting schedules or claim history.'}</p><div className="wallet-architecture-grid">{NOVA_WALLET_ARCHITECTURE.modules.map((module) => <article key={module.id}><i>{module.icon}</i><span><b>{module.label[language] || module.label.en}</b><small>{module.detail[language] || module.detail.en}</small></span></article>)}</div></>}
       {walletPanel === 'receive' && <><small>RECEIVE · REWARD LEDGER</small><b>SPNX Points are credited only by verified SpaceNovaX rewards.</b><p>Mining, mission and verified game rewards are automatically recorded in your live balance. External deposits are not enabled.</p></>}
       {walletPanel === 'send' && <><small>SEND · SECURITY GATE</small><b>KYC approval is required before any transfer can be opened.</b><p>After KYC launch, sending will require PIN confirmation and server-side risk validation. No asset can leave this Wallet before that approval.</p></>}
       {walletPanel === 'history' && <><small>HISTORY · SERVER LEDGER</small><b>Your settled SPNX Points activity is protected on the server.</b><p>Mining, mission and game settlements appear in the activity ledger. Live token transactions will be added only after official asset activation.</p></>}

@@ -452,3 +452,14 @@
 .staking-fee-notice{padding:12px 13px!important;border:1px solid rgba(255,194,83,.3);border-radius:13px;background:rgba(122,78,18,.13);color:#d9c89e!important}
 .ton-wallet-form{border-color:rgba(67,202,255,.32)!important}
 @media(max-width:520px){.spnx-staking-grid{grid-template-columns:1fr 1fr}.spnx-staking-grid article{min-height:88px}}
+
+
+/* Modular NOVA Wallet registry: each surface can evolve independently while
+   settled ledgers and contract-backed schedules remain immutable. */
+.wallet-architecture-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:15px}
+.wallet-architecture-grid article{display:flex;align-items:center;gap:10px;min-height:62px;padding:11px;border:1px solid rgba(91,214,255,.2);border-radius:13px;background:linear-gradient(135deg,rgba(15,50,66,.42),rgba(19,17,48,.66))}
+.wallet-architecture-grid i{display:grid;place-items:center;width:30px;height:30px;flex:0 0 30px;border-radius:10px;background:rgba(83,231,255,.11);color:#72efff;font-size:17px;font-style:normal}
+.wallet-architecture-grid span{display:grid;gap:4px;min-width:0}
+.wallet-architecture-grid b{font-size:9px!important;color:#e5fbff}
+.wallet-architecture-grid small{color:#8caabb;font-size:7px;line-height:1.35}
+@media(max-width:520px){.wallet-architecture-grid{grid-template-columns:1fr}.wallet-architecture-grid article{min-height:58px}}
