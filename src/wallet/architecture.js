@@ -11,6 +11,9 @@ export const NOVA_WALLET_ARCHITECTURE = Object.freeze({
     Object.freeze({ id: 'vesting', icon: '⌁', label: { en: 'Conversion & Vesting', ko: '전환·자동 락업' }, detail: { en: 'Immutable release schedules', ko: '고정 해제 일정' } }),
     Object.freeze({ id: 'claims', icon: '↓', label: { en: 'Claim Center', ko: '수령 신청' }, detail: { en: 'User-signed, fee-previewed claims', ko: '사용자 서명·가스비 사전 안내' } }),
     Object.freeze({ id: 'staking', icon: '◆', label: { en: 'SPNX Staking', ko: 'SPNX 스테이킹' }, detail: { en: 'Optional claimed-token programs', ko: '수령 완료분 선택 예치' } }),
+    Object.freeze({ id: 'nft-vault', icon: '◇', label: { en: 'NOVA NFT Vault', ko: 'NOVA NFT 금고' }, detail: { en: 'Collectibles, badges and game assets', ko: '컬렉터블·배지·게임 자산' } }),
+    Object.freeze({ id: 'marketplace', icon: '▣', label: { en: 'Marketplace', ko: '마켓플레이스' }, detail: { en: 'Escrow, listings and dispute records', ko: '에스크로·판매 등록·분쟁 기록' } }),
+    Object.freeze({ id: 'payments', icon: '◉', label: { en: 'Payments', ko: '결제' }, detail: { en: 'Signed checkout and receipt records', ko: '서명 결제·영수증 기록' } }),
     Object.freeze({ id: 'security', icon: '◈', label: { en: 'Security Center', ko: '보안 센터' }, detail: { en: 'PIN, biometrics and audit trail', ko: 'PIN·생체인증·감사 기록' } }),
   ]),
 });

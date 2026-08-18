@@ -15,6 +15,9 @@ NOVA Wallet can add new product modules without replacing Captain ledgers, chang
 | Conversion & vesting contract | Hold approved SPNX allocation and release scheduled portions | Permit arbitrary operator withdrawals or schedule changes |
 | Claim module | Show unlock status, fee preview, and signed claim status | Send a transaction without user confirmation |
 | Staking contract | Hold voluntary claimed-SPNX positions and pay from the capped pool | Accept automatic vesting balances |
+| NFT Vault module | Display and manage TON-native SpaceNovaX collectibles, badges and game assets | Mint, transfer, or use a private key without an explicit user signature |
+| Marketplace module | Manage listings, escrow state, delivery evidence, 0.5% platform fee, and dispute audit records | Release escrow by an undisclosed operator action or use locked SPNX |
+| Payments module | Create signed TON checkout requests and immutable receipts | Charge a user without amount, recipient, fee preview, and direct wallet confirmation |
 | Security module | PIN, device biometric verification, recovery process, audit events | Store raw biometric data |
 | Treasury multisig | Fund public contracts under published rules | Process individual user claims directly |
 
@@ -34,6 +37,14 @@ NOVA Wallet can add new product modules without replacing Captain ledgers, chang
 4. Any emergency pause is limited to preventing new actions after an exploit signal. It cannot transfer user principal, erase eligibility, or modify existing terms.
 5. Emergency actions require the published multisig threshold, event logging, and a public status notice.
 6. Contract addresses and source verification must be published before activation.
+
+## Marketplace and payment release gates
+
+- Marketplace and payments operate on TON only inside the Telegram Mini App and use TON Connect for wallet interaction.
+- A checkout must display asset, amount, recipient, network fee estimate, marketplace fee (where applicable), and a clear user confirmation.
+- Marketplace escrow must have a published state model: listed, funded, delivery pending, completed, cancelled, disputed, resolved.
+- A payment or escrow release requires a transaction receipt and immutable audit record.
+- NFTs, marketplace listings, and payments remain off until separate testnet checks and contract review are complete.
 
 ## Activation sequence
 
