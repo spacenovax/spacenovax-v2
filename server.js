@@ -159,6 +159,11 @@ function createInitialData() {
       ledger: [],
       ledgerKeys: {},
       walletChallenges: {},
+      tonTestnetConnections: {},
+      tonProofChallenges: {},
+      conversionBatches: [],
+      vestingClaims: [],
+      stakingPositions: [],
       webauthnChallenges: {},
       convertRequests: [],
       payouts: [],
@@ -203,7 +208,12 @@ function createInitialData() {
         miningPool: 3500000000,
         communityNodeLimit: COMMUNITY_NODE_LIMIT,
         communityNodeBonusPercent: COMMUNITY_NODE_BONUS_PERCENT,
-        sponsoredBannersEnabled: false
+        sponsoredBannersEnabled: false,
+        tonTestnetEnabled: true,
+        tonMainnetEnabled: false,
+        tonProofEnabled: false,
+        vestingClaimsEnabled: false,
+        stakingEnabled: false
       }
     };
 }
@@ -245,6 +255,18 @@ function normalizeData(data) {
   data.settings.autoPayoutEnabled ??= false;
   data.settings.sponsoredBannersEnabled ??= false;
   data.walletChallenges ||= {};
+  // TON state is prepared separately from the legacy wallet records. Testnet
+  // connections are not asset ownership and no live action is enabled here.
+  data.tonTestnetConnections ||= {};
+  data.tonProofChallenges ||= {};
+  data.conversionBatches ||= [];
+  data.vestingClaims ||= [];
+  data.stakingPositions ||= [];
+  data.settings.tonTestnetEnabled ??= true;
+  data.settings.tonMainnetEnabled ??= false;
+  data.settings.tonProofEnabled ??= false;
+  data.settings.vestingClaimsEnabled ??= false;
+  data.settings.stakingEnabled ??= false;
   data.webauthnChallenges ||= {};
   for (const [challengeId, challenge] of Object.entries(data.webauthnChallenges)) {
     if (!challenge || Number(challenge.expiresAt || 0) < now()) delete data.webauthnChallenges[challengeId];
