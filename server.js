@@ -4596,6 +4596,10 @@ const GEOCODE_CACHE_MS = 30 * 60 * 1000;
 // Korea uses Kakao's official Local REST API when a server-side key is set.
 // The browser never receives this key; all requests remain behind this proxy.
 const KAKAO_REST_API_KEY = String(process.env.KAKAO_REST_API_KEY || '').trim();
+// Global place search is deliberately opt-in and hard-capped below the current
+// paid tier. If the key, quota, or provider is unavailable, OSM remains active.
+const GOOGLE_PLACES_API_KEY = String(process.env.GOOGLE_PLACES_API_KEY || '').trim();
+const GOOGLE_PLACES_MONTHLY_LIMIT = Math.max(0, Math.min(4000, Number(process.env.GOOGLE_PLACES_MONTHLY_LIMIT || 4000)));
 // Search map-visible POIs only around the Captain's supplied local area. This
 // complements broad address geocoding without turning the service into tracking.
 const GEOCODE_MAP_POI_RADIUS_METERS = 10_000;
@@ -4606,6 +4610,18 @@ const NAVIGATION_SEARCH_ALIASES = {
   '센텀q시티': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
   '센텀큐시티아파트': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
 };
+
+function consumeGooglePlacesSearchQuota() {
+  if (!GOOGLE_PLACES_API_KEY || !GOOGLE_PLACES_MONTHLY_LIMIT) return false;
+  const data = readData();
+  const month = new Date().toISOString().slice(0, 7);
+  data.googlePlacesUsage ||= { month, requests: 0 };
+  if (data.googlePlacesUsage.month !== month) data.googlePlacesUsage = { month, requests: 0 };
+  if (Number(data.googlePlacesUsage.requests || 0) >= GOOGLE_PLACES_MONTHLY_LIMIT) return false;
+  data.googlePlacesUsage.requests = Number(data.googlePlacesUsage.requests || 0) + 1;
+  writeData(data);
+  return true;
+}
 app.get('/api/orbit/geocode', async (req, res) => {
   const query = String(req.query.q || '').normalize('NFKC').replace(/[，、;；]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
   const compactQuery = query.replace(/\s+/g, '');
@@ -4767,6 +4783,40 @@ app.get('/api/orbit/geocode', async (req, res) => {
     };
     const kakaoItems = await searchKakao();
 
+    // For non-Korean searches, Google Places is an optional quality upgrade
+    // for global building and business names. It is never called after the
+    // strict monthly safety cap, and it can never suppress OSM fallback.
+    const searchGooglePlaces = async () => {
+      if (useKakaoSearch || (items?.length || 0) >= 8 || !consumeGooglePlacesSearchQuota()) return [];
+      const body = { textQuery: query, languageCode: language, pageSize: 15 };
+      if (nearbyValid) {
+        body.locationBias = {
+          circle: {
+            center: { latitude: nearLatitude, longitude: nearLongitude },
+            radius: 10000,
+          },
+        };
+      }
+      try {
+        const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.types',
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!response.ok) throw new Error('Google Places responded ' + response.status);
+        return (await response.json()).places || [];
+      } catch (error) {
+        console.warn('Orbit Google Places search unavailable', error.message);
+        return [];
+      }
+    };
+    const googlePlaceItems = await searchGooglePlaces();
+
     // Nominatim is best for postal addresses, but map-visible shops, apartment
     // buildings and local landmarks are often stored only as OSM POI tags.
     // Query those tags only as a bounded fallback around the supplied local area.
@@ -4860,6 +4910,21 @@ app.get('/api/orbit/geocode', async (req, res) => {
         distanceM: distanceFromNearby(lat, lon),
       };
     }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.label);
+    const googleResults = googlePlaceItems.map((item) => {
+      const lat = Number(item.location?.latitude);
+      const lon = Number(item.location?.longitude);
+      return {
+        id: 'google:' + (item.id || lat.toFixed(6) + ',' + lon.toFixed(6)),
+        label: String(item.displayName?.text || item.formattedAddress || '').trim(),
+        address: String(item.formattedAddress || '').trim(),
+        lat,
+        lon,
+        country: '',
+        type: String(item.types?.[0] || 'place'),
+        category: String(item.types?.[0] || 'place'),
+        distanceM: distanceFromNearby(lat, lon),
+      };
+    }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.label);
     const poiResults = mapPoiItems.map((item) => {
       const tags = item.tags || {};
       const lat = Number(item.lat ?? item.center?.lat);
@@ -4886,7 +4951,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
 
     const mergedSeen = new Set();
     const normalizedQuery = compactQuery.toLocaleLowerCase();
-    const mergedResults = [...kakaoResults, ...poiResults, ...results].filter((place) => {
+    const mergedResults = [...kakaoResults, ...googleResults, ...poiResults, ...results].filter((place) => {
       const placeKey = `${String(place.label).toLocaleLowerCase()}:${place.lat.toFixed(4)}:${place.lon.toFixed(4)}`;
       if (mergedSeen.has(placeKey)) return false;
       mergedSeen.add(placeKey);
