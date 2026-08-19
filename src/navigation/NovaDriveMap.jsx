@@ -22,6 +22,33 @@ function pointAhead(origin, heading = 0, metersAhead = 30) {
   return { lat: lat2 * 180 / Math.PI, lon: lon2 * 180 / Math.PI };
 }
 
+function bearingBetween(from, to) {
+  if (!from || !to) return 0;
+  const lat1 = from.lat * Math.PI / 180, lat2 = to.lat * Math.PI / 180, deltaLon = (to.lon - from.lon) * Math.PI / 180;
+  const y = Math.sin(deltaLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function routeHeading(route, progress, current) {
+  const points = route?.points || [];
+  if (points.length < 2) return 0;
+  const lastSegment = points.length - 2;
+  const index = Math.max(0, Math.min(lastSegment, Math.floor((Number(progress) || 0) * (points.length - 1))));
+  // Use the live GPS point as the start so the heading stays stable even when
+  // the routing geometry begins a few metres behind the vehicle.
+  return bearingBetween(current || points[index], points[index + 1]);
+}
+
+function navigationHeading(current, route, progress) {
+  const deviceHeading = Number(current?.heading);
+  const speed = Number(current?.speed) || 0;
+  // A browser often reports heading as null/0 while stopped. In that case the
+  // next route segment is a much better camera direction than arbitrary north.
+  if (Number.isFinite(deviceHeading) && (speed >= 2 || Math.abs(deviceHeading) > 0.01)) return (deviceHeading + 360) % 360;
+  return routeHeading(route, progress, current);
+}
+
 function vehicleElement() {
   const element = document.createElement('div');
   element.className = 'nova-maplibre-vehicle';
@@ -38,11 +65,15 @@ function destinationElement() {
   return element;
 }
 
-function remainingLine(route, progress) {
+function remainingLine(route, progress, current) {
   const points = route?.points || [];
   if (points.length < 2) return [];
   const index = Math.max(0, Math.min(points.length - 1, Math.floor((Number(progress) || 0) * (points.length - 1))));
-  return points.slice(index).map((point) => [point.lon, point.lat]);
+  const livePoint = current && Number.isFinite(current.lat) && Number.isFinite(current.lon) ? [current.lon, current.lat] : [points[index].lon, points[index].lat];
+  // The first coordinate is always the vehicle. Completed geometry is never
+  // included, so blue paint cannot remain behind the vehicle.
+  const upcoming = points.slice(Math.min(points.length, index + 1)).map((point) => [point.lon, point.lat]);
+  return [livePoint, ...upcoming];
 }
 
 export default function NovaDriveMap({ current, destination, route, progress }) {
@@ -72,7 +103,7 @@ export default function NovaDriveMap({ current, destination, route, progress }) 
       map.addLayer({ id: 'nova-route-line', type: 'line', source: 'nova-route', paint: { 'line-color': '#1b8cff', 'line-width': 8, 'line-opacity': 1 }, layout: { 'line-cap': 'round', 'line-join': 'round' } });
       readyRef.current = true;
       const state = liveRef.current;
-      const line = remainingLine(state.route, state.progress);
+      const line = remainingLine(state.route, state.progress, state.current);
       map.getSource('nova-route').setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line } });
     });
     mapRef.current = map;
@@ -87,10 +118,12 @@ export default function NovaDriveMap({ current, destination, route, progress }) 
       if (!destinationRef.current) destinationRef.current = new maplibregl.Marker({ element: destinationElement(), anchor: 'center' }).addTo(map);
       destinationRef.current.setLngLat([destination.lon, destination.lat]);
     }
-    const line = remainingLine(route, progress);
+    const line = remainingLine(route, progress, current);
     if (readyRef.current) map.getSource('nova-route')?.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line } });
-    const heading = Number(current.heading) || 0;
+    const heading = navigationHeading(current, route, progress);
     const forward = pointAhead(current, heading, 30);
+    // Map bearing follows the travel direction; the viewport-aligned arrow
+    // therefore remains at the 12 o'clock position.
     map.easeTo({ center: [forward.lon, forward.lat], zoom: Math.max(map.getZoom(), 17), bearing: -heading, duration: 420, essential: true });
   }, [current, destination, route, progress]);
 
