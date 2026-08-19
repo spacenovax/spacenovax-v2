@@ -51,8 +51,8 @@
 
 /* Original light navigation map treatment: no third-party map artwork or icons are copied. */
 .nova-nav-icon-light b {
-  width: 48px;
-  height: 48px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -60,7 +60,7 @@
   border: 2px solid rgba(25,118,243,.28);
   box-shadow: 0 3px 14px rgba(17,71,123,.32);
 }
-.nova-nav-icon-light svg { width: 46px; height: 46px; filter: drop-shadow(0 1px 1px rgba(14,74,142,.18)); }
+.nova-nav-icon-light svg { width: 32px; height: 32px; filter: drop-shadow(0 1px 1px rgba(14,74,142,.18)); }
 .nova-map-recenter {
   position: absolute;
   z-index: 640;
