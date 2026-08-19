@@ -4593,6 +4593,9 @@ app.get('/api/orbit/satellite-imagery', async (req, res) => {
 // Destination and reverse-geocoding proxy for Earth Navigation.
 const geocodeCache = new Map();
 const GEOCODE_CACHE_MS = 30 * 60 * 1000;
+// Korea uses Kakao's official Local REST API when a server-side key is set.
+// The browser never receives this key; all requests remain behind this proxy.
+const KAKAO_REST_API_KEY = String(process.env.KAKAO_REST_API_KEY || '').trim();
 // Search map-visible POIs only around the Captain's supplied local area. This
 // complements broad address geocoding without turning the service into tracking.
 const GEOCODE_MAP_POI_RADIUS_METERS = 10_000;
@@ -4724,6 +4727,46 @@ app.get('/api/orbit/geocode', async (req, res) => {
       items = [...combined.values()].slice(0, 24);
     }
 
+    // Use Kakao's official address/place data for searches that are clearly in
+    // Korea. It returns building names and business POIs that are not always
+    // present in global OSM data. The worldwide Nominatim/OSM path remains the
+    // fallback for every other region and when the optional key is not set.
+    const isKoreanLocation = nearbyValid
+      && nearLatitude >= 32.5 && nearLatitude <= 39.5
+      && nearLongitude >= 124 && nearLongitude <= 132;
+    const useKakaoSearch = Boolean(KAKAO_REST_API_KEY && (/[가-힣]/.test(query) || isKoreanLocation));
+    const searchKakao = async () => {
+      if (!useKakaoSearch) return [];
+      const request = async (endpoint, parameters) => {
+        const url = new URL('https://dapi.kakao.com/v2/local/search/' + endpoint + '.json');
+        Object.entries(parameters).forEach(([name, value]) => {
+          if (value !== undefined && value !== null && value !== '') url.searchParams.set(name, String(value));
+        });
+        const response = await fetch(url, {
+          headers: { Authorization: 'KakaoAK ' + KAKAO_REST_API_KEY },
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!response.ok) throw new Error('Kakao Local responded ' + response.status);
+        return response.json();
+      };
+      const nearbyParameters = nearbyValid ? {
+        x: nearLongitude.toFixed(6), y: nearLatitude.toFixed(6), radius: 10000, sort: 'distance',
+      } : {};
+      try {
+        const keyword = await request('keyword', { query, size: 15, ...nearbyParameters });
+        const keywordDocuments = (keyword.documents || []).map((document) => ({ source: 'keyword', document }));
+        if (keywordDocuments.length >= 8) return keywordDocuments;
+        const address = await request('address', { query, analyze_type: 'similar', size: 15 });
+        const addressDocuments = (address.documents || []).map((document) => ({ source: 'address', document }));
+        return [...keywordDocuments, ...addressDocuments].slice(0, 24);
+      } catch (error) {
+        // Kakao is an optional regional source; retain global search on errors.
+        console.warn('Orbit Kakao Local search unavailable', error.message);
+        return [];
+      }
+    };
+    const kakaoItems = await searchKakao();
+
     // Nominatim is best for postal addresses, but map-visible shops, apartment
     // buildings and local landmarks are often stored only as OSM POI tags.
     // Query those tags only as a bounded fallback around the supplied local area.
@@ -4797,6 +4840,26 @@ app.get('/api/orbit/geocode', async (req, res) => {
       };
     }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)
       && place.label && !seen.has(place.id) && (seen.add(place.id) || true)).slice(0, 20);
+    const kakaoResults = kakaoItems.map(({ source, document }) => {
+      const lat = Number(document.y);
+      const lon = Number(document.x);
+      const roadAddress = document.road_address?.address_name || '';
+      const address = roadAddress || document.address_name || '';
+      const label = source === 'keyword'
+        ? (document.place_name || document.address_name || '')
+        : (document.road_address?.building_name || document.address_name || '');
+      return {
+        id: 'kakao:' + source + ':' + (document.id || lat.toFixed(6) + ',' + lon.toFixed(6)),
+        label: String(label).trim(),
+        address,
+        lat,
+        lon,
+        country: '대한민국',
+        type: source === 'keyword' ? (document.category_group_name || 'place') : 'address',
+        category: source === 'keyword' ? (document.category_group_name || 'place') : 'address',
+        distanceM: distanceFromNearby(lat, lon),
+      };
+    }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.label);
     const poiResults = mapPoiItems.map((item) => {
       const tags = item.tags || {};
       const lat = Number(item.lat ?? item.center?.lat);
@@ -4823,7 +4886,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
 
     const mergedSeen = new Set();
     const normalizedQuery = compactQuery.toLocaleLowerCase();
-    const mergedResults = [...poiResults, ...results].filter((place) => {
+    const mergedResults = [...kakaoResults, ...poiResults, ...results].filter((place) => {
       const placeKey = `${String(place.label).toLocaleLowerCase()}:${place.lat.toFixed(4)}:${place.lon.toFixed(4)}`;
       if (mergedSeen.has(placeKey)) return false;
       mergedSeen.add(placeKey);
