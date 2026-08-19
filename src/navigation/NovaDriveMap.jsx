@@ -25,7 +25,9 @@ function pointAhead(origin, heading = 0, metersAhead = 30) {
 function vehicleElement() {
   const element = document.createElement('div');
   element.className = 'nova-maplibre-vehicle';
-  element.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="11" y="4" width="26" height="40" rx="11" fill="#f7fbff" stroke="#08213b" stroke-width="3"/><path d="M15 14h18v15H15z" fill="#39d9ff" stroke="#0a2947" stroke-width="2"/><path d="M16 7h16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/><path d="M12 14H8v8h4m24-8h4v8h-4M12 30H8v8h4m24-8h4v8h-4" stroke="#152c45" stroke-width="4" stroke-linecap="round"/><path d="M16 36h16" stroke="#ff4f75" stroke-width="4" stroke-linecap="round"/></svg>';
+  // A neutral navigation-direction marker: original artwork, never a copied
+  // third-party map icon. The map camera keeps it pointed straight ahead.
+  element.innerHTML = '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" fill="#fff" fill-opacity=".96"/><path d="M32 11c2.1 0 4 1.1 5.1 3l14.2 27.2c1.7 3.3-1.6 6.9-5.1 5.4L32 40.5l-14.2 6.1c-3.5 1.5-6.8-2.1-5.1-5.4L26.9 14c1.1-1.9 3-3 5.1-3Z" fill="#1688ff"/><path d="M32 18v17.8" stroke="#dff4ff" stroke-width="3.5" stroke-linecap="round"/><path d="m24.8 35.8 7.2 4.7 7.2-4.7" fill="none" stroke="#0d62cf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   return element;
 }
 
