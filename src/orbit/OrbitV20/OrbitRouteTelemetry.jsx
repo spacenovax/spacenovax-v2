@@ -8,7 +8,7 @@ function formatEta(hours, ko) {
 
 // A compact route readout for the 3D Earth. It deliberately reports an estimate rather
 // than claiming turn-by-turn transport guidance: this is a global/orbital visualisation.
-export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, routeStatus, nextStep, gpsState, accuracy, networkOnline, onSearch, onDistanceCalculation, onStartNavigation, onStopNavigation, onShareRoute, onOpenOfflinePacks, offlinePackCount = 0, routeMode = 'recommended', onRouteModeChange }) {
+export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, routeStatus, nextStep, gpsState, accuracy, networkOnline, onSearch, onStartNavigation, onStopNavigation, onShareRoute, onOpenOfflinePacks, offlinePackCount = 0, routeMode = 'recommended', onRouteModeChange }) {
   const hasRoute = Boolean(current && destination && distanceKm != null);
   const from = currentPlace?.city || currentPlace?.country || (t.ko ? '현재 위치' : 'Current position');
   const to = destination?.label?.split(',')[0] || (t.ko ? '목적지를 선택하세요' : 'Select a destination');
@@ -41,16 +41,6 @@ export default function OrbitRouteTelemetry({ t, current, currentPlace, destinat
     }
   }
 
-  function openRoadNavigation() {
-    // Road guidance needs a destination. Keep the Captain on the Earth view
-    // until that destination is chosen instead of replacing the globe screen.
-    if (!hasRoute) {
-      onSearch?.();
-      return;
-    }
-    onStartNavigation?.();
-  }
-
   return (
     <section className={`ov20-route-telemetry ${hasRoute ? 'has-route' : ''}`} aria-label="Orbit route telemetry">
       <div className="ov20-route-head">
@@ -61,18 +51,6 @@ export default function OrbitRouteTelemetry({ t, current, currentPlace, destinat
           {hasRoute && !navigationActive && !hasArrived && <button className="ov20-route-share" onClick={shareRoute} aria-label={t.ko ? '현재 위치를 포함하지 않고 목적지만 공유' : 'Share destination only; your current location is not included'}>{shareState === 'working' ? '…' : `↗ ${t.shareRoute}`}</button>}
           <button onClick={onSearch}>{hasRoute ? (t.ko ? '경로 변경' : 'CHANGE') : t.findDestination}</button>
         </div>
-      </div>
-      <div className="ov20-route-mode-cards" aria-label={t.ko ? 'NOVA 이동 기능 선택' : 'Choose NOVA travel feature'}>
-        <button type="button" className="ov20-route-mode-card distance" onClick={onDistanceCalculation || onSearch}>
-          <span aria-hidden="true">◎</span>
-          <b>{t.ko ? '거리 계산' : 'DISTANCE'}</b>
-          <small>{t.ko ? '지구에서 국가·도시 간 거리와 방위 확인' : 'Explore global distance and bearing'}</small>
-        </button>
-        <button type="button" className="ov20-route-mode-card driving" onClick={openRoadNavigation} disabled={navigationActive || hasArrived}>
-          <span aria-hidden="true">➜</span>
-          <b>{navigationActive ? t.endNavigation : (t.ko ? '내비게이션 사용' : 'DRIVE')}</b>
-          <small>{hasRoute ? (t.ko ? '선택한 목적지로 도로 안내 시작' : 'Start road guidance to destination') : (t.ko ? '목적지를 선택해 도로 안내 시작' : 'Choose a destination for road guidance')}</small>
-        </button>
       </div>
       {hasRoute && <small className="ov20-route-road-status">{routeStatus === 'toll_unavailable' ? (t.ko ? '유료·무료도로 선택은 Google Routes 요금 데이터 연결 후 사용할 수 있습니다. 현재는 추천 경로를 선택해 주세요.' : 'Toll and toll-free choices need Google Routes data. Choose the recommended route for now.') : routeStatus === 'loading' ? (t.ko ? '자동차 도로 경로 계산 중…' : 'CALCULATING DRIVING ROUTE…') : routeStatus === 'rerouting' ? (t.ko ? 'NOVA가 현재 위치에서 새 경로를 탐색 중입니다…' : 'NOVA IS FINDING A NEW ROUTE…') : routeStatus === 'offline_pack' ? (t.ko ? '오프라인 지역 경로팩 · 연결 전까지 재탐색 불가' : 'OFFLINE REGION PACK · NO REROUTE UNTIL ONLINE') : routeStatus === 'saved' ? (t.ko ? 'NOVA LITE 저장 경로 · 연결 후 경로 확인' : 'NOVA LITE SAVED ROUTE · CHECK WHEN ONLINE') : routeStatus === 'ready' ? `${t.ko ? 'NOVA LITE 자동차 경로' : 'NOVA LITE DRIVING ROUTE'}${nextStep?.name ? ` · ${nextStep.name}` : ''}` : (t.ko ? '도로 경로를 불러오지 못했습니다. 직선 거리만 표시합니다.' : 'Driving route unavailable. Showing direct distance.')}</small>}
       {hasRoute && !navigationActive && !hasArrived && <div className="ov20-route-mode-selector" aria-label={t.ko ? '도로 선택' : 'Route preference'}>
