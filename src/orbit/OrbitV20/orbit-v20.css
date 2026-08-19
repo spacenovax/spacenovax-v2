@@ -327,13 +327,3 @@
 .ov20-marker-satellite .ov20-satellite-symbol { transform:scale(.72); transform-origin:center; }
 .ov20-marker-typhoon .ov20-marker-pin { width:16px; height:16px; border:0; background:transparent; box-shadow:none; }
 .ov20-marker-typhoon .ov20-typhoon-symbol { transform:scale(.8); }
-
-
-/* Live Earth stays uncluttered: satellite, storm and current-position markers are
-   compact signals. Full names live in the navigation panels and search results. */
-.ov20-marker:not(.selectable) .ov20-marker-label { display: none !important; }
-.ov20-marker-satellite .ov20-marker-pin { width: 17px; height: 15px; border-radius: 5px; }
-.ov20-marker-satellite .ov20-satellite-symbol { transform: scale(.76); }
-.ov20-marker-typhoon .ov20-marker-pin { width: 18px; height: 18px; }
-.ov20-marker-current .ov20-marker-pin { width: 17px; height: 17px; }
-.ov20-marker-current .ov20-marker-pulse { width: 22px; }
