@@ -64,13 +64,36 @@ function speak(text, language = 'ko') { if (!('speechSynthesis' in window) || !t
 function readRecent() { try { return JSON.parse(localStorage.getItem(RECENT) || '[]'); } catch { return []; } }
 function browserSpeechRecognition() { return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
 function MapFollow({ current, route, destination, navigating, nextStep, locationFocus }) {
-  const map = useMap(), fitted = useRef(false);
+  const map = useMap(), fitted = useRef(false), [adjustingDestination, setAdjustingDestination] = useState(false);
   useEffect(() => { fitted.current = false; }, [route]);
   useEffect(() => { if (!route?.points?.length || fitted.current) return; fitted.current = true; map.fitBounds(route.points.map(p => [p.lat, p.lon]), { padding: [40, 120], maxZoom: 16, animate: true }); }, [map, route]);
   useEffect(() => { if (!navigating && !route?.points?.length && destination) map.flyTo([destination.lat, destination.lon], 16, { animate: true, duration: .35 }); }, [map, destination, route, navigating]);
   useEffect(() => { if (!locationFocus || !Number.isFinite(current.lat) || !Number.isFinite(current.lon)) return; map.flyTo([current.lat, current.lon], Math.max(map.getZoom(), 16), { animate: true, duration: .35 }); }, [map, locationFocus, current.lat, current.lon]);
   useEffect(() => { const container = map.getContainer(); const heading = Number(current.heading) || 0; container.style.setProperty('--nova-map-rotation', (navigating ? -heading : 0) + 'deg'); container.style.setProperty('--nova-map-scale', navigating ? '1.42' : '1'); }, [map, current.heading, navigating]);
   useEffect(() => { const refresh = () => setTimeout(() => map.invalidateSize({ pan: false }), 90); window.addEventListener('resize', refresh); window.addEventListener('orientationchange', refresh); return () => { window.removeEventListener('resize', refresh); window.removeEventListener('orientationchange', refresh); }; }, [map]);
+  useEffect(() => {
+    if (!destination || navigating) return undefined;
+    const control = L.control({ position: 'topleft' });
+    control.onAdd = () => {
+      const button = L.DomUtil.create('button', `nova-map-adjust-control${adjustingDestination ? ' active' : ''}`);
+      button.type = 'button';
+      button.textContent = adjustingDestination ? '지도에서 위치 선택' : '지도에서 위치 조정';
+      L.DomEvent.disableClickPropagation(button);
+      L.DomEvent.on(button, 'click', (event) => { L.DomEvent.stop(event); setAdjustingDestination((value) => !value); });
+      return button;
+    };
+    control.addTo(map);
+    return () => control.remove();
+  }, [map, destination, navigating, adjustingDestination]);
+  useEffect(() => {
+    if (!adjustingDestination) return undefined;
+    const choosePoint = (event) => {
+      window.dispatchEvent(new CustomEvent('spnx-nav-adjust-destination', { detail: { lat: event.latlng.lat, lon: event.latlng.lng } }));
+      setAdjustingDestination(false);
+    };
+    map.on('click', choosePoint);
+    return () => map.off('click', choosePoint);
+  }, [map, adjustingDestination]);
   useEffect(() => () => { const container = map.getContainer(); container.style.removeProperty('--nova-map-rotation'); container.style.removeProperty('--nova-map-scale'); }, [map]);
   useEffect(() => { if (navigating) { const junction = laneGuide(nextStep); const forward = pointAhead(current, current.heading, GPS_FORWARD_LOOKAHEAD_METERS); map.setView([forward.lat, forward.lon], Math.max(map.getZoom(), junction ? 18 : 17), { animate: true, duration: .35 }); } }, [map, current, navigating, nextStep]);
   return null;
@@ -81,6 +104,23 @@ export default function NovaNavigationApp() {
   const t = NAV_COPY[language] || NAV_COPY.en;
   const watch = useRef(null), routeRef = useRef(null), currentRef = useRef(current), gpsReadyRef = useRef(false), destinationRef = useRef(destination), routeModeRef = useRef(routeMode), navigatingRef = useRef(navigating), announcedRef = useRef(new Set()), rerouteAtRef = useRef(0), offRouteRef = useRef({ count: 0, lastAt: 0 });
   useEffect(() => { routeRef.current = route; }, [route]); useEffect(() => { currentRef.current = current; }, [current]); useEffect(() => { destinationRef.current = destination; }, [destination]); useEffect(() => { routeModeRef.current = routeMode; }, [routeMode]); useEffect(() => { navigatingRef.current = navigating; }, [navigating]);
+  useEffect(() => {
+    const onAdjustedDestination = (event) => {
+      const lat = Number(event.detail?.lat), lon = Number(event.detail?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      setDestination((previous) => previous ? {
+        ...previous,
+        id: `${previous.id || 'destination'}:manual:${lat.toFixed(6)},${lon.toFixed(6)}`,
+        lat,
+        lon,
+        address: `${previous.address || previous.label} · 지도에서 위치 조정`,
+      } : previous);
+      setRoute(null);
+      setNotice('목적지 핀을 조정했습니다. 경로를 다시 찾아 주세요.');
+    };
+    window.addEventListener('spnx-nav-adjust-destination', onAdjustedDestination);
+    return () => window.removeEventListener('spnx-nav-adjust-destination', onAdjustedDestination);
+  }, []);
   useEffect(() => { let disposed = false; const stopTracking = () => { if (watch.current != null) { navigator.geolocation?.clearWatch(watch.current); watch.current = null; } }; const restoreGrantedLocation = async () => { try { const permission = await navigator.permissions?.query?.({ name: 'geolocation' }); if (!disposed && permission?.state === 'granted') requestLocation(false); else if (!disposed && permission?.state === 'denied') setGps('GPS 권한이 차단되어 있습니다'); } catch {} }; restoreGrantedLocation(); window.addEventListener('pagehide', stopTracking); const onVisibility = () => { if (document.hidden) stopTracking(); }; document.addEventListener('visibilitychange', onVisibility); return () => { disposed = true; stopTracking(); window.removeEventListener('pagehide', stopTracking); document.removeEventListener('visibilitychange', onVisibility); window.speechSynthesis?.cancel(); }; }, []);
   useEffect(() => {
     const term = clean(query);
