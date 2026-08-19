@@ -15,14 +15,11 @@ function MarkerIcon({ type }) {
 
 function Marker({ marker, projection, onPick }) {
   if (!projection?.visible) return null;
-  // Keep Live Earth readable: the globe uses compact visual signals only.
-  // Place names remain in the Orbit panels and destination search, not as
-  // large floating cards over the satellite/weather imagery.
-  const showSearchLabel = marker.selectable && marker.type === 'nearby';
+  const expanded = projection.expanded && marker.detail;
   return (
     <button
       type="button"
-      className={`ov20-marker ov20-marker-${marker.type} compact ${marker.selectable ? 'selectable' : ''}`}
+      className={`ov20-marker ov20-marker-${marker.type} ${expanded ? 'expanded' : 'compact'} ${marker.selectable ? 'selectable' : ''}`}
       style={{ left: projection.x, top: projection.y, '--marker-scale': projection.scale || 1 }}
       aria-label={marker.label}
       onClick={() => marker.selectable && onPick?.(marker)}
@@ -30,7 +27,10 @@ function Marker({ marker, projection, onPick }) {
     >
       <span className="ov20-marker-pulse" />
       <span className="ov20-marker-pin"><MarkerIcon type={marker.type} /></span>
-      {showSearchLabel && <span className="ov20-marker-label"><b>{marker.label}</b></span>}
+      <span className="ov20-marker-label">
+        <b>{marker.label}</b>
+        {expanded && <small>{marker.detail}</small>}
+      </span>
     </button>
   );
 }
@@ -46,7 +46,7 @@ export default function OrbitEarthView({ containerRef, current, markerPos, marke
           </div>
         )}
         <div className={`ov20-texture-quality ${textureQuality.startsWith('8K') ? 'detail' : ''}`}>{textureQuality}</div>
-        {markerTargets.filter((marker) => marker.type === 'nearby' && marker.selectable).map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} onPick={onMarkerPick} />)}
+        {markerTargets.map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} onPick={onMarkerPick} />)}
         <div className="ov20-globe-controls">
           <button className="ov20-zoom-btn" onClick={onZoomIn}>−</button>
           <button className="ov20-recenter-btn" onClick={onRecenter}>⊕</button>
