@@ -4770,13 +4770,31 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const nearbyParameters = nearbyValid ? {
         x: nearLongitude.toFixed(6), y: nearLatitude.toFixed(6), radius: 10000, sort: 'distance',
       } : {};
+      // Kakao keeps many Korean buildings under a spaced, regional, or Latin
+      // letter spelling. Search the exact input and up to two normalized aliases
+      // so “센텀큐시티” can return the apartment, gate, building units, and
+      // nearby businesses instead of only a fallback road segment.
+      const kakaoTerms = [...new Set([query, ...searchTerms].filter(Boolean))].slice(0, 3);
+      const combined = new Map();
       try {
-        const keyword = await request('keyword', { query, size: 15, ...nearbyParameters });
-        const keywordDocuments = (keyword.documents || []).map((document) => ({ source: 'keyword', document }));
-        if (keywordDocuments.length >= 8) return keywordDocuments;
-        const address = await request('address', { query, analyze_type: 'similar', size: 15 });
-        const addressDocuments = (address.documents || []).map((document) => ({ source: 'address', document }));
-        return [...keywordDocuments, ...addressDocuments].slice(0, 24);
+        for (const term of kakaoTerms) {
+          const keyword = await request('keyword', { query: term, size: 15, ...nearbyParameters });
+          (keyword.documents || []).forEach((document) => {
+            const id = document.id || `${document.x},${document.y}:${document.place_name}`;
+            combined.set(`keyword:${id}`, { source: 'keyword', document });
+          });
+          // A precise street address may not have a keyword POI record. Use the
+          // address endpoint only when the keyword results are still sparse.
+          if (combined.size < 8) {
+            const address = await request('address', { query: term, analyze_type: 'similar', size: 15 });
+            (address.documents || []).forEach((document) => {
+              const id = document.address_name || `${document.x},${document.y}`;
+              combined.set(`address:${id}`, { source: 'address', document });
+            });
+          }
+          if (combined.size >= 15) break;
+        }
+        return [...combined.values()].slice(0, 24);
       } catch (error) {
         // Kakao is an optional regional source; retain global search on errors.
         console.warn('Orbit Kakao Local search unavailable', error.message);
