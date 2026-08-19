@@ -66,8 +66,8 @@ export default function NovaDriveMap({ current, destination, route, progress }) 
     if (destination) destinationRef.current = new maplibregl.Marker({ element: destinationElement(), anchor: 'center' }).setLngLat([destination.lon, destination.lat]).addTo(map);
     map.on('load', () => {
       map.addSource('nova-route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } } });
-      map.addLayer({ id: 'nova-route-casing', type: 'line', source: 'nova-route', paint: { 'line-color': '#071a31', 'line-width': 15, 'line-opacity': 0.92, 'line-line-cap': 'round', 'line-line-join': 'round' } });
-      map.addLayer({ id: 'nova-route-line', type: 'line', source: 'nova-route', paint: { 'line-color': '#1b8cff', 'line-width': 8, 'line-opacity': 1, 'line-line-cap': 'round', 'line-line-join': 'round' } });
+      map.addLayer({ id: 'nova-route-casing', type: 'line', source: 'nova-route', paint: { 'line-color': '#071a31', 'line-width': 15, 'line-opacity': 0.92 }, layout: { 'line-cap': 'round', 'line-join': 'round' } });
+      map.addLayer({ id: 'nova-route-line', type: 'line', source: 'nova-route', paint: { 'line-color': '#1b8cff', 'line-width': 8, 'line-opacity': 1 }, layout: { 'line-cap': 'round', 'line-join': 'round' } });
       readyRef.current = true;
       const state = liveRef.current;
       const line = remainingLine(state.route, state.progress);
