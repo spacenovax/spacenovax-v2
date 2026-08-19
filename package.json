@@ -28,7 +28,8 @@
     "three": "^0.160.0",
     "tweetnacl": "^1.0.3",
     "vite": "latest",
-    "@tonconnect/ui-react": "latest"
+    "@tonconnect/ui-react": "latest",
+    "maplibre-gl": "5.12.0"
   },
   "description": "SpaceNovaX V15 English-first mining command network with multilingual UI, NOVA AI and official game portal"
 }
