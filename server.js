@@ -4593,6 +4593,13 @@ app.get('/api/orbit/satellite-imagery', async (req, res) => {
 // Destination and reverse-geocoding proxy for Earth Navigation.
 const geocodeCache = new Map();
 const GEOCODE_CACHE_MS = 30 * 60 * 1000;
+// Known local landmark aliases let common Korean building names resolve even
+// when the public map stores a Latin letter or an expanded road address.
+const NAVIGATION_SEARCH_ALIASES = {
+  '센텀큐시티': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
+  '센텀q시티': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
+  '센텀큐시티아파트': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
+};
 app.get('/api/orbit/geocode', async (req, res) => {
   const query = String(req.query.q || '').normalize('NFKC').replace(/[，、;；]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
   const compactQuery = query.replace(/\s+/g, '');
@@ -4664,11 +4671,16 @@ app.get('/api/orbit/geocode', async (req, res) => {
     /(특별자치시|특별시|광역시|자치도|도|시|군|구|읍|면|동|리|로|길)(?=[가-힣0-9])/g,
     '$1 ',
   ).replace(/\s+/g, ' ').trim();
+  const landmarkKey = compactQuery.toLowerCase().replace(/\s+/g, '');
+  const simplifiedPlaceQuery = compactQuery.replace(/(아파트|apt|apartments?|빌딩|건물|상가|센터)$/i, '').trim();
+  const aliasTerms = NAVIGATION_SEARCH_ALIASES[landmarkKey] || [];
   const searchTerms = [...new Set([
     query,
     compactQuery !== query ? compactQuery : '',
     spacedAddressQuery !== query && spacedAddressQuery !== compactQuery ? spacedAddressQuery : '',
-  ].filter(Boolean))];
+    simplifiedPlaceQuery && simplifiedPlaceQuery !== compactQuery ? simplifiedPlaceQuery : '',
+    ...aliasTerms,
+  ].filter(Boolean))].slice(0, 5);
   const nearbyKey = nearbyValid ? `:${nearLatitude.toFixed(2)},${nearLongitude.toFixed(2)}` : '';
   const key = `search:${searchTerms.join('|').toLowerCase()}:${language}${nearbyKey}`;
   const cached = geocodeCache.get(key);
@@ -4686,7 +4698,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
       nearbyViewbox = `&viewbox=${left},${top},${right},${bottom}&bounded=0`;
     }
     const searchNominatim = async (term) => {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&namedetails=1&extratags=1&dedupe=1&limit=12&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(term)}${nearbyViewbox}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&namedetails=1&extratags=1&dedupe=1&limit=20&accept-language=${encodeURIComponent(language)}&q=${encodeURIComponent(term)}${nearbyViewbox}`;
       const response = await fetch(url, {
         headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)' },
         signal: AbortSignal.timeout(12_000),
@@ -4699,11 +4711,14 @@ app.get('/api/orbit/geocode', async (req, res) => {
     // map result do we try one normalized address variant; that keeps the public
     // geocoder load bounded while supporting pasted/space-free addresses.
     let items = await searchNominatim(searchTerms[0]);
-    if ((!items || items.length === 0) && searchTerms.length > 1) {
-      for (const fallbackTerm of searchTerms.slice(1)) {
-        items = await searchNominatim(fallbackTerm);
-        if (items?.length) break;
-      }
+    // A short building or store name can return a few partial matches. Add one
+    // normalized/alias search so the user sees similar named places without
+    // requiring province, city, county or the exact Latin spelling.
+    if ((items?.length || 0) < 6 && searchTerms.length > 1) {
+      const fallbackItems = await searchNominatim(searchTerms[1]);
+      const combined = new Map();
+      [...(items || []), ...(fallbackItems || [])].forEach((item) => combined.set(String(item.place_id), item));
+      items = [...combined.values()].slice(0, 24);
     }
 
     const seen = new Set();
@@ -4743,7 +4758,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
         distanceM: distanceFromNearby(lat, lon),
       };
     }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)
-      && place.label && !seen.has(place.id) && (seen.add(place.id) || true)).slice(0, 12);
+      && place.label && !seen.has(place.id) && (seen.add(place.id) || true)).slice(0, 20);
     geocodeCache.set(key, { at: now(), value: results });
     return res.json({ ok: true, results, cached: false });
   } catch (error) {
