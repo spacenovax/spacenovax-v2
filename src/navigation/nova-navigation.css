@@ -281,3 +281,22 @@
     line-height: 1.6;
   }
 }
+
+
+/* Manual destination adjustment for entrances and parking pins. */
+.nova-map-adjust-control {
+  margin: 12px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid #b9d3e9;
+  border-radius: 12px;
+  background: #fff;
+  color: #173650;
+  font: 800 13px/1 system-ui, sans-serif;
+  box-shadow: 0 3px 12px rgba(12, 51, 86, .22);
+}
+.nova-map-adjust-control.active {
+  background: #0d5f9e;
+  border-color: #0d5f9e;
+  color: #fff;
+}
