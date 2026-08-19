@@ -4732,7 +4732,8 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const escapedNeedle = compactQuery
         .replaceAll('\\', '\\\\')
         .replaceAll('"', '\\"')
-        .replaceAll('      if (!escapedNeedle) return [];
+        .replaceAll('$', '\\$')
+        .replace(/[.*+?^{}()|[\]]/g, (character) => '\\' + character);
       const around = `around:${GEOCODE_MAP_POI_RADIUS_METERS},${nearLatitude.toFixed(5)},${nearLongitude.toFixed(5)}`;
       const nameFields = ['name', 'name:ko', 'name:en', 'alt_name', 'official_name', 'short_name', 'brand'];
       const clauses = nameFields.map((field) => `nwr(${around})["${field}"~"${escapedNeedle}",i];`).join('');
