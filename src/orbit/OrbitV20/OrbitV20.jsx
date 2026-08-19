@@ -657,6 +657,20 @@ export default function OrbitV20({ language, user, onOpenMining }) {
 
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 
+  function openDistanceCalculation() {
+    // Global distance and bearing exploration stays inside the 3D Earth view.
+    // It must not redirect a Captain to the separate road-navigation site.
+    setNavigationActive(false);
+    setDrivingViewOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setNearbyPlaces([]);
+    setNearbyAnchor(null);
+    setNearbyBusy(false);
+    setNearbyCategory('all');
+    setSearchOpen(true);
+  }
+
   function openDestinationSearch() {
     // Navigation needs the browser's reliable speech and media support.  When
     // launched from the Telegram Mini App, open the dedicated site externally;
@@ -1139,6 +1153,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
           accuracy={accuracy}
           networkOnline={networkOnline}
           onSearch={openDestinationSearch}
+          onDistanceCalculation={openDistanceCalculation}
           onStartNavigation={startNavigation}
           onStopNavigation={stopNavigation}
           onShareRoute={shareRouteSafely}
