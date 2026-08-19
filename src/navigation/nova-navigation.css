@@ -300,3 +300,13 @@
   border-color: #0d5f9e;
   color: #fff;
 }
+
+
+/* Live driving-position marker: a quiet location pulse and breathing arrow. */
+.nova-maplibre-vehicle { position: relative; isolation: isolate; }
+.nova-maplibre-vehicle::before { content: ''; position: absolute; inset: -12px; z-index: -1; border: 2px solid rgba(33,151,255,.5); border-radius: 50%; animation: nova-drive-location-pulse 2.4s ease-out infinite; }
+.nova-maplibre-vehicle::after { content: ''; position: absolute; inset: -5px; z-index: -1; border-radius: 50%; background: rgba(42,162,255,.18); animation: nova-drive-location-breathe 1.9s ease-in-out infinite; }
+.nova-maplibre-vehicle svg { animation: nova-drive-arrow-alive 1.6s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes nova-drive-location-pulse { 0% { transform: scale(.55); opacity: .9; } 78%,100% { transform: scale(1.45); opacity: 0; } }
+@keyframes nova-drive-location-breathe { 0%,100% { transform: scale(.92); opacity: .35; } 50% { transform: scale(1.12); opacity: .8; } }
+@keyframes nova-drive-arrow-alive { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-1.5px) scale(1.035); } }
