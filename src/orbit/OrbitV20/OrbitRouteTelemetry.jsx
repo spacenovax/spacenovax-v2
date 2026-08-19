@@ -8,7 +8,7 @@ function formatEta(hours, ko) {
 
 // A compact route readout for the 3D Earth. It deliberately reports an estimate rather
 // than claiming turn-by-turn transport guidance: this is a global/orbital visualisation.
-export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, routeStatus, nextStep, gpsState, accuracy, networkOnline, onSearch, onStartNavigation, onStopNavigation, onShareRoute, onOpenOfflinePacks, offlinePackCount = 0, routeMode = 'recommended', onRouteModeChange }) {
+export default function OrbitRouteTelemetry({ t, current, currentPlace, destination, distanceKm, etaHours, courseDeg, compassLabel, navigationActive, hasArrived, routeStatus, nextStep, gpsState, accuracy, networkOnline, onSearch, onDistanceCalculation, onStartNavigation, onStopNavigation, onShareRoute, onOpenOfflinePacks, offlinePackCount = 0, routeMode = 'recommended', onRouteModeChange }) {
   const hasRoute = Boolean(current && destination && distanceKm != null);
   const from = currentPlace?.city || currentPlace?.country || (t.ko ? '현재 위치' : 'Current position');
   const to = destination?.label?.split(',')[0] || (t.ko ? '목적지를 선택하세요' : 'Select a destination');
@@ -63,7 +63,7 @@ export default function OrbitRouteTelemetry({ t, current, currentPlace, destinat
         </div>
       </div>
       <div className="ov20-route-mode-cards" aria-label={t.ko ? 'NOVA 이동 기능 선택' : 'Choose NOVA travel feature'}>
-        <button type="button" className="ov20-route-mode-card distance" onClick={onSearch}>
+        <button type="button" className="ov20-route-mode-card distance" onClick={onDistanceCalculation || onSearch}>
           <span aria-hidden="true">◎</span>
           <b>{t.ko ? '거리 계산' : 'DISTANCE'}</b>
           <small>{t.ko ? '지구에서 국가·도시 간 거리와 방위 확인' : 'Explore global distance and bearing'}</small>
