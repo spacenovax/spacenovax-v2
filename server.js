@@ -4730,9 +4730,9 @@ app.get('/api/orbit/geocode', async (req, res) => {
     const searchNearbyMapPois = async () => {
       if (!nearbyValid || compactQuery.length < 2) return [];
       const escapedNeedle = compactQuery
-        .replace(/[.*+?^${}()|[\]\\]/g, '\\    const seen = new Set();
-    const radians = (value) => value * Math.PI / 180;')
-        .replace(/"/g, '\\\"');
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')
+        .replace(/[.*+?^{}()|[\]]/g, (character) => '\\' + character);
       if (!escapedNeedle) return [];
       const around = `around:${GEOCODE_MAP_POI_RADIUS_METERS},${nearLatitude.toFixed(5)},${nearLongitude.toFixed(5)}`;
       const nameFields = ['name', 'name:ko', 'name:en', 'alt_name', 'official_name', 'short_name', 'brand'];
