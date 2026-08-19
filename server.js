@@ -4738,15 +4738,15 @@ app.get('/api/orbit/geocode', async (req, res) => {
     const searchKakao = async () => {
       if (!useKakaoSearch) return [];
       const request = async (endpoint, parameters) => {
-        const url = new URL(\`https://dapi.kakao.com/v2/local/search/\${endpoint}.json\`);
+        const url = new URL('https://dapi.kakao.com/v2/local/search/' + endpoint + '.json');
         Object.entries(parameters).forEach(([name, value]) => {
           if (value !== undefined && value !== null && value !== '') url.searchParams.set(name, String(value));
         });
         const response = await fetch(url, {
-          headers: { Authorization: \`KakaoAK \${KAKAO_REST_API_KEY}\` },
+          headers: { Authorization: 'KakaoAK ' + KAKAO_REST_API_KEY },
           signal: AbortSignal.timeout(8_000),
         });
-        if (!response.ok) throw new Error(\`Kakao Local responded \${response.status}\`);
+        if (!response.ok) throw new Error('Kakao Local responded ' + response.status);
         return response.json();
       };
       const nearbyParameters = nearbyValid ? {
@@ -4849,7 +4849,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
         ? (document.place_name || document.address_name || '')
         : (document.road_address?.building_name || document.address_name || '');
       return {
-        id: \`kakao:\${source}:\${document.id || \`\${lat.toFixed(6)},\${lon.toFixed(6)}\`}\`,
+        id: 'kakao:' + source + ':' + (document.id || lat.toFixed(6) + ',' + lon.toFixed(6)),
         label: String(label).trim(),
         address,
         lat,
