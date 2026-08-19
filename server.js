@@ -4593,6 +4593,9 @@ app.get('/api/orbit/satellite-imagery', async (req, res) => {
 // Destination and reverse-geocoding proxy for Earth Navigation.
 const geocodeCache = new Map();
 const GEOCODE_CACHE_MS = 30 * 60 * 1000;
+// Search map-visible POIs only around the Captain's supplied local area. This
+// complements broad address geocoding without turning the service into tracking.
+const GEOCODE_MAP_POI_RADIUS_METERS = 10_000;
 // Known local landmark aliases let common Korean building names resolve even
 // when the public map stores a Latin letter or an expanded road address.
 const NAVIGATION_SEARCH_ALIASES = {
@@ -4721,6 +4724,41 @@ app.get('/api/orbit/geocode', async (req, res) => {
       items = [...combined.values()].slice(0, 24);
     }
 
+    // Nominatim is best for postal addresses, but map-visible shops, apartment
+    // buildings and local landmarks are often stored only as OSM POI tags.
+    // Query those tags only as a bounded fallback around the supplied local area.
+    const searchNearbyMapPois = async () => {
+      if (!nearbyValid || compactQuery.length < 2) return [];
+      const escapedNeedle = compactQuery
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\    const seen = new Set();
+    const radians = (value) => value * Math.PI / 180;')
+        .replace(/"/g, '\\\"');
+      if (!escapedNeedle) return [];
+      const around = `around:${GEOCODE_MAP_POI_RADIUS_METERS},${nearLatitude.toFixed(5)},${nearLongitude.toFixed(5)}`;
+      const nameFields = ['name', 'name:ko', 'name:en', 'alt_name', 'official_name', 'short_name', 'brand'];
+      const clauses = nameFields.map((field) => `nwr(${around})["${field}"~"${escapedNeedle}",i];`).join('');
+      const overpassQuery = `[out:json][timeout:10];(${clauses});out center tags 30;`;
+      try {
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'SpaceNovaX-Orbit/1.0 (contact: business@spacenovax.com)',
+          },
+          body: new URLSearchParams({ data: overpassQuery }).toString(),
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (!response.ok) throw new Error(`Overpass responded ${response.status}`);
+        const payload = await response.json();
+        return (payload.elements || []).slice(0, 30);
+      } catch (error) {
+        // An optional POI fallback must never make normal address search fail.
+        console.warn('Orbit map POI search unavailable', error.message);
+        return [];
+      }
+    };
+    const mapPoiItems = (items?.length || 0) < 12 ? await searchNearbyMapPois() : [];
+
     const seen = new Set();
     const radians = (value) => value * Math.PI / 180;
     const distanceFromNearby = (lat, lon) => {
@@ -4759,8 +4797,47 @@ app.get('/api/orbit/geocode', async (req, res) => {
       };
     }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)
       && place.label && !seen.has(place.id) && (seen.add(place.id) || true)).slice(0, 20);
-    geocodeCache.set(key, { at: now(), value: results });
-    return res.json({ ok: true, results, cached: false });
+    const poiResults = mapPoiItems.map((item) => {
+      const tags = item.tags || {};
+      const lat = Number(item.lat ?? item.center?.lat);
+      const lon = Number(item.lon ?? item.center?.lon);
+      const label = tags[`name:${language}`] || tags[`name:${language.split('-')[0]}`] || tags['name:ko'] || tags.name || tags.alt_name || '';
+      const address = [
+        tags['addr:street'] && tags['addr:housenumber'] ? `${tags['addr:street']} ${tags['addr:housenumber']}` : tags['addr:street'],
+        tags['addr:suburb'] || tags['addr:district'] || tags['addr:city'],
+        tags['addr:postcode'],
+      ].filter(Boolean).join(', ');
+      const category = tags.amenity || tags.shop || tags.tourism || tags.office || tags.building || 'place';
+      return {
+        id: `osm:${item.type}:${item.id}`,
+        label: String(label).trim(),
+        address,
+        lat,
+        lon,
+        country: tags['addr:country'] || '',
+        type: category,
+        category,
+        distanceM: distanceFromNearby(lat, lon),
+      };
+    }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.label);
+
+    const mergedSeen = new Set();
+    const normalizedQuery = compactQuery.toLocaleLowerCase();
+    const mergedResults = [...poiResults, ...results].filter((place) => {
+      const placeKey = `${String(place.label).toLocaleLowerCase()}:${place.lat.toFixed(4)}:${place.lon.toFixed(4)}`;
+      if (mergedSeen.has(placeKey)) return false;
+      mergedSeen.add(placeKey);
+      return true;
+    }).sort((a, b) => {
+      const aName = String(a.label).replace(/\s+/g, '').toLocaleLowerCase();
+      const bName = String(b.label).replace(/\s+/g, '').toLocaleLowerCase();
+      const score = (name) => (name === normalizedQuery ? 0 : name.includes(normalizedQuery) ? 1 : 2);
+      return score(aName) - score(bName)
+        || Number(a.distanceM ?? Number.MAX_SAFE_INTEGER) - Number(b.distanceM ?? Number.MAX_SAFE_INTEGER);
+    }).slice(0, 20);
+
+    geocodeCache.set(key, { at: now(), value: mergedResults });
+    return res.json({ ok: true, results: mergedResults, cached: false });
   } catch (error) {
     console.error('Orbit geocode failed', error.message);
     return res.status(502).json({ ok: false, message: 'Destination search temporarily unavailable.', results: [] });
