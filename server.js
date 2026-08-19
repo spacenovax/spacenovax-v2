@@ -5219,12 +5219,24 @@ app.get('/api/orbit/route', async (req, res) => {
     const stride = Math.max(1, Math.ceil(rawPoints.length / 720));
     const points = rawPoints.filter((_, index) => index % stride === 0 || index === rawPoints.length - 1).map(([lon, lat]) => ({ lat: Number(lat), lon: Number(lon) })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
     if (points.length < 2) throw new Error('Route geometry unavailable');
-    const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step) => {
+    const routeProgressAt = (lat, lon) => {
+      let nearest = 0, nearestDistance = Infinity;
+      points.forEach((point, index) => {
+        const dLat = point.lat - lat, dLon = point.lon - lon;
+        const squared = dLat * dLat + dLon * dLon;
+        if (squared < nearestDistance) { nearestDistance = squared; nearest = index; }
+      });
+      return points.length > 1 ? nearest / (points.length - 1) : 0;
+    };
+    const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step, index) => {
       const maneuverLocation = Array.isArray(step.maneuver?.location) ? step.maneuver.location : [];
       const maneuverLon = Number(maneuverLocation[0]); const maneuverLat = Number(maneuverLocation[1]);
+      const validManeuver = Number.isFinite(maneuverLat) && Number.isFinite(maneuverLon);
       const laneSet = (step.intersections || []).find((intersection) => Array.isArray(intersection.lanes) && intersection.lanes.length)?.lanes || [];
       const lanes = laneSet.slice(0, 8).map((lane) => ({ indications: Array.isArray(lane.indications) ? lane.indications.map(String).slice(0, 3) : [], valid: lane.valid === true }));
       return {
+        index,
+        routeProgress: validManeuver ? routeProgressAt(maneuverLat, maneuverLon) : 1,
         name: String(step.name || '').slice(0, 100),
         distanceM: Math.round(Number(step.distance) || 0),
         durationSec: Math.round(Number(step.duration) || 0),
@@ -5232,7 +5244,9 @@ app.get('/api/orbit/route', async (req, res) => {
         maneuver: {
           type: String(step.maneuver?.type || 'continue').slice(0, 32),
           modifier: String(step.maneuver?.modifier || '').slice(0, 32),
-          location: Number.isFinite(maneuverLat) && Number.isFinite(maneuverLon) ? { lat: maneuverLat, lon: maneuverLon } : null,
+          lat: validManeuver ? maneuverLat : null,
+          lon: validManeuver ? maneuverLon : null,
+          location: validManeuver ? { lat: maneuverLat, lon: maneuverLon } : null,
         },
       };
     });
