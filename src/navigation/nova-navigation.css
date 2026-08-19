@@ -25,3 +25,8 @@
 
 /* Forward-up map camera: the visible map turns with the device heading while the vehicle stays at 12 o'clock. */
 .nova-nav-map{transform:rotate(var(--nova-map-rotation,0deg)) scale(var(--nova-map-scale,1));transform-origin:50% 50%;transition:transform .35s linear;will-change:transform}
+
+
+/* Top-down navigation marker: 0° is vehicle front; the map counter-rotates during active guidance. */
+.nova-nav-icon b{display:grid!important;place-items:center;width:48px!important;height:48px!important;border:0!important;border-radius:50%!important;background:rgba(9,54,82,.94)!important;box-shadow:0 0 0 6px rgba(93,226,255,.38),0 7px 16px rgba(0,0,0,.35)!important;transform-origin:center}
+.nova-nav-icon svg{display:block;width:40px;height:40px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.26))}
