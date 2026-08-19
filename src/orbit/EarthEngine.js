@@ -598,75 +598,29 @@ export default class EarthEngine {
   // Its true-colour surface contains the latest available observed cloud cover;
   // it is a satellite-view mode, not a fabricated cloud animation.
   setSatelliteImagery(enabled, { date } = {}) {
-    const nextEnabled = Boolean(enabled);
-    const requestId = ++this._satelliteRequestId;
+    const observing = Boolean(enabled);
     const sourceDate = /^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))
       ? String(date)
       : new Date().toISOString().slice(0, 10);
 
-    if (!nextEnabled) {
-      this.satelliteLayer.enabled = false;
-      this.satelliteLayer.loading = false;
-      this.onSatelliteLayerChange?.({ enabled: false, status: 'idle', date: '' });
-      this._updateTextureLOD();
-      return;
+    // A daily polar-orbit composite can contain incomplete swaths. Applying one
+    // directly as an equirectangular globe texture creates black wedges on mobile
+    // devices, so it must never replace the validated base Earth surface.
+    ++this._satelliteRequestId;
+    if (this.satelliteLayer.texture) {
+      this.satelliteLayer.texture.dispose();
+      this.satelliteLayer.texture = null;
     }
-
-    // A ready image for this UTC day can be restored immediately.  The server
-    // still refreshes its underlying NASA response every ten minutes when a new
-    // request is needed.
-    if (this.satelliteLayer.texture && this.satelliteLayer.date === sourceDate) {
-      this.satelliteLayer.enabled = true;
-      this.satelliteLayer.loading = false;
-      this.earthMaterial.uniforms.dayMap.value = this.satelliteLayer.texture;
-      this._announceTextureQuality('NASA · SATELLITE');
-      this.onSatelliteLayerChange?.({ enabled: true, status: 'ready', date: sourceDate });
-      return;
-    }
-
-    this.satelliteLayer.enabled = true;
-    this.satelliteLayer.loading = true;
-    this.onSatelliteLayerChange?.({ enabled: true, status: 'loading', date: sourceDate });
-    const failSatelliteLoad = (error, resolvedDate = sourceDate) => {
-      if (this._disposed || requestId !== this._satelliteRequestId) return;
-      this.satelliteLayer.enabled = false;
-      this.satelliteLayer.loading = false;
-      this._updateTextureLOD();
-      this.onSatelliteLayerChange?.({ enabled: false, status: 'error', date: resolvedDate });
-      console.warn('Orbit: NASA satellite imagery failed; staying on the bundled basemap.', error);
-    };
-    // Resolve metadata first.  The image response tells the server which UTC day
-    // was actually available (it can fall back from an incomplete current-day
-    // polar-orbit composite), so the label never invents a capture date.
-    fetch(`/api/orbit/satellite-imagery?date=${encodeURIComponent(sourceDate)}&meta=1`)
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload.ok || !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date || ''))) {
-          throw new Error(payload.message || 'NASA satellite metadata unavailable');
-        }
-        return String(payload.date);
-      })
-      .then((resolvedDate) => {
-        if (this._disposed || requestId !== this._satelliteRequestId || !this.satelliteLayer.enabled) return;
-        loader.load(`/api/orbit/satellite-imagery?date=${encodeURIComponent(resolvedDate)}`, (tex) => {
-          // TextureLoader may finish after the user turned the layer off or after
-          // the Orbit view unmounted.  Dispose that stale GPU texture immediately.
-          if (this._disposed || requestId !== this._satelliteRequestId || !this.satelliteLayer.enabled) {
-            tex.dispose();
-            return;
-          }
-          const prepared = this._prepareTexture(tex, { srgb: true });
-          const previous = this.satelliteLayer.texture;
-          this.satelliteLayer.texture = prepared;
-          this.satelliteLayer.date = resolvedDate;
-          this.satelliteLayer.loading = false;
-          this.earthMaterial.uniforms.dayMap.value = prepared;
-          if (previous && previous !== prepared) previous.dispose();
-          this._announceTextureQuality('NASA · SATELLITE');
-          this.onSatelliteLayerChange?.({ enabled: true, status: 'ready', date: resolvedDate });
-        }, undefined, (error) => failSatelliteLoad(error, resolvedDate));
-      })
-      .catch((error) => failSatelliteLoad(error));
+    this.satelliteLayer.enabled = false;
+    this.satelliteLayer.loading = false;
+    this.satelliteLayer.date = observing ? sourceDate : '';
+    this._updateTextureLOD();
+    this.onSatelliteLayerChange?.({
+      enabled: observing,
+      status: observing ? 'ready' : 'idle',
+      date: observing ? sourceDate : '',
+      safeBaseGlobe: true,
+    });
   }
   recenter() {
     this.autoRotate = false;
