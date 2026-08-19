@@ -41,12 +41,12 @@ function routeHeading(route, progress, current) {
 }
 
 function navigationHeading(current, route, progress) {
+  const matchedRouteHeading = routeHeading(route, progress, current);
+  // GPS heading can lag, flip, or follow the phone rather than the car. The
+  // next matched route segment is therefore the camera's source of truth.
+  if (Number.isFinite(matchedRouteHeading) && !(matchedRouteHeading === 0 && (route?.points || []).length < 2)) return matchedRouteHeading;
   const deviceHeading = Number(current?.heading);
-  const speed = Number(current?.speed) || 0;
-  // A browser often reports heading as null/0 while stopped. In that case the
-  // next route segment is a much better camera direction than arbitrary north.
-  if (Number.isFinite(deviceHeading) && (speed >= 2 || Math.abs(deviceHeading) > 0.01)) return (deviceHeading + 360) % 360;
-  return routeHeading(route, progress, current);
+  return Number.isFinite(deviceHeading) ? (deviceHeading + 360) % 360 : 0;
 }
 
 function vehicleElement() {
