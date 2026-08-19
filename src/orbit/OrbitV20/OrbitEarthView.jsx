@@ -46,7 +46,7 @@ export default function OrbitEarthView({ containerRef, current, markerPos, marke
           </div>
         )}
         <div className={`ov20-texture-quality ${textureQuality.startsWith('8K') ? 'detail' : ''}`}>{textureQuality}</div>
-        {markerTargets.map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} onPick={onMarkerPick} />)}
+        {markerTargets.filter((marker) => marker.type === 'nearby' && marker.selectable).map((marker) => <Marker key={marker.id} marker={marker} projection={markerPos[marker.id]} onPick={onMarkerPick} />)}
         <div className="ov20-globe-controls">
           <button className="ov20-zoom-btn" onClick={onZoomIn}>−</button>
           <button className="ov20-recenter-btn" onClick={onRecenter}>⊕</button>
