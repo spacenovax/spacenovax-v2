@@ -4729,17 +4729,19 @@ app.get('/api/orbit/geocode', async (req, res) => {
       return response.json();
     };
 
-    // Search once per user input in the normal case.  Only if it returns no
-    // map result do we try one normalized address variant; that keeps the public
-    // geocoder load bounded while supporting pasted/space-free addresses.
+    // Search the literal input first. If it is a short building or landmark
+    // name, try the normalized aliases one by one as well. This is important
+    // for Korean names such as “센텀큐시티”, where the public map may store
+    // the Latin letter form first and then only the underlying road address.
+    // The loop stops as soon as a useful set is found, so it remains bounded.
     let items = await searchNominatim(searchTerms[0]);
-    // A short building or store name can return a few partial matches. Add one
-    // normalized/alias search so the user sees similar named places without
-    // requiring province, city, county or the exact Latin spelling.
-    if ((items?.length || 0) < 6 && searchTerms.length > 1) {
-      const fallbackItems = await searchNominatim(searchTerms[1]);
-      const combined = new Map();
-      [...(items || []), ...(fallbackItems || [])].forEach((item) => combined.set(String(item.place_id), item));
+    const combined = new Map((items || []).map((item) => [String(item.place_id), item]));
+    if (combined.size < 6 && searchTerms.length > 1) {
+      for (const term of searchTerms.slice(1)) {
+        const fallbackItems = await searchNominatim(term);
+        (fallbackItems || []).forEach((item) => combined.set(String(item.place_id), item));
+        if (combined.size >= 6) break;
+      }
       items = [...combined.values()].slice(0, 24);
     }
 
