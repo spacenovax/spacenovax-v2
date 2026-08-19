@@ -44,7 +44,7 @@ const topDownVehicle = (vehicle = 'car') => {
   if (vehicle === 'walk') return '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#fff"/><circle cx="24" cy="14" r="4" fill="#1976f3"/><path d="M24 20v10m0-5-7 5m7-5 7 5m-7 1-6 9m6-9 6 9" fill="none" stroke="#1976f3" stroke-width="3.5" stroke-linecap="round"/></svg>';
   return arrow;
 };
-const vehicleIcon = (heading = 0, vehicle = 'car') => { const selected = VEHICLES.find((item) => item.id === vehicle) || VEHICLES[0]; return L.divIcon({ className: `nova-nav-icon nova-nav-icon-${selected.id} nova-nav-icon-light`, html: `<b style="transform:rotate(${heading}deg)">${topDownVehicle(selected.id)}</b>`, iconSize: [52, 52], iconAnchor: [26, 26] }); };
+const vehicleIcon = (heading = 0, vehicle = 'car') => { const selected = VEHICLES.find((item) => item.id === vehicle) || VEHICLES[0]; return L.divIcon({ className: `nova-nav-icon nova-nav-icon-${selected.id} nova-nav-icon-light`, html: `<b style="transform:rotate(${heading}deg)">${topDownVehicle(selected.id)}</b>`, iconSize: [36, 36], iconAnchor: [18, 18] }); };
 const readVehicle = () => { try { const saved = localStorage.getItem(VEHICLE_PREF); return VEHICLES.some((item) => item.id === saved) ? saved : 'car'; } catch { return 'car'; } };
 const destinationIcon = L.divIcon({ className: 'nova-nav-destination', html: '<b>◆</b>', iconSize: [34, 34], iconAnchor: [17, 17] });
 const clean = (v) => String(v || '').normalize('NFKC').replace(/[，、;；]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
@@ -68,7 +68,7 @@ function MapFollow({ current, route, destination, navigating, nextStep, location
   useEffect(() => { fitted.current = false; }, [route]);
   useEffect(() => { if (!route?.points?.length || fitted.current) return; fitted.current = true; map.fitBounds(route.points.map(p => [p.lat, p.lon]), { padding: [40, 120], maxZoom: 16, animate: true }); }, [map, route]);
   useEffect(() => { if (!navigating && !route?.points?.length && destination) map.flyTo([destination.lat, destination.lon], 16, { animate: true, duration: .35 }); }, [map, destination, route, navigating]);
-  useEffect(() => { if (!locationFocus || !Number.isFinite(current.lat) || !Number.isFinite(current.lon)) return; map.flyTo([current.lat, current.lon], Math.max(map.getZoom(), 16), { animate: true, duration: .35 }); }, [map, locationFocus, current.lat, current.lon]);
+  useEffect(() => { if (!locationFocus || !Number.isFinite(current.lat) || !Number.isFinite(current.lon)) return; map.flyTo([current.lat, current.lon], Math.max(map.getZoom(), 14), { animate: true, duration: .35 }); }, [map, locationFocus, current.lat, current.lon]);
   useEffect(() => { const container = map.getContainer(); const heading = Number(current.heading) || 0; container.style.setProperty('--nova-map-rotation', (navigating ? -heading : 0) + 'deg'); container.style.setProperty('--nova-map-scale', navigating ? '1.42' : '1'); }, [map, current.heading, navigating]);
   useEffect(() => { const refresh = () => setTimeout(() => map.invalidateSize({ pan: false }), 90); window.addEventListener('resize', refresh); window.addEventListener('orientationchange', refresh); return () => { window.removeEventListener('resize', refresh); window.removeEventListener('orientationchange', refresh); }; }, [map]);
   useEffect(() => {
