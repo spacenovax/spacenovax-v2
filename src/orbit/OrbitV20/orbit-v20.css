@@ -314,3 +314,53 @@
 .ov20-route-mode-selector button{min-height:38px;padding:7px 6px;border:1px solid rgba(93,201,255,.34);border-radius:9px;background:rgba(4,20,42,.72);color:#cdeeff;font:700 11px/1.15 system-ui,sans-serif}
 .ov20-route-mode-selector button.active{border-color:#5edcff;background:linear-gradient(135deg,rgba(18,104,197,.92),rgba(21,203,235,.65));color:#fff;box-shadow:0 0 16px rgba(43,190,255,.28)}
 .ov20-route-toll-note{display:block;margin:0 0 8px;color:#9ed6ff;font-size:11px;line-height:1.45}
+
+/* Live Earth: original photorealistic overlays, no boxed marker cards. */
+.ov20-marker-typhoon,
+.ov20-marker-satellite { pointer-events:none; }
+
+.ov20-marker-typhoon .ov20-marker-pulse { display:none; }
+.ov20-marker-typhoon .ov20-marker-pin {
+  width:54px; height:54px; border:0; border-radius:50%;
+  background:transparent; box-shadow:none; overflow:visible;
+}
+.ov20-typhoon-symbol {
+  display:block; width:54px; height:54px; border:0; border-radius:50%;
+  background-repeat:no-repeat; background-position:center; background-size:contain;
+  filter:drop-shadow(0 5px 7px rgba(7,20,48,.56));
+  animation:ov20-live-typhoon-spin 28s linear infinite;
+}
+.ov20-typhoon-symbol::after { display:none; }
+.ov20-marker-typhoon .ov20-marker-label {
+  margin-top:-2px; padding:0; border:0; border-radius:0; background:transparent;
+  box-shadow:none; text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 8px rgba(202,236,255,.72);
+}
+.ov20-marker-typhoon .ov20-marker-label b { color:#f7fbff; font-size:7px; letter-spacing:.03em; }
+.ov20-marker-typhoon .ov20-marker-label small { color:#c7ebff; font-size:5px; }
+
+.ov20-marker-satellite .ov20-marker-pulse { display:none; }
+.ov20-marker-satellite .ov20-marker-pin {
+  width:42px; height:42px; border:0; border-radius:0;
+  background:transparent; box-shadow:none; overflow:visible;
+}
+.ov20-satellite-symbol {
+  display:block; width:42px; height:42px; background-repeat:no-repeat;
+  background-position:center; background-size:contain;
+  filter:drop-shadow(0 4px 5px rgba(0,11,30,.7)) drop-shadow(0 0 4px rgba(127,226,255,.58));
+  animation:ov20-live-satellite-float 8s ease-in-out infinite;
+}
+.ov20-satellite-symbol b,
+.ov20-satellite-symbol i { display:none; }
+.ov20-marker-satellite .ov20-marker-label {
+  margin-top:-2px; padding:0; border:0; border-radius:0; background:transparent;
+  box-shadow:none; text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 8px rgba(183,239,255,.65);
+}
+.ov20-marker-satellite .ov20-marker-label b { color:#eafaff; font-size:6.5px; letter-spacing:.03em; }
+.ov20-marker-satellite .ov20-marker-label small { color:#bfeeff; font-size:5px; }
+
+@keyframes ov20-live-typhoon-spin { to { transform:rotate(360deg); } }
+@keyframes ov20-live-satellite-float {
+  0%,100% { transform:translateY(0) rotate(-4deg); }
+  50% { transform:translateY(-4px) rotate(4deg); }
+}
+

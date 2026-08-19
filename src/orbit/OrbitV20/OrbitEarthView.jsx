@@ -3,11 +3,12 @@
 // mounts the canvas container and renders HTML overlays positioned from the engine's
 // per-frame screen projection.
 import React from 'react';
+import { LIVE_SATELLITE_SPRITE, LIVE_TYPHOON_SPRITE } from './liveEarthSprites';
 
 function MarkerIcon({ type }) {
   if (type === 'base') return <span className="ov20-marker-symbol" aria-hidden="true">⌂</span>;
-  if (type === 'typhoon') return <span className="ov20-marker-symbol ov20-typhoon-symbol" aria-hidden="true">◌</span>;
-  if (type === 'satellite') return <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true"><i /><i /><b /></span>;
+  if (type === 'typhoon') return <span className="ov20-marker-symbol ov20-typhoon-symbol" aria-hidden="true" style={{ backgroundImage: `url(${LIVE_TYPHOON_SPRITE})` }} />;
+  if (type === 'satellite') return <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true" style={{ backgroundImage: `url(${LIVE_SATELLITE_SPRITE})` }} />;
   if (type === 'destination') return <span className="ov20-marker-symbol" aria-hidden="true">⌖</span>;
   return <span className="ov20-marker-symbol" aria-hidden="true">●</span>;
 }
