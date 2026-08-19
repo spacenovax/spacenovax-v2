@@ -4606,12 +4606,9 @@ const GEOCODE_MAP_POI_RADIUS_METERS = 10_000;
 // Known local landmark aliases let common Korean building names resolve even
 // when the public map stores a Latin letter or an expanded road address.
 const NAVIGATION_SEARCH_ALIASES = {
-  // Prefer the actual apartment and named-place records before the underlying
-  // road address. Kakao exposes these POIs separately, while a broad OSM
-  // lookup can otherwise collapse the query to a nearby “선지로” road segment.
-  '센텀큐시티': ['김해센텀큐시티아파트', '센텀큐시티공인중개사사무소', '김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
-  '센텀q시티': ['김해센텀큐시티아파트', '센텀큐시티공인중개사사무소', '김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
-  '센텀큐시티아파트': ['김해센텀큐시티아파트', '센텀큐시티공인중개사사무소', '김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
+  '센텀큐시티': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
+  '센텀q시티': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
+  '센텀큐시티아파트': ['김해 센텀Q시티', '경상남도 김해시 주촌면 선지로 85'],
 };
 
 function consumeGooglePlacesSearchQuota() {
@@ -4777,10 +4774,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
       // letter spelling. Search the exact input and up to two normalized aliases
       // so “센텀큐시티” can return the apartment, gate, building units, and
       // nearby businesses instead of only a fallback road segment.
-      // Keep this bounded, but include the normalized landmark POI variants.
-      // The previous three-term cap omitted apartment/business aliases and
-      // left only broad road-name fallbacks on otherwise successful requests.
-      const kakaoTerms = [...new Set([query, ...searchTerms].filter(Boolean))].slice(0, 4);
+      const kakaoTerms = [...new Set([query, ...searchTerms].filter(Boolean))].slice(0, 3);
       const combined = new Map();
       try {
         for (const term of kakaoTerms) {
@@ -4905,7 +4899,6 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const type = item.type || category || 'place';
       return {
         id: String(item.place_id),
-        source: 'osm',
         label: displayParts.join(',').trim(),
         address: addressLine || displayParts.slice(1).join(',').trim(),
         lat,
@@ -4927,7 +4920,6 @@ app.get('/api/orbit/geocode', async (req, res) => {
         : (document.road_address?.building_name || document.address_name || '');
       return {
         id: 'kakao:' + source + ':' + (document.id || lat.toFixed(6) + ',' + lon.toFixed(6)),
-        source: 'kakao',
         label: String(label).trim(),
         address,
         lat,
@@ -4943,7 +4935,6 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const lon = Number(item.location?.longitude);
       return {
         id: 'google:' + (item.id || lat.toFixed(6) + ',' + lon.toFixed(6)),
-        source: 'google',
         label: String(item.displayName?.text || item.formattedAddress || '').trim(),
         address: String(item.formattedAddress || '').trim(),
         lat,
@@ -4967,7 +4958,6 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const category = tags.amenity || tags.shop || tags.tourism || tags.office || tags.building || 'place';
       return {
         id: `osm:${item.type}:${item.id}`,
-        source: 'osm-poi',
         label: String(label).trim(),
         address,
         lat,
@@ -4981,15 +4971,6 @@ app.get('/api/orbit/geocode', async (req, res) => {
 
     const mergedSeen = new Set();
     const normalizedQuery = compactQuery.toLocaleLowerCase();
-    // Korean named-place results are the canonical answer when the Kakao
-    // provider has them. Do not let a nearby generic OSM road (for example
-    // “선지로”) jump above an apartment, entrance, shop, or office solely
-    // because its map coordinate is a few metres closer.
-    const isKakaoPrioritySearch = useKakaoSearch && kakaoResults.length > 0;
-    const providerRank = (place) => {
-      if (!isKakaoPrioritySearch) return 0;
-      return place.source === 'kakao' ? 0 : 1;
-    };
     const mergedResults = [...kakaoResults, ...googleResults, ...poiResults, ...results].filter((place) => {
       const placeKey = `${String(place.label).toLocaleLowerCase()}:${place.lat.toFixed(4)}:${place.lon.toFixed(4)}`;
       if (mergedSeen.has(placeKey)) return false;
@@ -4999,8 +4980,7 @@ app.get('/api/orbit/geocode', async (req, res) => {
       const aName = String(a.label).replace(/\s+/g, '').toLocaleLowerCase();
       const bName = String(b.label).replace(/\s+/g, '').toLocaleLowerCase();
       const score = (name) => (name === normalizedQuery ? 0 : name.includes(normalizedQuery) ? 1 : 2);
-      return providerRank(a) - providerRank(b)
-        || score(aName) - score(bName)
+      return score(aName) - score(bName)
         || Number(a.distanceM ?? Number.MAX_SAFE_INTEGER) - Number(b.distanceM ?? Number.MAX_SAFE_INTEGER);
     }).slice(0, 20);
 
