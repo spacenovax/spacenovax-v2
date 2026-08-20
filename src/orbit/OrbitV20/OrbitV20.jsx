@@ -493,7 +493,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       targets.push({
         id: `sat-${satellite.id}`, type: 'satellite', lat: satellite.lat, lon: satellite.lon,
         label: String(satellite.name || satellite.id || 'SATELLITE').slice(0, 20),
-        detail: t.ko ? '실시간 궤도' : 'LIVE ORBIT',
+        detail: satellite.estimated ? (t.ko ? '관측 표시 보조 궤도' : 'DISPLAY ORBIT BACKUP') : (t.ko ? '실시간 궤도' : 'LIVE ORBIT'),
       });
     });
     return targets;
