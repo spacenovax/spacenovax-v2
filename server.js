@@ -4704,9 +4704,10 @@ app.get('/api/orbit/geocode', async (req, res) => {
     ...aliasTerms,
   ].filter(Boolean))].slice(0, 5);
   const nearbyKey = nearbyValid ? `:${nearLatitude.toFixed(2)},${nearLongitude.toFixed(2)}` : '';
-  const key = `search:${searchTerms.join('|').toLowerCase()}:${language}${nearbyKey}`;
+  const cacheProviderKey = KAKAO_REST_API_KEY ? ':kakao-enabled' : ':kakao-disabled';
+  const key = `search:${searchTerms.join('|').toLowerCase()}:${language}${nearbyKey}${cacheProviderKey}`;
   const cached = geocodeCache.get(key);
-  if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, results: cached.value, cached: true });
+  if (cached && now() - cached.at < GEOCODE_CACHE_MS) return res.json({ ok: true, results: cached.value, providers: cached.providers || {}, cached: true });
 
   try {
     let nearbyViewbox = '';
@@ -4753,6 +4754,13 @@ app.get('/api/orbit/geocode', async (req, res) => {
       && nearLatitude >= 32.5 && nearLatitude <= 39.5
       && nearLongitude >= 124 && nearLongitude <= 132;
     const useKakaoSearch = Boolean(KAKAO_REST_API_KEY && (/[가-힣]/.test(query) || isKoreanLocation));
+    const kakaoProvider = {
+      configured: Boolean(KAKAO_REST_API_KEY),
+      requested: useKakaoSearch,
+      status: useKakaoSearch ? 'pending' : (KAKAO_REST_API_KEY ? 'not_applicable' : 'not_configured'),
+      code: null,
+      resultCount: 0,
+    };
     const searchKakao = async () => {
       if (!useKakaoSearch) return [];
       const request = async (endpoint, parameters) => {
@@ -4794,10 +4802,16 @@ app.get('/api/orbit/geocode', async (req, res) => {
           }
           if (combined.size >= 15) break;
         }
-        return [...combined.values()].slice(0, 24);
+        const entries = [...combined.values()].slice(0, 24);
+        kakaoProvider.status = 'ok';
+        kakaoProvider.resultCount = entries.length;
+        return entries;
       } catch (error) {
-        // Kakao is an optional regional source; retain global search on errors.
-        console.warn('Orbit Kakao Local search unavailable', error.message);
+        const message = String(error?.message || '');
+        const status = message.match(/\b(401|403|429|5\d\d)\b/)?.[1] || 'REQUEST_FAILED';
+        kakaoProvider.status = 'error';
+        kakaoProvider.code = status;
+        console.warn('Orbit Kakao Local search unavailable', message);
         return [];
       }
     };
@@ -4984,8 +4998,9 @@ app.get('/api/orbit/geocode', async (req, res) => {
         || Number(a.distanceM ?? Number.MAX_SAFE_INTEGER) - Number(b.distanceM ?? Number.MAX_SAFE_INTEGER);
     }).slice(0, 20);
 
-    geocodeCache.set(key, { at: now(), value: mergedResults });
-    return res.json({ ok: true, results: mergedResults, cached: false });
+    const providers = { kakao: kakaoProvider };
+    geocodeCache.set(key, { at: now(), value: mergedResults, providers });
+    return res.json({ ok: true, results: mergedResults, providers, cached: false });
   } catch (error) {
     console.error('Orbit geocode failed', error.message);
     return res.status(502).json({ ok: false, message: 'Destination search temporarily unavailable.', results: [] });
