@@ -358,7 +358,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
       setGpsState('live');
       if (!initialGpsFixRef.current) {
         initialGpsFixRef.current = true;
-        engineRef.current?.flyTo(pos.lat, pos.lon, { duration: 1100 });
+        engineRef.current?.flyTo(pos.lat, pos.lon, { duration: 1100, onArrive: () => engineRef.current?.setAutoRotate(true) });
       }
     };
     const useFallback = () => {
