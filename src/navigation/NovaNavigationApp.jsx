@@ -217,7 +217,20 @@ export default function NovaNavigationApp() {
   async function buildRoute(place, mode = 'recommended') { setRouteMode(mode); setRoute(null); setScreen('route'); setNotice('현재 GPS 위치와 선택한 조건으로 경로를 계산하고 있습니다…'); try { const origin = gpsReadyRef.current ? currentRef.current : await requestCurrentPosition(); setDestination(place); const response = await fetch(`/api/orbit/route?fromLat=${origin.lat}&fromLon=${origin.lon}&toLat=${place.lat}&toLon=${place.lon}&mode=${encodeURIComponent(mode)}&lang=${encodeURIComponent(language)}`); const data = await response.json(); if (!data.ok) { if (data.code === 'TOLL_PROVIDER_UNAVAILABLE') throw new Error('유료·무료도로 데이터 연결이 아직 설정되지 않았습니다. 현재는 추천 경로를 이용해 주세요.'); throw new Error(data.message); } setRoute(data.route); setNotice('선택한 경로가 준비되었습니다. 안내 시작을 누르세요.'); } catch (e) { setNotice(e.message || '경로를 찾지 못했습니다. 다른 장소를 선택해 주세요.'); } }
   async function rerouteFrom(position) { if (!destinationRef.current) return; setNotice('경로를 이탈했습니다. 선택한 조건으로 새 경로를 찾고 있습니다…'); try { const target = destinationRef.current; const response = await fetch(`/api/orbit/route?fromLat=${position.lat}&fromLon=${position.lon}&toLat=${target.lat}&toLon=${target.lon}&mode=${encodeURIComponent(routeModeRef.current)}&lang=${encodeURIComponent(language)}`); const data = await response.json(); if (!data.ok) throw new Error(); setRoute(data.route); announcedRef.current = new Map(); offRouteRef.current = { count: 0, lastAt: 0 }; setProgress(0); const firstStep = (data.route.steps || []).find((step) => step?.maneuver); const nextInstruction = firstStep ? `새 경로로 안내합니다. ${maneuverText(firstStep)}` : '새 위치에 맞춰 경로를 조정했습니다. 안내를 계속합니다.'; ping(); speak(nextInstruction); setNotice(nextInstruction); } catch { setNotice('선택한 조건으로 경로를 다시 분석하지 못했습니다. GPS 신호를 확인해 주세요.'); } }
   function selectPlace(place) { if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return; const item = { id: place.id, label: place.label, address: place.address || '', type: place.type || '', lat: place.lat, lon: place.lon }; const next = [item, ...recent.filter(p => p.id !== item.id)].slice(0, 8); setRecent(next); try { localStorage.setItem(RECENT, JSON.stringify(next)); } catch {} setDestination(item); setRoute(null); setQuery(item.label); setResults([]); setActiveResult(-1); setSearchError(''); setNotice('선택한 장소를 확인한 뒤 경로 찾기를 눌러 주세요.'); setScreen('place'); }
-  function startNavigation() { if (!route || !destination) return; announcedRef.current = new Map(); offRouteRef.current = { count: 0, lastAt: 0 }; rerouteAtRef.current = 0; setProgress(0); setNavigating(true); setScreen('drive'); setNotice('NOVA가 경로 안내를 시작합니다.'); requestLocation(true); if (navigator.geolocation && watch.current == null) watch.current = navigator.geolocation.watchPosition(updatePosition, () => setGps('GPS 신호를 다시 찾고 있습니다…'), { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }); }
+  function startNavigation() {
+    if (!destination) return;
+    // Browser WebViews expose intermittent raw device locations. They are not
+    // a validated driving-navigation engine, so NOVA never issues driving
+    // manoeuvres itself; it hands the selected destination to a map app.
+    const name = encodeURIComponent(destination.label || '목적지');
+    const coordinate = `${destination.lat},${destination.lon}`;
+    const koreanDestination = language === 'ko' || /[가-힣]/.test(destination.label || destination.address || '');
+    const url = koreanDestination
+      ? `https://map.kakao.com/link/to/${name},${coordinate}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinate)}&travelmode=driving`;
+    setNotice('선택한 지도 앱에서 실제 길안내를 시작합니다.');
+    window.location.assign(url);
+  }
   function stopNavigation() { setNavigating(false); if (watch.current != null) { navigator.geolocation.clearWatch(watch.current); watch.current = null; } window.speechSynthesis?.cancel(); setRoute(null); setDestination(null); setProgress(0); setNotice('안전 주행 모드입니다. 목적지를 선택하면 길안내를 시작합니다.'); setScreen('drive'); }
   function search() { setDestination(null); setRoute(null); setResults([]); setSearchError(''); setActiveResult(-1); setQuery(''); setScreen('search'); }
   const nextStep = useMemo(() => (route?.steps || []).find((step) => Number(step.routeProgress) >= progress - .006) || route?.steps?.[0], [route, progress]);
