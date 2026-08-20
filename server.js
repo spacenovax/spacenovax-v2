@@ -5219,6 +5219,13 @@ app.get('/api/orbit/route', async (req, res) => {
     const stride = Math.max(1, Math.ceil(rawPoints.length / 720));
     const points = rawPoints.filter((_, index) => index % stride === 0 || index === rawPoints.length - 1).map(([lon, lat]) => ({ lat: Number(lat), lon: Number(lon) })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
     if (points.length < 2) throw new Error('Route geometry unavailable');
+    const pointDistances = [0];
+    for (let index = 1; index < points.length; index++) {
+      const a = points[index - 1], b = points[index], latDelta = (b.lat - a.lat) * Math.PI / 180, lonDelta = (b.lon - a.lon) * Math.PI / 180;
+      const h = Math.sin(latDelta / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(lonDelta / 2) ** 2;
+      pointDistances[index] = pointDistances[index - 1] + 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+    const routeGeometryDistanceM = pointDistances[pointDistances.length - 1] || 1;
     const routeProgressAt = (lat, lon) => {
       let nearest = 0, nearestDistance = Infinity;
       points.forEach((point, index) => {
@@ -5226,7 +5233,7 @@ app.get('/api/orbit/route', async (req, res) => {
         const squared = dLat * dLat + dLon * dLon;
         if (squared < nearestDistance) { nearestDistance = squared; nearest = index; }
       });
-      return points.length > 1 ? nearest / (points.length - 1) : 0;
+      return { progress: pointDistances[nearest] / routeGeometryDistanceM, distanceFromStartM: pointDistances[nearest] };
     };
     const steps = (source.legs || []).flatMap((leg) => leg.steps || []).slice(0, 80).map((step, index) => {
       const maneuverLocation = Array.isArray(step.maneuver?.location) ? step.maneuver.location : [];
@@ -5236,7 +5243,8 @@ app.get('/api/orbit/route', async (req, res) => {
       const lanes = laneSet.slice(0, 8).map((lane) => ({ indications: Array.isArray(lane.indications) ? lane.indications.map(String).slice(0, 3) : [], valid: lane.valid === true }));
       return {
         index,
-        routeProgress: validManeuver ? routeProgressAt(maneuverLat, maneuverLon) : 1,
+        routeProgress: validManeuver ? routeProgressAt(maneuverLat, maneuverLon).progress : 1,
+        distanceFromStartM: validManeuver ? Math.round(routeProgressAt(maneuverLat, maneuverLon).distanceFromStartM) : Math.round(routeGeometryDistanceM),
         name: String(step.name || '').slice(0, 100),
         distanceM: Math.round(Number(step.distance) || 0),
         durationSec: Math.round(Number(step.duration) || 0),
