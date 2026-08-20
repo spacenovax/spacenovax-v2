@@ -930,7 +930,7 @@ export default class EarthEngine {
   // Called once per frame by MasterRenderLoop (Phase 2: single shared render loop).
   renderFrame(time = performance.now()) {
     if (this._flight) this._stepFlight(time);
-    else if (this.autoRotate) { this.rotation.lon += 0.04; this._applyRotation(); }
+    else if (this.autoRotate) { this.rotation.lon += 0.012; this._applyRotation(); }
     if (this.clouds) {
       const delta = 0.00035;
       this.clouds.rotation.y += delta;
