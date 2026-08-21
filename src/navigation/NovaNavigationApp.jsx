@@ -195,7 +195,7 @@ export default function NovaNavigationApp() {
     }, 420);
     return () => clearTimeout(timer);
   }, [query, screen, searchNonce, language]);
-  function updatePosition(pos) { const accuracy = Number(pos.coords.accuracy); const rawLat = Number(pos.coords.latitude), rawLon = Number(pos.coords.longitude); if (!Number.isFinite(rawLat) || !Number.isFinite(rawLon)) return false; const previous = gpsReadyRef.current ? currentRef.current : { lat: rawLat, lon: rawLon, heading: 0 }; const raw = { lat: rawLat, lon: rawLon }; const moved = meters(previous, raw); const heading = Number.isFinite(pos.coords.heading) ? (pos.coords.heading + 360) % 360 : moved >= 3 ? bearing(previous, raw) : previous.heading; const next = { ...raw, heading, speed: Math.max(0, (pos.coords.speed || 0) * 3.6), accuracy: Number.isFinite(accuracy) ? accuracy : 0 }; gpsReadyRef.current = true; currentRef.current = next; setGpsReady(true); try { localStorage.setItem(GPS_LAST_POSITION, JSON.stringify({ lat: next.lat, lon: next.lon, heading: next.heading, speed: next.speed, accuracy: next.accuracy, savedAt: Date.now() })); } catch {} setCurrent(next); setGps(`GPS 연결됨 · 정확도 ${Math.ceil(next.accuracy)}m · 전방 30m 추적`); const activeRoute = routeRef.current; if (!navigatingRef.current || !activeRoute?.points?.length || !destinationRef.current) return true; const location = routeLocation(activeRoute, next); setProgress(location.progress); if (meters(next, destinationRef.current) < 35) { ping(); speak('목적지에 도착하였습니다. 안내를 종료하겠습니다.'); setNotice('목적지에 도착했습니다. 안내를 종료했습니다.'); stopNavigation(); return true; } const step = (activeRoute.steps || []).find((candidate) => { const point = maneuverPoint(candidate); return Number(candidate.routeProgress) >= location.progress - .0005 && point; }); if (step) { const maneuver = maneuverPoint(step); const routeDistance = Number(step.distanceFromStartM); const toStep = Number.isFinite(routeDistance) ? Math.max(0, routeDistance - location.distanceFromStartM) : meters(next, maneuver); const key = `${step.index ?? Math.round(Number(step.routeProgress || 0) * 10000)}`;
+  function updatePosition(pos) { const accuracy = Number(pos.coords.accuracy); const rawLat = Number(pos.coords.latitude), rawLon = Number(pos.coords.longitude); if (!Number.isFinite(rawLat) || !Number.isFinite(rawLon)) return false; const previous = gpsReadyRef.current ? currentRef.current : { lat: rawLat, lon: rawLon, heading: 0 }; const raw = { lat: rawLat, lon: rawLon }; const moved = meters(previous, raw); const heading = Number.isFinite(pos.coords.heading) ? (pos.coords.heading + 360) % 360 : moved >= 3 ? bearing(previous, raw) : previous.heading; const next = { ...raw, heading, speed: Math.max(0, (pos.coords.speed || 0) * 3.6), accuracy: Number.isFinite(accuracy) ? accuracy : 0 }; gpsReadyRef.current = true; currentRef.current = next; setGpsReady(true); try { localStorage.setItem(GPS_LAST_POSITION, JSON.stringify({ lat: next.lat, lon: next.lon, heading: next.heading, speed: next.speed, accuracy: next.accuracy, savedAt: Date.now() })); } catch {} setCurrent(next); setGps(`GPS 연결됨 · 정확도 ${Math.ceil(next.accuracy)}m · 전방 30m 추적`); const activeRoute = routeRef.current; if (!navigatingRef.current || !activeRoute?.points?.length || !destinationRef.current) return true; const location = routeLocation(activeRoute, next); setProgress(location.progress); setNotice('NOVA Lite 주행 화면 · 실제 도로 표지와 검증된 지도 앱 안내를 우선하세요.'); return true; if (meters(next, destinationRef.current) < 35) { ping(); speak('목적지에 도착하였습니다. 안내를 종료하겠습니다.'); setNotice('목적지에 도착했습니다. 안내를 종료했습니다.'); stopNavigation(); return true; } const step = (activeRoute.steps || []).find((candidate) => { const point = maneuverPoint(candidate); return Number(candidate.routeProgress) >= location.progress - .0005 && point; }); if (step) { const maneuver = maneuverPoint(step); const routeDistance = Number(step.distanceFromStartM); const toStep = Number.isFinite(routeDistance) ? Math.max(0, routeDistance - location.distanceFromStartM) : meters(next, maneuver); const key = `${step.index ?? Math.round(Number(step.routeProgress || 0) * 10000)}`;
     const laneAlert = laneGuide(step);
     const earlyWarning = laneAlert || needsEarlyManeuverWarning(step);
     const thresholds = earlyWarning ? [30, 100, 300, 500, 1000] : [30, 100, 300];
@@ -218,18 +218,22 @@ export default function NovaNavigationApp() {
   async function rerouteFrom(position) { if (!destinationRef.current) return; setNotice('경로를 이탈했습니다. 선택한 조건으로 새 경로를 찾고 있습니다…'); try { const target = destinationRef.current; const response = await fetch(`/api/orbit/route?fromLat=${position.lat}&fromLon=${position.lon}&toLat=${target.lat}&toLon=${target.lon}&mode=${encodeURIComponent(routeModeRef.current)}&lang=${encodeURIComponent(language)}`); const data = await response.json(); if (!data.ok) throw new Error(); setRoute(data.route); announcedRef.current = new Map(); offRouteRef.current = { count: 0, lastAt: 0 }; setProgress(0); const firstStep = (data.route.steps || []).find((step) => step?.maneuver); const nextInstruction = firstStep ? `새 경로로 안내합니다. ${maneuverText(firstStep)}` : '새 위치에 맞춰 경로를 조정했습니다. 안내를 계속합니다.'; ping(); speak(nextInstruction); setNotice(nextInstruction); } catch { setNotice('선택한 조건으로 경로를 다시 분석하지 못했습니다. GPS 신호를 확인해 주세요.'); } }
   function selectPlace(place) { if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return; const item = { id: place.id, label: place.label, address: place.address || '', type: place.type || '', lat: place.lat, lon: place.lon }; const next = [item, ...recent.filter(p => p.id !== item.id)].slice(0, 8); setRecent(next); try { localStorage.setItem(RECENT, JSON.stringify(next)); } catch {} setDestination(item); setRoute(null); setQuery(item.label); setResults([]); setActiveResult(-1); setSearchError(''); setNotice('선택한 장소를 확인한 뒤 경로 찾기를 눌러 주세요.'); setScreen('place'); }
   function startNavigation() {
-    if (!destination) return;
-    // Browser WebViews expose intermittent raw device locations. They are not
-    // a validated driving-navigation engine, so NOVA never issues driving
-    // manoeuvres itself; it hands the selected destination to a map app.
-    const name = encodeURIComponent(destination.label || '목적지');
-    const coordinate = `${destination.lat},${destination.lon}`;
-    const koreanDestination = language === 'ko' || /[가-힣]/.test(destination.label || destination.address || '');
-    const url = koreanDestination
-      ? `https://map.kakao.com/link/to/${name},${coordinate}`
-      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinate)}&travelmode=driving`;
-    setNotice('선택한 지도 앱에서 실제 길안내를 시작합니다.');
-    window.location.assign(url);
+    if (!route || !destination) return;
+    announcedRef.current = new Map();
+    offRouteRef.current = { count: 0, lastAt: 0 };
+    rerouteAtRef.current = 0;
+    setProgress(0);
+    setNavigating(true);
+    setScreen('drive');
+    setNotice('NOVA Lite 주행 화면입니다. 실제 도로 안내는 검증된 지도 앱을 함께 확인해 주세요.');
+    requestLocation(false);
+    if (navigator.geolocation && watch.current == null) {
+      watch.current = navigator.geolocation.watchPosition(
+        updatePosition,
+        () => setGps('GPS 신호를 다시 찾고 있습니다…'),
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 },
+      );
+    }
   }
   function stopNavigation() { setNavigating(false); if (watch.current != null) { navigator.geolocation.clearWatch(watch.current); watch.current = null; } window.speechSynthesis?.cancel(); setRoute(null); setDestination(null); setProgress(0); setNotice('안전 주행 모드입니다. 목적지를 선택하면 길안내를 시작합니다.'); setScreen('drive'); }
   function search() { setDestination(null); setRoute(null); setResults([]); setSearchError(''); setActiveResult(-1); setQuery(''); setScreen('search'); }
