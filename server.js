@@ -211,6 +211,7 @@ function createInitialData() {
         communityNodeBonusPercent: COMMUNITY_NODE_BONUS_PERCENT,
         sponsoredBannersEnabled: false,
         tonTestnetEnabled: true,
+        tonTestnetPointsEnabled: true,
         tonMainnetEnabled: false,
         tonProofEnabled: false,
         vestingClaimsEnabled: false,
@@ -264,6 +265,7 @@ function normalizeData(data) {
   data.vestingClaims ||= [];
   data.stakingPositions ||= [];
   data.settings.tonTestnetEnabled ??= true;
+  data.settings.tonTestnetPointsEnabled ??= true;
   data.settings.tonMainnetEnabled ??= false;
   data.settings.tonProofEnabled ??= false;
   data.settings.vestingClaimsEnabled ??= false;
@@ -4057,10 +4059,40 @@ function walletDisplayName(user) {
   return String(user.name || user.username || `Captain ${user.id}`).slice(0, 80);
 }
 
+const TESTNET_POINT_FAUCET_AMOUNT = 10000;
+const TESTNET_POINT_FAUCET_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+function publicTestnetPointFaucet(user) {
+  const lastClaimedAt = Number(user.testnetPointFaucetLastClaimedAt || 0);
+  const nextClaimAt = lastClaimedAt ? lastClaimedAt + TESTNET_POINT_FAUCET_COOLDOWN_MS : 0;
+  return {
+    balance: Number(user.testnetPoints || 0),
+    amountPerRequest: TESTNET_POINT_FAUCET_AMOUNT,
+    lastClaimedAt,
+    nextClaimAt,
+    available: !nextClaimAt || nextClaimAt <= now(),
+  };
+}
+
 app.post('/api/nova-wallet/status', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data);
   if (!requireVerifiedCaptain(user, res)) return;
-  res.json({ ok: true, security: publicWalletSecurity(user), kycRequiredForTransfers: true, transfersEnabled: false });
+  res.json({ ok: true, security: publicWalletSecurity(user), testnetPoints: publicTestnetPointFaucet(user), kycRequiredForTransfers: true, transfersEnabled: false });
+});
+app.post('/api/nova-wallet/testnet-points/request', (req, res) => {
+  const data = readData(); const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  if (!data.settings?.tonTestnetEnabled || !data.settings?.tonTestnetPointsEnabled) {
+    return res.status(409).json({ ok: false, message: 'Testnet point faucet is currently unavailable.' });
+  }
+  const faucet = publicTestnetPointFaucet(user);
+  if (!faucet.available) return res.status(429).json({ ok: false, message: 'Testnet point faucet is available once every 24 hours.', testnetPoints: faucet });
+  user.testnetPoints = Number(user.testnetPoints || 0) + TESTNET_POINT_FAUCET_AMOUNT;
+  user.testnetPointFaucetLastClaimedAt = now();
+  user.updatedAt = now();
+  const updated = publicTestnetPointFaucet(user);
+  data.events.push({ type: 'ton_testnet_points_faucet_claimed', userId: user.id, amount: TESTNET_POINT_FAUCET_AMOUNT, at: now() });
+  writeData(data);
+  res.json({ ok: true, testnetPoints: updated, message: `${TESTNET_POINT_FAUCET_AMOUNT.toLocaleString()} test points were added.` });
 });
 app.post('/api/nova-wallet/pin/setup', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data);
