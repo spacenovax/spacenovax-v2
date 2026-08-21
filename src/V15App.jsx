@@ -1818,7 +1818,14 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const [wallet, setWallet] = useState(user.tonWallet || '');
   const tonWallet = useTonWallet();
   const [tonConnectUI] = useTonConnectUI();
+  const [walletNetwork, setWalletNetwork] = useState(initialPanel === 'testnet' ? 'testnet' : 'mainnet');
   const [tonTestnetStatus, setTonTestnetStatus] = useState('disconnected');
+  const [testnetRecipient, setTestnetRecipient] = useState('');
+  const [testnetAmount, setTestnetAmount] = useState('0.05');
+  const [testnetTransferBusy, setTestnetTransferBusy] = useState(false);
+  const [testnetTransferResult, setTestnetTransferResult] = useState('');
+  const [testnetPoints, setTestnetPoints] = useState(null);
+  const [testnetPointBusy, setTestnetPointBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [walletSecurity, setWalletSecurity] = useState(null);
@@ -1831,7 +1838,7 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [walletAsset, setWalletAsset] = useState('SPNX');
   const [walletPanel, setWalletPanel] = useState(initialPanel);
-  useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => setWalletSecurity(data.security)).catch(() => {}); }, []);
+  useEffect(() => { api('/api/nova-wallet/status', { method: 'POST', body: {} }).then((data) => { setWalletSecurity(data.security); setTestnetPoints(data.testnetPoints || null); }).catch(() => {}); }, []);
   useEffect(() => {
     let active = true;
     const check = async () => {
@@ -1925,19 +1932,19 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
     if (tonWallet.account.chain !== CHAIN.TESTNET) {
       setTonTestnetStatus('mainnet-rejected');
       setWallet('');
-      setNotice(language === 'ko'
-        ? '테스트넷 지갑만 연결할 수 있습니다. 메인넷 자산·거래는 이번 단계에서 사용할 수 없습니다.'
-        : 'Only a testnet wallet can be connected. Mainnet assets and transactions are unavailable at this stage.');
+      if (walletNetwork === 'testnet') setNotice(language === 'ko'
+        ? '테스트넷 전송에는 테스트넷 TON 지갑이 필요합니다. 메인넷 자산·거래는 이번 단계에서 사용할 수 없습니다.'
+        : 'A testnet TON wallet is required for testnet transfers. Mainnet assets and transactions are unavailable at this stage.');
       return;
     }
     setWallet(tonWallet.account.address);
-    setTonTestnetStatus('connected-unverified');
+    setTonTestnetStatus('connected');
     setNotice(language === 'ko'
-      ? 'TON 테스트넷 지갑이 이 브라우저 세션에 연결되었습니다. 아직 서버 소유권 검증·자산 저장·수령 기능은 활성화되지 않았습니다.'
-      : 'A TON testnet wallet is connected for this browser session. Ownership verification, asset storage, and claims remain disabled.');
-  }, [tonWallet, language]);
+      ? 'TON 테스트넷 지갑이 연결되었습니다. Test TON 전송은 지갑에서 직접 서명하며, tSPNX Jetton은 계약 검증 후 추가됩니다.'
+      : 'A TON testnet wallet is connected. Test TON transfers are signed directly in your wallet; tSPNX Jetton support follows contract validation.');
+  }, [tonWallet, language, walletNetwork]);
 
-  async function connectAndVerify() {
+  async function connectTestnetWallet() {
     if (tonWallet?.account?.chain === CHAIN.TESTNET) {
       await tonConnectUI.disconnect();
       return;
@@ -1949,6 +1956,42 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
         ? 'TON Connect 창을 열지 못했습니다. 다시 시도해 주세요.'
         : 'Unable to open TON Connect. Please try again.');
     }
+  }
+  function toNanoTon(value) {
+    const normalized = String(value || '').trim();
+    if (!/^\d+(\.\d{0,9})?$/.test(normalized)) throw new Error(language === 'ko' ? '전송할 Test TON 수량을 올바르게 입력하세요.' : 'Enter a valid Test TON amount.');
+    const [whole, fraction = ''] = normalized.split('.');
+    const nano = BigInt(whole) * 1_000_000_000n + BigInt((fraction + '000000000').slice(0, 9));
+    if (nano <= 0n) throw new Error(language === 'ko' ? '0보다 큰 수량을 입력하세요.' : 'Enter an amount greater than zero.');
+    return nano.toString();
+  }
+  async function sendTestnetTon() {
+    if (tonWallet?.account?.chain !== CHAIN.TESTNET) return setNotice(language === 'ko' ? '먼저 테스트넷 TON 지갑을 연결하세요.' : 'Connect a testnet TON wallet first.');
+    const recipient = testnetRecipient.trim();
+    if (recipient.length < 20) return setNotice(language === 'ko' ? '받는 테스트넷 TON 주소를 확인하세요.' : 'Check the recipient testnet TON address.');
+    setTestnetTransferBusy(true); setTestnetTransferResult('');
+    try {
+      const transaction = await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 300,
+        network: CHAIN.TESTNET,
+        messages: [{ address: recipient, amount: toNanoTon(testnetAmount) }],
+      });
+      setTestnetTransferResult(transaction?.boc ? (language === 'ko' ? '지갑이 Test TON 전송을 제출했습니다. 테스트넷 탐색기에서 확인하세요.' : 'Your wallet submitted the Test TON transfer. Confirm it in a testnet explorer.') : (language === 'ko' ? '지갑 서명이 완료되었습니다. 네트워크 확인을 기다리세요.' : 'Wallet signing is complete. Wait for network confirmation.'));
+      setNotice(language === 'ko' ? 'Test TON 전송 요청이 지갑에서 제출되었습니다.' : 'The Test TON transfer request was submitted by your wallet.');
+    } catch (error) {
+      setNotice(error?.message || (language === 'ko' ? 'Test TON 전송이 취소되었거나 실패했습니다.' : 'Test TON transfer was cancelled or failed.'));
+    } finally { setTestnetTransferBusy(false); }
+  }
+  async function requestTestnetPoints() {
+    setTestnetPointBusy(true);
+    try {
+      const data = await api('/api/nova-wallet/testnet-points/request', { method: 'POST', body: {} });
+      setTestnetPoints(data.testnetPoints || null);
+      setNotice(language === 'ko' ? '테스트 포인트 10,000이 지급되었습니다. 실제 TON·SPNX 가치는 없습니다.' : '10,000 test points were added. They have no TON or SPNX value.');
+    } catch (error) {
+      if (error?.testnetPoints) setTestnetPoints(error.testnetPoints);
+      setNotice(error.message);
+    } finally { setTestnetPointBusy(false); }
   }
   if (walletLocked) return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-onboarding">
     <div className="wallet-security-scan"/><div className="section-heading"><div><small>{wu.genesis}</small><h2>{walletSecurity?.pinConfigured ? wu.unlock : wu.initialize}</h2></div><span className="secure-label"><Icon name="shield" size={17}/>{wu.secure}</span></div>
@@ -1968,6 +2011,10 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
   return <main className="v15-page"><section className="command-card ops-module wallet-theme nova-wallet-shell">
     <div className="section-heading"><div><small>NOVA WALLET · {w.assets.toUpperCase()}</small><h2>NOVA Wallet</h2></div><button className="secure-label" onClick={() => setWalletLocked(true)}><Icon name="shield" size={17}/>{wu.lockedSession}</button></div>
     <div className="nova-wallet-hero"><div><small>{w.portfolio.toUpperCase()} · LIVE SPNX POINTS LEDGER</small><strong>{format(livePointsBalance)} <em>SPNX POINTS</em></strong><p>Live mining, mission and verified game credits settle here through your Captain ledger. KYC is required only when official SPNX conversion launches.</p></div><div className="nova-wallet-orb">✦<span>SECURE</span></div></div>
+    <div className="wallet-network-switch" role="tablist" aria-label="TON network selection">
+      <button role="tab" aria-selected={walletNetwork === 'mainnet'} className={walletNetwork === 'mainnet' ? 'active' : ''} onClick={() => setWalletNetwork('mainnet')}><b>{language === 'ko' ? '메인넷' : 'MAINNET'}</b><small>{language === 'ko' ? '출시 준비 · 자산 이동 잠금' : 'Launch preparation · transfers locked'}</small></button>
+      <button role="tab" aria-selected={walletNetwork === 'testnet'} className={walletNetwork === 'testnet' ? 'active testnet' : 'testnet'} onClick={() => { setWalletNetwork('testnet'); setWalletPanel('testnet'); }}><b>{language === 'ko' ? '테스트넷' : 'TESTNET'}</b><small>{language === 'ko' ? '누구나 Test TON으로 실제 송수신' : 'Open Test TON send & receive'}</small></button>
+    </div>
     <div className="nova-asset-grid">
       {[['SPNX','0.000000',w.coming],['USDT','0.00',w.coming]].map(([name,value,status]) => <button key={name} className={'nova-asset-card ' + (walletAsset === name ? 'selected' : '')} onClick={() => setWalletAsset(name)}><span className={'asset-emblem ' + (name === 'SPNX' ? 'spnx' : 'usdt')}>{name === 'SPNX' ? <img src="/brand/spacenovax-symbol.jpg" alt="SPNX" /> : '₮'}</span><small>{name}</small><b>{value}</b><i>{status}</i></button>)}
       <button className="nova-asset-card spnx-convert-card" onClick={() => setWalletPanel('convert')}><span className="asset-emblem points">✦</span><small>SPNX POINTS</small><b>LIVE LEDGER</b><i className="active">{format(livePointsBalance)} LIVE</i><strong>POINTS → SPNX <Icon name="arrow" size={14}/></strong></button>
@@ -1992,14 +2039,14 @@ function Wallet({ user, setUser, t, language, initialPanel = 'overview' }) {
       {walletPanel === 'security' && <><small>SECURITY CENTER</small><b>{walletSecurity?.biometricAvailable ? 'Device biometric access is registered for this Wallet.' : 'Your Wallet is protected with a six-digit PIN.'}</b><p>PIN or registered device biometrics can open the Wallet. Biometrics stay on your device; SpaceNovaX stores only a verification public key. Never share a seed phrase, private key or PIN with anyone.</p>{!walletSecurity?.biometricAvailable && <button className="wallet-security-action" disabled={biometricBusy || !biometricSupported} onClick={registerWalletBiometric}><Icon name="shield"/>{biometricBusy ? 'REGISTERING DEVICE…' : biometricSupported ? 'REGISTER FACE ID / FINGERPRINT' : 'DEVICE BIOMETRICS NOT AVAILABLE'}</button>}<button className="wallet-security-action" onClick={() => setWalletLocked(true)}><Icon name="shield"/>LOCK NOVA WALLET NOW</button></>}
       {walletPanel === 'swap' && <><small>SWAP · KYC SECURITY GATE</small><b>SPNX swap will activate only after KYC approval and official live-asset release.</b><p>Before then, no exchange rate, liquidity, quote or transfer can be executed. The final Swap flow will require PIN reconfirmation, KYC status, server validation and a signed transaction.</p></>}
       {walletPanel === 'convert' && <><small>SPNX POINTS → SPNX · VESTING GATE</small><b>{language === 'ko' ? 'KYC 승인 후 전환된 SPNX는 즉시 10%만 수령 가능하며, 이후 3개월마다 10%씩 해제됩니다.' : 'After KYC approval, 10% of converted SPNX is claimable immediately and 10% unlocks every three months.'}</b><p>{language === 'ko' ? '잠긴 SPNX는 계약 밖으로 이동·매도·스테이킹할 수 없습니다. 수령 가능한 분량만 TON 지갑으로 신청할 수 있으며, 네트워크 수수료는 사용자가 부담합니다.' : 'Locked SPNX cannot move, trade or stake outside the contract. Only unlocked amounts can be claimed to a TON wallet; the user pays network fees.'}</p><button className="wallet-security-action" disabled><Icon name="shield"/>TON TESTNET REQUIRED</button></>}
-      {walletPanel === 'testnet' && <><small>TON TESTNET · SAFE PRACTICE NETWORK</small><b>{language === 'ko' ? '실제 자산과 완전히 분리된 NOVA Wallet 테스트 공간입니다.' : 'A NOVA Wallet practice space fully separated from real assets.'}</b><p>{language === 'ko' ? '테스트 TON과 tSPNX는 가치가 없고 메인넷으로 이전되지 않습니다. 지갑 연결 → 소유권 확인 → 테스트 자산 수령 → 사용자 간 전송 → 락업·스테이킹 순서로 검증합니다.' : 'Test TON and tSPNX have no value and never move to mainnet. Validation runs through wallet connection, ownership proof, test asset funding, user-to-user transfers, vesting and staking.'}</p><div className="ton-testnet-steps"><span className={tonTestnetStatus === 'connected-unverified' ? 'active' : ''}><i>1</i>{language === 'ko' ? '지갑 연결' : 'Connect'}</span><span><i>2</i>{language === 'ko' ? '소유권 확인' : 'Prove ownership'}</span><span><i>3</i>{language === 'ko' ? 'tSPNX 받기' : 'Receive tSPNX'}</span><span><i>4</i>{language === 'ko' ? '서로 전송' : 'Send to users'}</span></div><div className="ton-testnet-asset-grid"><article><small>TEST TON</small><b>GAS ONLY</b><span>{language === 'ko' ? '테스트 가스비 전용' : 'Test gas only'}</span></article><article><small>tSPNX</small><b>JETTON PENDING</b><span>{language === 'ko' ? '계약 배포 후 활성화' : 'Activates after contract deployment'}</span></article><article><small>MAINNET</small><b>LOCKED</b><span>{language === 'ko' ? '실제 자산 이동 차단' : 'Real asset movement blocked'}</span></article></div><button className="wallet-security-action" onClick={connectAndVerify}><Icon name="wallet"/>{tonTestnetStatus === 'connected-unverified' ? (language === 'ko' ? '테스트넷 지갑 연결됨' : 'TESTNET WALLET CONNECTED') : (language === 'ko' ? '테스트넷 지갑 연결하기' : 'CONNECT TESTNET WALLET')}</button><p className="staking-fee-notice">{language === 'ko' ? 'tSPNX 전송은 테스트넷 Jetton 계약 주소가 등록되고, 지갑 소유권 검증과 테스트용 가스비 확인이 통과된 후에만 열립니다. 계약 없이 가짜 잔액이나 가짜 거래 내역을 만들지 않습니다.' : 'tSPNX transfers open only after a testnet Jetton contract address is registered and ownership proof plus test-gas checks pass. No fake balances or transaction history are created without a contract.'}</p></>}
+      {walletPanel === 'testnet' && <><small>TON TESTNET · OPEN PRACTICE NETWORK</small><b>{language === 'ko' ? '누구나 Test TON으로 실제 송금과 수령을 검증할 수 있습니다.' : 'Anyone can verify real Test TON sending and receiving.'}</b><p>{language === 'ko' ? '모든 전송은 연결한 본인 테스트넷 지갑에서 직접 서명합니다. Test TON과 이후의 tSPNX는 가치가 없으며 메인넷으로 이전되지 않습니다.' : 'Every transfer is signed directly in the connected testnet wallet. Test TON and future tSPNX have no value and never move to mainnet.'}</p><div className="ton-testnet-steps"><span className={tonTestnetStatus === 'connected' ? 'active' : ''}><i>1</i>{language === 'ko' ? '지갑 연결' : 'Connect'}</span><span className={tonTestnetStatus === 'connected' ? 'active' : ''}><i>2</i>{language === 'ko' ? '주소 받기' : 'Receive address'}</span><span className={tonTestnetStatus === 'connected' ? 'active' : ''}><i>3</i>{language === 'ko' ? 'Test TON 받기' : 'Fund Test TON'}</span><span className={tonTestnetStatus === 'connected' ? 'active' : ''}><i>4</i>{language === 'ko' ? '서로 전송' : 'Send to users'}</span></div><div className="ton-testnet-asset-grid"><article><small>TEST TON</small><b>LIVE TRANSFER</b><span>{language === 'ko' ? '테스트넷 지갑에서 실제 서명' : 'Signed in your testnet wallet'}</span></article><article><small>TEST POINTS</small><b>{Number(testnetPoints?.balance || 0).toLocaleString()} tPOINT</b><span>{language === 'ko' ? '테스트 원장 · 온체인 자산 아님' : 'Test ledger · not an on-chain asset'}</span></article><article><small>tSPNX</small><b>JETTON PENDING</b><span>{language === 'ko' ? '검증된 테스트 계약 후 활성화' : 'After reviewed test contract'}</span></article><article><small>MAINNET</small><b>LOCKED</b><span>{language === 'ko' ? '실제 자산 이동 차단' : 'Real asset movement blocked'}</span></article></div><div className="testnet-point-faucet"><div><small>{language === 'ko' ? '테스트 포인트 신청' : 'TEST POINT FAUCET'}</small><b>{language === 'ko' ? '1회 10,000 Test Points' : '10,000 Test Points per request'}</b><span>{testnetPoints?.available === false ? (language === 'ko' ? '다음 신청까지 24시간 대기' : 'Available again after 24 hours') : (language === 'ko' ? '테스트 전용 · 현금·TON·SPNX 가치 없음' : 'Test only · no cash, TON, or SPNX value')}</span></div><button disabled={testnetPointBusy || testnetPoints?.available === false} onClick={requestTestnetPoints}>{testnetPointBusy ? (language === 'ko' ? '지급 중…' : 'REQUESTING…') : (language === 'ko' ? '10,000 신청' : 'REQUEST 10,000')}</button></div><button className="wallet-security-action" onClick={connectTestnetWallet}><Icon name="wallet"/>{tonTestnetStatus === 'connected' ? (language === 'ko' ? '테스트넷 지갑 연결됨 · 연결 해제' : 'TESTNET WALLET CONNECTED · DISCONNECT') : (language === 'ko' ? '테스트넷 지갑 연결하기' : 'CONNECT TESTNET WALLET')}</button>{tonTestnetStatus === 'connected' && <div className="testnet-transfer-console"><label>{language === 'ko' ? '내 테스트넷 수령 주소' : 'MY TESTNET RECEIVE ADDRESS'}</label><div><input readOnly value={wallet}/><button onClick={() => navigator.clipboard?.writeText(wallet).then(() => setNotice(language === 'ko' ? '테스트넷 주소를 복사했습니다.' : 'Testnet address copied.'))}><Icon name="copy"/>{language === 'ko' ? '복사' : 'COPY'}</button></div><label>{language === 'ko' ? '받는 테스트넷 TON 주소' : 'RECIPIENT TESTNET TON ADDRESS'}</label><input value={testnetRecipient} onChange={(event) => setTestnetRecipient(event.target.value.trim())} placeholder="UQ… or EQ…" autoCapitalize="off" autoCorrect="off" spellCheck="false"/><label>{language === 'ko' ? '보낼 Test TON' : 'TEST TON AMOUNT'}</label><div><input inputMode="decimal" value={testnetAmount} onChange={(event) => setTestnetAmount(event.target.value)} placeholder="0.05"/><button className="testnet-send" disabled={testnetTransferBusy} onClick={sendTestnetTon}>{testnetTransferBusy ? (language === 'ko' ? '지갑 서명 대기…' : 'AWAITING WALLET…') : (language === 'ko' ? 'Test TON 보내기' : 'SEND TEST TON')}</button></div>{testnetTransferResult && <p className="testnet-transfer-result">{testnetTransferResult}</p>}</div>}<p className="staking-fee-notice">{language === 'ko' ? 'Test TON은 테스트 전용이며 가치가 없습니다. 지갑에서 테스트 가스비를 직접 승인합니다. Test Points는 테스트 원장 포인트입니다. tSPNX 전송은 검증된 Jetton 계약과 ton_proof 검증을 연결한 뒤에만 추가됩니다.' : 'Test TON is valueless and for testing only. Your wallet approves the test network fee directly. Test Points are test-ledger points. tSPNX transfers are added only after a reviewed Jetton contract and ton_proof verification.'}</p></>}
       {walletPanel === 'staking' && <><small>SPNX STAKING · TON TESTNET PREPARATION</small><b>{language === 'ko' ? '수령 완료된 SPNX만 선택 스테이킹할 수 있습니다.' : 'Only claimed SPNX can be staked by choice.'}</b><p>{language === 'ko' ? '자동 락업 물량은 이동·매도·스테이킹할 수 없습니다. 스테이킹 보상은 고정 보상 풀에서 지급되며, APR은 복리·원금·가격 수익을 보장하지 않습니다.' : 'Automatic vesting allocations cannot move, trade or stake. Rewards come from a fixed pool; APR does not guarantee compounding, principal, or market value.'}</p><div className="spnx-staking-grid">{[['FLEX','ANYTIME','1% APR'],['NOVA 90','90 DAYS','3% APR'],['NOVA 180','180 DAYS','5% APR'],['NOVA 365','365 DAYS','8% APR']].map(([name,term,rate]) => <article key={name}><small>{name}</small><b>{rate}</b><span>{language === 'ko' ? (term === 'ANYTIME' ? '언제든 해제' : term.replace(' DAYS','일')) : term}</span></article>)}</div><p className="staking-fee-notice">{language === 'ko' ? '예치·보상 수령·해제는 TON 네트워크 거래입니다. 거래 전에 연결 지갑의 필요 TON·현재 TON·부족 TON을 확인하며, 충분한 TON 잔액이 없으면 진행할 수 없습니다.' : 'Stake, reward claim and unlock are TON network transactions. Before each action the app will show required, current and missing TON; insufficient TON blocks the transaction.'}</p><button className="wallet-security-action" disabled><Icon name="shield"/>{language === 'ko' ? '테스트넷 계약 검증 후 활성화' : 'ACTIVATES AFTER TESTNET VALIDATION'}</button></>}
       {walletPanel === 'nft' && <><small>NOVA NFT VAULT · INSIDE NOVA WALLET</small><b>{language === 'ko' ? '미래의 컬렉터블, 미션 배지, 게임 자산은 여기에서 관리합니다.' : 'Future collectibles, mission badges and game assets will be managed here.'}</b><p>{language === 'ko' ? 'NFT 발행·전송·거래는 TON 테스트넷 검증, 자산 정책, 사용자 서명 후에만 활성화됩니다. 잠긴 SPNX와 개인키는 NFT 기능에서 사용할 수 없습니다.' : 'NFT minting, transfers and trading activate only after TON testnet validation, asset policy approval and user signatures. Locked SPNX and private keys are never used by the NFT module.'}</p></>}
       {walletPanel === 'marketplace' && <><small>MARKETPLACE · ESCROW PREPARATION</small><b>{language === 'ko' ? '상품 등록, 구매, 판매 완료, 분쟁 기록을 분리해 관리합니다.' : 'Listings, purchases, delivery completion and dispute records are kept separately.'}</b><p>{language === 'ko' ? '거래가 시작되면 구매자·판매자의 TON 지갑 서명, 에스크로 상태, 0.5% 마켓 수수료, 거래 영수증을 모두 표시합니다. 현재는 실제 결제·자산 이전이 비활성입니다.' : 'When activated, each trade will show buyer and seller TON signatures, escrow status, the 0.5% marketplace fee, and a receipt. Payments and asset transfers remain disabled today.'}</p><button className="wallet-security-action" disabled><Icon name="shield"/>{language === 'ko' ? '테스트넷 에스크로 검증 후 활성화' : 'ACTIVATES AFTER TESTNET ESCROW VALIDATION'}</button></>}
       {walletPanel === 'payments' && <><small>PAYMENTS · TON CHECKOUT PREPARATION</small><b>{language === 'ko' ? '결제 요청·사용자 서명·영수증을 하나의 흐름으로 기록합니다.' : 'Payment request, user signature and receipt will be recorded in one flow.'}</b><p>{language === 'ko' ? '각 결제 전에는 금액·수수료·수령 주소를 명확히 보여주고, TON Connect 지갑에서 직접 승인해야 합니다. 지갑에 필요한 TON이 부족하면 결제가 진행되지 않습니다.' : 'Before every payment the app will show amount, fee and recipient address, then require direct approval in TON Connect. Payment is blocked when the wallet lacks required TON.'}</p><button className="wallet-security-action" disabled><Icon name="shield"/>{language === 'ko' ? '결제 계약·영수증 검증 후 활성화' : 'ACTIVATES AFTER PAYMENT & RECEIPT VALIDATION'}</button></>}
     </section>
     <div className="conversion-card conversion-locked"><div><b>{language === 'ko' ? 'TON 기반 SPNX 전환·베스팅 정책' : 'TON-based SPNX conversion & vesting policy'}</b><p>{language === 'ko' ? 'KYC 승인 전환분은 즉시 10%, 이후 3개월마다 10%씩 해제됩니다. 잠긴 SPNX는 이동·매도·스테이킹할 수 없습니다.' : 'KYC-approved conversion batches unlock 10% immediately and 10% every three months. Locked SPNX cannot move, trade, or stake.'}</p></div><button disabled>TESTNET FIRST<Icon name="shield"/></button></div>
-    <div className="wallet-form ton-wallet-form"><label>TON WALLET · TON CONNECT TESTNET</label><input readOnly value={wallet} placeholder={language === 'ko' ? '테스트넷 TON 지갑을 연결하세요' : 'Connect a TON testnet wallet'}/><button disabled={verifying} onClick={connectAndVerify}><Icon name="wallet"/>{tonTestnetStatus === 'connected-unverified' ? (language === 'ko' ? '테스트넷 연결 해제' : 'DISCONNECT TESTNET') : (language === 'ko' ? 'TON 테스트넷 연결' : 'CONNECT TON TESTNET')}</button><p className="ton-testnet-state"><i className={tonTestnetStatus}/>{tonTestnetStatus === 'connected-unverified' ? (language === 'ko' ? '테스트넷 연결됨 · 서버 소유권 검증 전 · 실제 자산 이동 없음' : 'Testnet connected · ownership verification pending · no live asset movement') : tonTestnetStatus === 'mainnet-rejected' ? (language === 'ko' ? '메인넷 연결 차단 · 테스트넷 전용' : 'Mainnet rejected · testnet only') : (language === 'ko' ? '테스트넷 지갑 연결 대기 중' : 'Awaiting testnet wallet connection')}</p><p className="privacy-note"><Icon name="shield" size={15}/>{language === 'ko' ? '시드 문구·개인키는 절대 입력하지 마세요. 이번 단계는 테스트넷 연결만 처리하며, 실제 수령·예치·해제·결제는 불가능합니다.' : 'Never enter a seed phrase or private key. This step handles testnet connection only; claims, staking, unlocks, and payments are unavailable.'}</p></div>
+    <div className="wallet-form ton-wallet-form"><label>{walletNetwork === 'testnet' ? 'TON TESTNET · TON CONNECT' : 'TON MAINNET · RELEASE GATE'}</label>{walletNetwork === 'testnet' ? <><input readOnly value={wallet} placeholder={language === 'ko' ? '테스트넷 TON 지갑을 연결하세요' : 'Connect a TON testnet wallet'}/><button disabled={verifying} onClick={connectTestnetWallet}><Icon name="wallet"/>{tonTestnetStatus === 'connected' ? (language === 'ko' ? '테스트넷 연결 해제' : 'DISCONNECT TESTNET') : (language === 'ko' ? 'TON 테스트넷 연결' : 'CONNECT TON TESTNET')}</button><p className="ton-testnet-state"><i className={tonTestnetStatus}/>{tonTestnetStatus === 'connected' ? (language === 'ko' ? '테스트넷 연결됨 · Test TON 송수신 가능' : 'Testnet connected · Test TON send and receive available') : tonTestnetStatus === 'mainnet-rejected' ? (language === 'ko' ? '메인넷 지갑 감지 · 테스트넷 지갑으로 다시 연결하세요' : 'Mainnet wallet detected · reconnect a testnet wallet') : (language === 'ko' ? '테스트넷 지갑 연결 대기 중' : 'Awaiting testnet wallet connection')}</p></> : <p className="privacy-note"><Icon name="shield" size={15}/>{language === 'ko' ? '메인넷은 지갑 구조·전환·락업·자동지급 검증이 끝날 때까지 자산 수령·송금·스테이킹이 잠겨 있습니다.' : 'Mainnet receive, send, and staking remain locked until wallet, conversion, vesting, and automatic payout verification is complete.'}</p>}<p className="privacy-note"><Icon name="shield" size={15}/>{language === 'ko' ? '시드 문구·개인키는 절대 입력하지 마세요. SpaceNovaX는 이를 보관하거나 요청하지 않습니다.' : 'Never enter a seed phrase or private key. SpaceNovaX never stores or requests either.'}</p></div>
     {notice && <p className="module-notice">{notice}</p>}
   </section></main>;
 }
