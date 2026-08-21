@@ -689,7 +689,9 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, onOpenFleet, 
   const m = user.mining || fallbackUser.mining;
   const pct = Math.max(0, Math.min(100, Math.round(Number(m.progress || 0) * 100)));
   const claimable = Boolean(m.claimable);
-  const active = Boolean(m.active);
+  // The server may retain active=true until the claim is settled. A completed
+  // cycle is never presented as actively earning in the client.
+  const active = Boolean(m.active) && !claimable;
   const ko = document.documentElement.lang === 'ko';
   const baseSpeed = Number(m.baseSpeedPerHour || (m.baseReward || 30) / 24);
   const fleetBonus = Number(m.fleetBonus || user.fleetBonus || 0);
@@ -700,7 +702,7 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, onOpenFleet, 
   const nodeBonus = m.nodeOnline ? Number(m.nodeBonus || 0) : 0;
   const eventMultiplier = Number(m.eventMultiplier || 1);
   const subtotalSpeed = baseSpeed * (1 + (fleetBonus + securityBonus + missionBonus) / 100) * eventMultiplier;
-  const currentSpeed = Number(m.speedPerHour || subtotalSpeed * (1 + nodeBonus / 100));
+  const currentSpeed = active ? Number(m.speedPerHour || subtotalSpeed * (1 + nodeBonus / 100)) : 0;
   const reductionSteps = Number(m.reductionSteps || 0);
   const reductionMultiplier = Number.isFinite(Number(m.reductionMultiplier)) ? Number(m.reductionMultiplier) : 1;
   const effectiveReductionPercent = Math.max(0, (1 - reductionMultiplier) * 100);
@@ -718,6 +720,7 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, onOpenFleet, 
     </div>
     <MiningReactor
       active={active}
+      claimable={claimable}
       progress={pct}
       detailed={detailed}
       onActivate={!active && !busy ? onStart : claimable && !busy ? onClaim : undefined}
@@ -762,7 +765,7 @@ function MiningCore({ user, t, onStart, onClaim, onOpenGlobalChat, onOpenFleet, 
   </section>;
 }
 
-function MiningReactor({ active, progress, detailed, onActivate, actionLabel, nodeOnline = false, nodeStatus = '', nodeBonus = 0 }) {
+function MiningReactor({ active, claimable = false, progress, detailed, onActivate, actionLabel, nodeOnline = false, nodeStatus = '', nodeBonus = 0 }) {
   const particles = useMemo(() => Array.from({ length: detailed ? 26 : 16 }, (_, index) => ({
     left: 8 + ((index * 37) % 84),
     delay: (index * .17) % 2.4,
@@ -772,8 +775,12 @@ function MiningReactor({ active, progress, detailed, onActivate, actionLabel, no
   const nodeWaiting = ['awaiting_heartbeat', 'not_registered', ''].includes(String(nodeStatus));
   const nodeState = nodeOnline ? 'ONLINE' : nodeWaiting ? 'WAITING' : 'OFFLINE';
   const hashState = nodeOnline ? 'STABLE' : nodeWaiting ? 'WAITING' : 'OFFLINE';
-  const coreState = active ? 'MINING' : nodeOnline ? 'NODE ONLINE' : onActivate ? 'TOUCH' : 'STANDBY';
-  const coreOutput = active ? `${progress}% OUTPUT` : nodeOnline ? `+${nodeBonus}% SPEED` : actionLabel?.toUpperCase();
+  // A community node can remain online after a 24-hour mining cycle finishes.
+  // Do not let that infrastructure status make the Quantum Core look as though
+  // it is still earning. The core itself is live only while this cycle is live.
+  const cycleComplete = !active && claimable;
+  const coreState = active ? 'MINING' : cycleComplete ? 'CYCLE COMPLETE' : onActivate ? 'READY' : 'STANDBY';
+  const coreOutput = active ? `${progress}% OUTPUT` : cycleComplete ? 'REWARD READY' : onActivate ? 'TAP TO START' : 'NO ACTIVE CYCLE';
   return <div
     className={`mining-reactor ${active ? 'running' : 'idle'} ${nodeOnline ? 'node-online' : 'node-offline'} ${detailed ? 'reactor-large' : ''} ${onActivate ? 'reactor-touchable' : ''}`}
     onClick={onActivate}
