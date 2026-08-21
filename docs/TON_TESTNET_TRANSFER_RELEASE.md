@@ -14,3 +14,10 @@ User-to-user tSPNX transfers open only after all of the following are complete:
 Test TON and tSPNX are valueless test assets. They do not convert to SPNX, TON, cash, rewards, KYC status, or mainnet balances.
 
 No private key, seed phrase, or administrator secret is accepted by the app. The deployer wallet and any testnet faucet key stay outside the application server.
+
+## Practice faucet
+
+- Every Captain may request **10,000 Test Points** once every 24 hours.
+- Test Points are a clearly labelled server-side practice ledger, not a TON Jetton, wallet balance, or claimable SPNX allocation.
+- Native **Test TON** send and receive are signed directly in the user's testnet wallet through TON Connect.
+- When a reviewed tSPNX Jetton is deployed, the same testnet screen will expose its on-chain balance and transfer flow; it must not relabel Test Points as tSPNX.
