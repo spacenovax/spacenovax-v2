@@ -19,6 +19,7 @@ import {
   solanaPayoutConfig,
   validateSolanaAddress,
 } from './lib/solanaPayout.js';
+import { tonPayoutConfig } from './lib/tonPayout.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1358,21 +1359,24 @@ function kycRuntimeReady() {
 }
 
 function conversionRuntimeStatus(data) {
-  const solana = solanaPayoutConfig();
+  const ton = tonPayoutConfig();
   return {
     kycRuntimeReady: kycRuntimeReady(),
-    solana,
+    selectedNetwork: 'ton',
+    ton,
+    legacySolana: {
+      retiredForNewPayouts: true,
+      // Do not read its configuration or use it as a release gate.
+      isolated: true,
+    },
     kycEnabled: Boolean(data.settings?.kycEnabled),
     convertEnabled: Boolean(data.settings?.convertEnabled),
     autoPayoutEnabled: Boolean(data.settings?.autoPayoutEnabled),
-    ready: Boolean(
-      kycRuntimeReady()
-      && solana.enabled
-      && solana.valid
-      && data.settings?.kycEnabled
-      && data.settings?.convertEnabled
-      && data.settings?.autoPayoutEnabled
-    ),
+    // Keep all payout paths closed until the reviewed TON transfer adapter is
+    // available. This prevents a legacy Solana key from being used by mistake.
+    ready: false,
+    releaseBlocked: true,
+    releaseBlockReason: ton.error,
   };
 }
 
@@ -1388,6 +1392,11 @@ function publicPayout(payout) {
 
 const payoutLocks = new Set();
 async function processPayout(payoutId, trigger = 'automatic') {
+  // The previous Solana implementation is retained only for audit/migration
+  // reference. TON is the selected settlement network, and its transfer
+  // adapter has not passed the testnet release gates yet.
+  throw new Error('Automatic payouts are disabled pending TON testnet release gates.');
+  /* c8 ignore next */
   if (payoutLocks.has(payoutId)) return { skipped: true, reason: 'already_processing' };
   payoutLocks.add(payoutId);
   try {
@@ -3578,9 +3587,9 @@ app.post('/api/admin/settings/update', requireAdmin, (req, res) => {
     data.settings.kycEnabled = Boolean(requestedKyc);
   }
   if (requestedConvert !== undefined || requestedAuto !== undefined) {
-    const solana = solanaPayoutConfig();
-    if ((requestedConvert || requestedAuto) && (!solana.enabled || !solana.valid || !data.settings.kycEnabled)) {
-      return res.status(409).json({ ok: false, message: `KYC and Solana payout runtime must be ready first. ${solana.error || ''}`.trim() });
+    const ton = tonPayoutConfig();
+    if (requestedConvert || requestedAuto) {
+      return res.status(409).json({ ok: false, message: `TON automatic payout is not released. ${ton.error}`.trim() });
     }
     if (requestedConvert !== undefined) data.settings.convertEnabled = Boolean(requestedConvert);
     if (requestedAuto !== undefined) data.settings.autoPayoutEnabled = Boolean(requestedAuto);
@@ -3669,9 +3678,9 @@ app.get('/api/admin/distribution-simulator', requireAdmin, (req, res) => {
     totalAmount,
     completed: completed.length,
     completedAmount: completed.reduce((sum, r) => sum + Number(r.tokenAmount || 0), 0),
-    estimatedSolFee: Number((pending.length * 0.00001).toFixed(6)),
+    estimatedTonFee: null,
     mode: conversionRuntimeStatus(data).ready ? 'automatic_payout_ready' : 'locked',
-    note: 'Actual payout requires KYC approval, signed wallet ownership, an enabled conversion window, and a configured Solana treasury.'
+    note: 'TON payout remains locked until TON proof, Jetton transfer, treasury multisig, reconciliation, and testnet release gates are complete.'
   } });
 });
 
