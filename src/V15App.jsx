@@ -773,16 +773,17 @@ function MiningReactor({ active, claimable = false, progress, detailed, onActiva
     size: 2 + (index % 3),
   })), [detailed]);
   const nodeWaiting = ['awaiting_heartbeat', 'not_registered', ''].includes(String(nodeStatus));
-  const nodeState = nodeOnline ? 'ONLINE' : nodeWaiting ? 'WAITING' : 'OFFLINE';
-  const hashState = nodeOnline ? 'STABLE' : nodeWaiting ? 'WAITING' : 'OFFLINE';
-  // A community node can remain online after a 24-hour mining cycle finishes.
-  // Do not let that infrastructure status make the Quantum Core look as though
-  // it is still earning. The core itself is live only while this cycle is live.
+  // The reactor panel represents the current earning session, not infrastructure
+  // availability.  A registered community node must not leave HASH LINK or NODE 01
+  // lit after the user stops mining or after a cycle completes.
+  const miningNodeOnline = active && nodeOnline;
+  const nodeState = miningNodeOnline ? 'ONLINE' : active && nodeWaiting ? 'WAITING' : 'OFFLINE';
+  const hashState = miningNodeOnline ? 'STABLE' : active && nodeWaiting ? 'WAITING' : 'OFFLINE';
   const cycleComplete = !active && claimable;
   const coreState = active ? 'MINING' : cycleComplete ? 'CYCLE COMPLETE' : onActivate ? 'READY' : 'STANDBY';
   const coreOutput = active ? `${progress}% OUTPUT` : cycleComplete ? 'REWARD READY' : onActivate ? 'TAP TO START' : 'NO ACTIVE CYCLE';
   return <div
-    className={`mining-reactor ${active ? 'running' : 'idle'} ${nodeOnline ? 'node-online' : 'node-offline'} ${detailed ? 'reactor-large' : ''} ${onActivate ? 'reactor-touchable' : ''}`}
+    className={`mining-reactor ${active ? 'running' : 'idle'} ${miningNodeOnline ? 'node-online' : 'node-offline'} ${detailed ? 'reactor-large' : ''} ${onActivate ? 'reactor-touchable' : ''}`}
     onClick={onActivate}
     onKeyDown={(event) => { if (onActivate && (event.key === 'Enter' || event.key === ' ')) onActivate(); }}
     role={onActivate ? 'button' : undefined}
@@ -800,8 +801,8 @@ function MiningReactor({ active, claimable = false, progress, detailed, onActiva
     <div className="reactor-particles">{particles.map((particle, index) => <i key={index} style={{ left: `${particle.left}%`, animationDelay: `${particle.delay}s`, animationDuration: `${particle.duration}s`, width: particle.size, height: particle.size }}/>)}</div>
     <div className="reactor-status">
       <span className={active ? 'status-core is-active' : 'status-core'}><i/>QUANTUM CORE {active ? 'ACTIVE' : 'READY'}</span>
-      <span className={`status-link ${nodeOnline ? 'is-online' : nodeWaiting ? 'is-waiting' : 'is-offline'}`}><i/>HASH LINK {hashState}</span>
-      <span className={`status-node ${nodeOnline ? 'is-online' : nodeWaiting ? 'is-waiting' : 'is-offline'}`}><i/>NODE 01 {nodeState}</span>
+      <span className={`status-link ${miningNodeOnline ? 'is-online' : active && nodeWaiting ? 'is-waiting' : 'is-offline'}`}><i/>HASH LINK {hashState}</span>
+      <span className={`status-node ${miningNodeOnline ? 'is-online' : active && nodeWaiting ? 'is-waiting' : 'is-offline'}`}><i/>NODE 01 {nodeState}</span>
     </div>
   </div>;
 }
