@@ -7,6 +7,9 @@ import * as THREE from 'three';
 const EARTH_RADIUS = 2;
 const CAMERA_MIN_DISTANCE = 2.9;
 const CAMERA_DEFAULT_DISTANCE = 8.3;
+// Mobile needs a wider observatory framing: it keeps the whole Earth, satellite paths
+// and storm markers inside the Telegram viewport instead of cropping the lower globe.
+const CAMERA_MOBILE_DEFAULT_DISTANCE = 12.7;
 const CAMERA_MAX_DISTANCE = 18; // twice the previous far-zoom limit (9)
 const LABEL_REFERENCE_DISTANCE = 9;
 const loader = new THREE.TextureLoader();
@@ -247,6 +250,7 @@ export default class EarthEngine {
     this.lowPower = lowPower;
     const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
     this.isTouchDevice = coarsePointer || (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints || 0) > 0);
+    this.defaultCameraDistance = this.isTouchDevice ? CAMERA_MOBILE_DEFAULT_DISTANCE : CAMERA_DEFAULT_DISTANCE;
     this.onTextureQualityChange = onTextureQualityChange;
     this.onSatelliteLayerChange = onSatelliteLayerChange;
     this.textureQuality = '4K';
@@ -271,7 +275,7 @@ export default class EarthEngine {
     const { clientWidth: w, clientHeight: h } = this.container;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-    this.camera.position.set(0, 0, CAMERA_DEFAULT_DISTANCE); // ~35% smaller apparent globe size, more space visible around it
+    this.camera.position.set(0, 0, this.defaultCameraDistance);
     this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowPower, alpha: true, powerPreference: this.lowPower ? 'default' : 'high-performance' });
     this._setRenderResolution();
     this.renderer.setSize(w, h);
@@ -641,7 +645,7 @@ export default class EarthEngine {
     const target = { lon: 20, lat: 12 };
     let deltaLon = ((target.lon - from.lon + 540) % 360) - 180;
     this._flight = { t0: performance.now(), duration: 900, from, deltaLon, deltaLat: target.lat - from.lat, onArrive: () => { this.autoRotate = true; } };
-    this.camera.position.z = CAMERA_DEFAULT_DISTANCE;
+    this.camera.position.z = this.defaultCameraDistance;
     this._updateTextureLOD();
   }
   setAutoRotate(value) { this.autoRotate = value; }
@@ -961,7 +965,8 @@ export default class EarthEngine {
   // Called once per frame by MasterRenderLoop (Phase 2: single shared render loop).
   renderFrame(time = performance.now()) {
     if (this._flight) this._stepFlight(time);
-    else if (this.autoRotate) { this.rotation.lon += 0.012; this._applyRotation(); }
+    // A calm but clearly visible live observatory rotation (about 1.3× the former rate).
+    else if (this.autoRotate) { this.rotation.lon += 0.016; this._applyRotation(); }
     if (this.clouds) {
       const delta = 0.00035;
       this.clouds.rotation.y += delta;
