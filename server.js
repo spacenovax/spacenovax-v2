@@ -297,6 +297,11 @@ function normalizeData(data) {
   data.globalChatMutes = data.globalChatMutes.slice(-5000);
   data.sponsoredBanners ||= [];
   data.sponsoredBanners = data.sponsoredBanners.slice(-50);
+  // A license is an account-bound entitlement, never an API secret handed to
+  // a recipient.  The owner ID is the verified SpaceNovaX / Telegram account,
+  // which prevents a recipient from transferring access by forwarding a code.
+  data.accountLicenses ||= [];
+  data.accountLicenses = data.accountLicenses.slice(-1000);
   data.sponsoredBannerClicks ||= {};
   data.developerGithubConnections ||= [];
   data.developerGithubConnections = data.developerGithubConnections.slice(-5000);
@@ -3070,6 +3075,30 @@ function publicAdminUser(data, user) {
   };
 }
 
+function publicLicense(data, license) {
+  const owner = data.users?.[license.ownerId];
+  return {
+    id: license.id,
+    product: license.product,
+    status: license.status,
+    ownerId: license.ownerId,
+    ownerName: owner?.firstName || license.ownerName || 'Unknown Captain',
+    telegramId: owner?.telegramId || license.telegramId || '',
+    note: license.note || '',
+    issuedAt: license.issuedAt,
+    issuedBy: license.issuedBy,
+    updatedAt: license.updatedAt || license.issuedAt,
+    updatedBy: license.updatedBy || license.issuedBy,
+    revokedAt: license.revokedAt || null,
+    revokeReason: license.revokeReason || '',
+  };
+}
+
+function activeAccountLicense(data, ownerId, product = '') {
+  return (data.accountLicenses || []).find((license) => license.status === 'active'
+    && license.ownerId === ownerId && (!product || license.product === product)) || null;
+}
+
 app.post('/api/admin/login', (req, res) => {
   const id = String(req.body?.id || '').trim();
   const password = String(req.body?.password || '');
@@ -3102,6 +3131,80 @@ app.post('/api/admin/login', (req, res) => {
 
 app.get('/api/admin/me', requireAdmin, (req, res) => {
   res.json({ ok: true, admin: req.admin });
+});
+
+// Account-bound license administration.  A license is intentionally bound to
+// an existing verified Captain account, not to a copyable key.  The receiver
+// must open the official Mini App once so the administrator can select the
+// exact user ID; after that it cannot be reassigned by the receiver.
+app.get('/api/admin/licenses', requireAdmin, (req, res) => {
+  const data = readData();
+  const licenses = (data.accountLicenses || [])
+    .slice()
+    .sort((a, b) => Number(b.updatedAt || b.issuedAt || 0) - Number(a.updatedAt || a.issuedAt || 0))
+    .map((license) => publicLicense(data, license));
+  res.json({ ok: true, licenses });
+});
+
+app.post('/api/admin/licenses/issue', requireAdmin, (req, res) => {
+  const ownerId = String(req.body?.ownerId || '').trim();
+  const product = String(req.body?.product || 'SpaceNovaX Founder License').trim().slice(0, 80);
+  const note = String(req.body?.note || '').trim().slice(0, 240);
+  const data = readData();
+  const owner = data.users?.[ownerId];
+  if (!ownerId || !owner) return res.status(404).json({ ok: false, message: 'Use an existing Captain user ID. The recipient must first open the official Telegram Mini App.' });
+  if (owner.isGuest || !owner.telegramId) return res.status(400).json({ ok: false, message: 'A license can only be bound to a verified Telegram Captain account.' });
+  if (!product) return res.status(400).json({ ok: false, message: 'License name is required.' });
+  const existing = activeAccountLicense(data, ownerId, product);
+  if (existing) return res.status(409).json({ ok: false, message: 'This Captain already has an active license for that product.' });
+  const timestamp = now();
+  const license = {
+    id: `lic_${crypto.randomUUID()}`,
+    product,
+    status: 'active',
+    ownerId,
+    ownerName: owner.firstName || '',
+    telegramId: String(owner.telegramId),
+    note,
+    issuedAt: timestamp,
+    issuedBy: req.admin.id,
+    updatedAt: timestamp,
+    updatedBy: req.admin.id,
+  };
+  data.accountLicenses.push(license);
+  data.events.push({ type: 'admin_license_issued', adminId: req.admin.id, licenseId: license.id, ownerId, product, at: timestamp });
+  writeData(data);
+  res.status(201).json({ ok: true, license: publicLicense(data, license) });
+});
+
+app.post('/api/admin/licenses/status', requireAdmin, (req, res) => {
+  const licenseId = String(req.body?.licenseId || '').trim();
+  const status = String(req.body?.status || '').trim();
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!['active', 'suspended', 'revoked'].includes(status)) return res.status(400).json({ ok: false, message: 'Invalid license status.' });
+  const data = readData();
+  const license = (data.accountLicenses || []).find((item) => item.id === licenseId);
+  if (!license) return res.status(404).json({ ok: false, message: 'License not found.' });
+  const timestamp = now();
+  license.status = status;
+  license.updatedAt = timestamp;
+  license.updatedBy = req.admin.id;
+  if (status === 'revoked') { license.revokedAt = timestamp; license.revokeReason = reason || 'administrator_revocation'; }
+  if (status === 'active') { delete license.revokedAt; delete license.revokeReason; }
+  data.events.push({ type: `admin_license_${status}`, adminId: req.admin.id, licenseId, ownerId: license.ownerId, product: license.product, at: timestamp });
+  writeData(data);
+  res.json({ ok: true, license: publicLicense(data, license) });
+});
+
+app.get('/api/licenses/me', (req, res) => {
+  const data = readData();
+  const user = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(user, res)) return;
+  const licenses = (data.accountLicenses || [])
+    .filter((license) => license.ownerId === user.id)
+    .map((license) => ({ id: license.id, product: license.product, status: license.status, issuedAt: license.issuedAt }));
+  writeData(data);
+  res.json({ ok: true, licenses });
 });
 
 app.get('/api/admin/announcements', requireAdmin, (req, res) => {

@@ -61,12 +61,14 @@ export default function AdminPage() {
   const [messageReports, setMessageReports] = useState([]);
   const [globalChat, setGlobalChat] = useState({ rooms: [], applications: [], messages: [], mutes: [], limits: {} });
   const [sponsors, setSponsors] = useState({ enabled: false, maxPartners: 5, placements: ['mining-top', 'global-chat', 'navigation-explore'], banners: [] });
+  const [licenses, setLicenses] = useState([]);
   const [announcementForm, setAnnouncementForm] = useState({ title:'', body:'', priority:'normal' });
   const [sponsorForm, setSponsorForm] = useState(emptySponsorForm);
   const [conversionRuntime, setConversionRuntime] = useState(null);
   const [notice, setNotice] = useState('Checking admin session...');
   const [search, setSearch] = useState('');
   const [pointForm, setPointForm] = useState({ userId: '', amount: '100', reason: 'admin bonus' });
+  const [licenseForm, setLicenseForm] = useState({ ownerId: '', product: 'SpaceNovaX Founder License', note: 'Gift license · account-bound and non-transferable' });
   const [settingsForm, setSettingsForm] = useState({
     convertEnabled: false,
     kycEnabled: false,
@@ -81,7 +83,7 @@ export default function AdminPage() {
 
   async function loadAdmin() {
     try {
-      const [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q] = await Promise.all([
+      const [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r] = await Promise.all([
         adminFetch('/api/admin/stats'),
         adminFetch('/api/admin/users/search?q=' + encodeURIComponent(search)),
         adminFetch('/api/admin/logs'),
@@ -98,10 +100,11 @@ export default function AdminPage() {
         adminFetch('/api/admin/announcements'),
         adminFetch('/api/admin/messages/stats'),
         adminFetch('/api/admin/global-chat'),
-        adminFetch('/api/admin/sponsored-banners')
+        adminFetch('/api/admin/sponsored-banners'),
+        adminFetch('/api/admin/licenses')
       ]);
       setStats(a.stats); setUsers(b.users || []); setLogs(c.logs || []); setMonitor(d.monitor); setRiskData(e); setSettings(f.settings || {}); setConversionRuntime(f.conversionRuntime || g.runtime || null); setQueue(g.queue || []); setSimulator(h.simulator); setRanking(i.ranking); setMissions(j.missions || []); setMiningEngine(k.engine); setOperations(l.operations || null); setNodeProgram(m.program || null); setNodes(m.nodes || []); setAnnouncements(n.announcements || []); setMessageStats(o.stats || null); setMessageReports(o.reports || []); setGlobalChat(p || { rooms: [], applications: [], messages: [], mutes: [], limits: {} }); setSponsors(q || { enabled:false, maxPartners:5, placements:['mining-top','global-chat','navigation-explore'], banners:[] });
-      setSettingsForm({
+      setLicenses(r.licenses || []); setSettingsForm({
         convertEnabled: Boolean(f.settings?.convertEnabled),
         kycEnabled: Boolean(f.settings?.kycEnabled),
         autoPayoutEnabled: Boolean(f.settings?.autoPayoutEnabled),
@@ -118,6 +121,8 @@ export default function AdminPage() {
 
   async function checkSession() { try { const data = await adminFetch('/api/admin/me'); setAdmin(data.admin); await loadAdmin(); } catch { clearToken(); setAdmin(null); setNotice('Admin login required.'); } }
   async function givePoints(e) { e.preventDefault(); try { await adminFetch('/api/admin/points', { method:'POST', body: JSON.stringify(pointForm) }); setPointForm({ userId:'', amount:'100', reason:'admin bonus' }); loadAdmin(); } catch(e){ setNotice(e.message); } }
+  async function issueLicense(event) { event.preventDefault(); try { await adminFetch('/api/admin/licenses/issue', { method:'POST', body: JSON.stringify(licenseForm) }); setLicenseForm({ ownerId:'', product:'SpaceNovaX Founder License', note:'Gift license · account-bound and non-transferable' }); setNotice('Account-bound license issued. It cannot be transferred to another Captain.'); await loadAdmin(); } catch (error) { setNotice(error.message); } }
+  async function updateLicenseStatus(license, status) { const warning = status === 'revoked' ? '이 라이선스를 영구 회수합니까?' : status === 'suspended' ? '이 라이선스를 일시 중지합니까?' : ''; if (warning && !window.confirm(warning)) return; try { await adminFetch('/api/admin/licenses/status', { method:'POST', body:JSON.stringify({ licenseId:license.id, status, reason: status === 'revoked' ? 'administrator_revocation' : '' }) }); setNotice(`License ${status}.`); await loadAdmin(); } catch (error) { setNotice(error.message); } }
   async function toggleBan(user) { try { await adminFetch('/api/admin/user/update', { method:'POST', body: JSON.stringify({ userId:user.id, banned:!user.banned }) }); loadAdmin(); } catch(e){ setNotice(e.message); } }
   async function updateSettings(e) { e.preventDefault(); try { await adminFetch('/api/admin/settings/update', { method:'POST', body: JSON.stringify(settingsForm) }); loadAdmin(); } catch(e){ setNotice(e.message); } }
   async function updateConvert(id, action) { try { await adminFetch('/api/admin/convert/update', { method:'POST', body: JSON.stringify({ id, action }) }); loadAdmin(); } catch(e){ setNotice(e.message); } }
@@ -243,7 +248,7 @@ export default function AdminPage() {
 
   if (!admin) return <AdminLogin onLogin={(a)=>{ setAdmin(a); loadAdmin(); }} />;
 
-  const tabs = ['dashboard','announcements','sponsors','messages','globalchat','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
+  const tabs = ['dashboard','licenses','announcements','sponsors','messages','globalchat','nova','game','mining','nodes','users','kyc','risk','missions','ranking','convert','settings','logs'];
 
   return <section className="admin-page glass">
     <div className="admin-head"><div><h2>✦ NOVA Command Admin V16.5</h2><p>{notice}</p><small>Logged in: {admin.id} · {admin.role}</small></div><div className="admin-actions"><button onClick={loadAdmin}>Refresh</button><button onClick={logout}>Logout</button></div></div>
@@ -252,6 +257,8 @@ export default function AdminPage() {
     {tab==='dashboard' && <><div className="admin-stats">
       <div><small>Total Users</small><b>{stats?.totalUsers ?? '-'}</b></div><div><small>Online 10m</small><b>{monitor?.onlineUsers ?? '-'}</b></div><div><small>Active Mining</small><b>{stats?.activeMining ?? '-'}</b></div><div><small>Total Points</small><b>{fmt(stats?.totalBalance)} SPNX</b></div><div><small>New Users 24h</small><b>{monitor?.todayNewUsers ?? '-'}</b></div><div><small>Mission Claims</small><b>{stats?.todayMissions ?? '-'}</b></div><div><small>High Risk</small><b>{monitor?.highRisk ?? '-'}</b></div><div><small>Review</small><b>{monitor?.review ?? '-'}</b></div><div><small>Trusted</small><b>{monitor?.trusted ?? '-'}</b></div><div><small>Mining Phase</small><b>Phase {stats?.phase ?? '-'}</b></div><div><small>Pool Used</small><b>{((stats?.miningPoolRatio || 0)*100).toFixed(4)}%</b></div><div><small>Ledger Chain</small><b>{operations?.system?.ledgerIntegrity?.valid ? `VALID · ${operations.system.ledgerIntegrity.count}` : 'CHECK REQUIRED'}</b></div><div><small>Community Nodes</small><b>{nodeProgram?.registered ?? 0} / {nodeProgram?.limit ?? '-'}</b></div><div><small>Nodes Online</small><b>{nodeProgram?.online ?? 0}</b></div>
     </div><form className="admin-form" onSubmit={givePoints}><h3>Manual Point Control</h3><input placeholder="User ID" value={pointForm.userId} onChange={(e)=>setPointForm({...pointForm,userId:e.target.value})}/><input placeholder="Amount" type="number" value={pointForm.amount} onChange={(e)=>setPointForm({...pointForm,amount:e.target.value})}/><input placeholder="Reason" value={pointForm.reason} onChange={(e)=>setPointForm({...pointForm,reason:e.target.value})}/><button type="submit">Give Points</button></form></>}
+
+    {tab==='licenses' && <div className="admin-users"><h3>Account-bound License Control</h3><p className="admin-empty">외부 API 키를 전달하지 않습니다. 수령자가 공식 Telegram Mini App을 한 번 실행해 생성된 Captain ID에만 라이선스를 묶습니다. 수령자는 다른 사람에게 전달·재할당할 수 없고, 관리자는 즉시 중지 또는 회수할 수 있습니다.</p><form className="admin-form" onSubmit={issueLicense}><h3>Gift / issue a personal license</h3><input required placeholder="Recipient Captain user ID (example: tg-123456789)" value={licenseForm.ownerId} onChange={(e)=>setLicenseForm({...licenseForm,ownerId:e.target.value})}/><input required maxLength="80" placeholder="License name" value={licenseForm.product} onChange={(e)=>setLicenseForm({...licenseForm,product:e.target.value})}/><input maxLength="240" placeholder="Internal note" value={licenseForm.note} onChange={(e)=>setLicenseForm({...licenseForm,note:e.target.value})}/><button type="submit">ISSUE TO ACCOUNT</button></form><div className="admin-stats"><div><small>Active</small><b>{licenses.filter((item)=>item.status==='active').length}</b></div><div><small>Suspended</small><b>{licenses.filter((item)=>item.status==='suspended').length}</b></div><div><small>Revoked</small><b>{licenses.filter((item)=>item.status==='revoked').length}</b></div><div><small>Transferability</small><b>BLOCKED</b></div></div><div className="admin-node-list">{licenses.length ? licenses.map((license)=><article className="admin-user-row admin-user-rich" key={license.id}><div><b>{license.status.toUpperCase()} · {license.product}</b><small>{license.ownerName} · Captain: {license.ownerId} · Telegram: {license.telegramId || '-'}</small><small>Issued by {license.issuedBy} · {new Date(license.issuedAt).toLocaleString()}</small>{license.note && <small>Note: {license.note}</small>}{license.revokeReason && <small>Reason: {license.revokeReason}</small>}</div><div className="admin-user-side"><strong>{license.status.toUpperCase()}</strong>{license.status!=='active' && <button onClick={()=>updateLicenseStatus(license,'active')}>RESTORE</button>}{license.status==='active' && <button onClick={()=>updateLicenseStatus(license,'suspended')}>SUSPEND</button>}{license.status!=='revoked' && <button className="danger" onClick={()=>updateLicenseStatus(license,'revoked')}>REVOKE</button>}</div></article>) : <p className="admin-empty">No personal licenses issued. The recipient must open the official Telegram Mini App first, then use their Captain ID here.</p>}</div></div>}
 
     {tab==='announcements' && <div className="admin-users"><h3>Global Announcement Center</h3><p className="admin-empty">게시 즉시 전체 사용자 공지함에 저장되며, 앱 상단 NEW 공지는 게시 후 24시간 표시됩니다.</p><form className="admin-announcement-form" onSubmit={publishAnnouncement}><input maxLength="120" required placeholder="공지 제목" value={announcementForm.title} onChange={(e)=>setAnnouncementForm({...announcementForm,title:e.target.value})}/><textarea maxLength="5000" required rows="7" placeholder="전체 사용자에게 알릴 공지 내용을 입력하세요." value={announcementForm.body} onChange={(e)=>setAnnouncementForm({...announcementForm,body:e.target.value})}/><select value={announcementForm.priority} onChange={(e)=>setAnnouncementForm({...announcementForm,priority:e.target.value})}><option value="normal">일반 공지</option><option value="important">중요 공지</option><option value="urgent">긴급 공지</option></select><button type="submit">전체 공지 게시</button></form><div className="admin-node-list">{announcements.map((item)=><article className="admin-user-row admin-user-rich" key={item.id}><div><b>{item.priority.toUpperCase()} · {item.title}</b><small>{new Date(item.publishedAt).toLocaleString()} · {item.createdBy}</small><small>{item.body}</small></div><div className="admin-user-side"><strong>{item.active?'PUBLISHED':'HIDDEN'}</strong><button onClick={()=>toggleAnnouncement(item)}>{item.active?'Hide':'Publish'}</button></div></article>)}</div></div>}
 
