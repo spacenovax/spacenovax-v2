@@ -3,12 +3,22 @@
 // mounts the canvas container and renders HTML overlays positioned from the engine's
 // per-frame screen projection.
 import React from 'react';
-import { LIVE_SATELLITE_SPRITE, LIVE_TYPHOON_SPRITE } from './liveEarthSprites';
+import { LIVE_TYPHOON_SPRITE } from './liveEarthSprites';
 
 function MarkerIcon({ type }) {
   if (type === 'base') return <span className="ov20-marker-symbol" aria-hidden="true">⌂</span>;
   if (type === 'typhoon') return <span className="ov20-marker-symbol ov20-typhoon-symbol" aria-hidden="true" style={{ backgroundImage: `url(${LIVE_TYPHOON_SPRITE})` }} />;
-  if (type === 'satellite') return <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true" style={{ backgroundImage: `url(${LIVE_SATELLITE_SPRITE})` }} />;
+  // Match the actual Three.js satellite model: a bright bus, two blue solar wings and
+  // a small dish.  Keeping this as DOM/CSS rather than the former 2D sprite makes the
+  // labels and the in-globe models look like one consistent live satellite system.
+  if (type === 'satellite') return (
+    <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true">
+      <span className="ov20-satellite-wing ov20-satellite-wing-left" />
+      <span className="ov20-satellite-bus"><i /></span>
+      <span className="ov20-satellite-wing ov20-satellite-wing-right" />
+      <span className="ov20-satellite-dish" />
+    </span>
+  );
   if (type === 'destination') return <span className="ov20-marker-symbol" aria-hidden="true">⌖</span>;
   return <span className="ov20-marker-symbol" aria-hidden="true">●</span>;
 }
