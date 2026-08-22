@@ -4597,30 +4597,24 @@ app.get('/api/orbit/satellites', async (req, res) => {
     if (orbitTleCache.satellites.length && now() - orbitTleCache.at < ORBIT_TLE_CACHE_MS) {
       return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: true });
     }
-    const groups = ['stations', 'weather', 'noaa', 'resource', 'gps-ops', 'galileo'];
-    const responses = await Promise.allSettled(groups.map(async (group) => {
-      const response = await fetch(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`, {
-        headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public TLE relay)' },
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (!response.ok) throw new Error(`${group}: Celestrak responded ${response.status}`);
-      return response.text();
-    }));
-    const lines = responses
-      .filter((result) => result.status === 'fulfilled')
-      .flatMap((result) => result.value.split('\n').map((line) => line.trimEnd()).filter(Boolean));
-    if (!lines.length) throw new Error('Celestrak public TLE groups unavailable');
+    // Do not fan out several outbound requests at once: shared hosting egress can
+    // reject the burst, leaving the globe stuck on its six-item visual fallback.
+    // The public weather group alone provides more than enough independently
+    // tracked spacecraft for the mobile constellation and is fetched as one TLE set.
+    const response = await fetch('https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle', {
+      headers: { 'User-Agent': 'Mozilla/5.0 SpaceNovaX-Orbit public TLE relay' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`Celestrak responded ${response.status}`);
+    const lines = (await response.text()).split('\n').map((line) => line.trimEnd()).filter(Boolean);
     const satellites = [];
-    const seen = new Set();
     for (let index = 0; index + 2 < lines.length; index += 3) {
       const name = lines[index]?.trim();
       const line1 = lines[index + 1];
       const line2 = lines[index + 2];
-      if (name && !seen.has(name) && line1?.startsWith('1 ') && line2?.startsWith('2 ')) {
-        seen.add(name);
-        satellites.push({ name, line1, line2 });
-      }
+      if (name && line1?.startsWith('1 ') && line2?.startsWith('2 ')) satellites.push({ name, line1, line2 });
     }
+    if (!satellites.length) throw new Error('Celestrak weather TLE set unavailable');
     // Keep the WebGL layer light, but provide enough real tracked objects for a
     // meaningful global constellation view on mobile.
     // Keep enough public objects to show a useful constellation on the visible
