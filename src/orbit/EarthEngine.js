@@ -256,6 +256,7 @@ export default class EarthEngine {
     this._disposed = false;
     this._gestureActive = false;
     this._gestureRestoreTimer = null;
+    this._autoRotateResumeTimer = null;
     this._renderPixelRatio = 0;
     this._interactionHandlers = null;
     this.markerLayers = new Map();
@@ -420,6 +421,14 @@ export default class EarthEngine {
     this._setRenderResolution();
   }
 
+  _resumeAutoRotateAfter(delay = 1800) {
+    if (this._autoRotateResumeTimer) clearTimeout(this._autoRotateResumeTimer);
+    this._autoRotateResumeTimer = setTimeout(() => {
+      this._autoRotateResumeTimer = null;
+      if (!this._flight) this.autoRotate = true;
+    }, delay);
+  }
+
   setPerformanceMode(lowPower) {
     const next = Boolean(lowPower);
     if (this.lowPower === next) return;
@@ -452,6 +461,9 @@ export default class EarthEngine {
       this._gestureRestoreTimer = setTimeout(() => {
         this._gestureRestoreTimer = null;
         this._setGestureActive(false);
+        // Manual rotation remains responsive, then the live globe returns to its
+        // slow observatory rotation when the user releases the screen.
+        this._resumeAutoRotateAfter();
       }, 120);
     };
     const onPointerDown = (event) => {
@@ -520,6 +532,7 @@ export default class EarthEngine {
       this.autoRotate = false;
       this._flight = null;
       this.zoomBy(event.deltaY * 0.003);
+      this._resumeAutoRotateAfter();
     };
     this._interactionHandlers = { el, onPointerDown, onPointerMove, endPointer, onWheel };
     el.addEventListener('pointerdown', onPointerDown, { passive: false });
@@ -627,7 +640,7 @@ export default class EarthEngine {
     const from = { lon: this.rotation.lon, lat: this.rotation.lat };
     const target = { lon: 20, lat: 12 };
     let deltaLon = ((target.lon - from.lon + 540) % 360) - 180;
-    this._flight = { t0: performance.now(), duration: 900, from, deltaLon, deltaLat: target.lat - from.lat };
+    this._flight = { t0: performance.now(), duration: 900, from, deltaLon, deltaLat: target.lat - from.lat, onArrive: () => { this.autoRotate = true; } };
     this.camera.position.z = CAMERA_DEFAULT_DISTANCE;
     this._updateTextureLOD();
   }
@@ -982,6 +995,7 @@ export default class EarthEngine {
     this._satelliteRequestId += 1;
     window.removeEventListener('resize', this._resizeHandler);
     if (this._gestureRestoreTimer) clearTimeout(this._gestureRestoreTimer);
+    if (this._autoRotateResumeTimer) clearTimeout(this._autoRotateResumeTimer);
     if (this._interactionHandlers) {
       const { el, onPointerDown, onPointerMove, endPointer, onWheel } = this._interactionHandlers;
       el.removeEventListener('pointerdown', onPointerDown);
