@@ -4588,7 +4588,8 @@ app.get('/api/nova/status', (req, res) => {
 });
 
 // Public orbital data proxy. This keeps third-party CORS and rate-limit details
-// out of the client while exposing only public station TLE data.
+// out of the client while exposing a compact, real public cross-section of orbit:
+// crewed stations, weather/NOAA, Earth-observation and navigation constellations.
 const ORBIT_TLE_CACHE_MS = 6 * 60 * 60 * 1000;
 const orbitTleCache = { at: 0, satellites: [] };
 app.get('/api/orbit/satellites', async (req, res) => {
@@ -4596,20 +4597,33 @@ app.get('/api/orbit/satellites', async (req, res) => {
     if (orbitTleCache.satellites.length && now() - orbitTleCache.at < ORBIT_TLE_CACHE_MS) {
       return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: true });
     }
-    const response = await fetch('https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle', {
-      headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public TLE relay)' },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`Celestrak responded ${response.status}`);
-    const lines = (await response.text()).split('\n').map((line) => line.trimEnd()).filter(Boolean);
+    const groups = ['stations', 'weather', 'noaa', 'resource', 'gps-ops', 'galileo'];
+    const responses = await Promise.allSettled(groups.map(async (group) => {
+      const response = await fetch(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`, {
+        headers: { 'User-Agent': 'SpaceNovaX-Orbit/1.0 (public TLE relay)' },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) throw new Error(`${group}: Celestrak responded ${response.status}`);
+      return response.text();
+    }));
+    const lines = responses
+      .filter((result) => result.status === 'fulfilled')
+      .flatMap((result) => result.value.split('\n').map((line) => line.trimEnd()).filter(Boolean));
+    if (!lines.length) throw new Error('Celestrak public TLE groups unavailable');
     const satellites = [];
+    const seen = new Set();
     for (let index = 0; index + 2 < lines.length; index += 3) {
       const name = lines[index]?.trim();
       const line1 = lines[index + 1];
       const line2 = lines[index + 2];
-      if (name && line1?.startsWith('1 ') && line2?.startsWith('2 ')) satellites.push({ name, line1, line2 });
+      if (name && !seen.has(name) && line1?.startsWith('1 ') && line2?.startsWith('2 ')) {
+        seen.add(name);
+        satellites.push({ name, line1, line2 });
+      }
     }
-    orbitTleCache.satellites = satellites.slice(0, 60);
+    // Keep the WebGL layer light, but provide enough real tracked objects for a
+    // meaningful global constellation view on mobile.
+    orbitTleCache.satellites = satellites.slice(0, 24);
     orbitTleCache.at = now();
     return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: false });
   } catch (error) {
