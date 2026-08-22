@@ -344,13 +344,16 @@
   background:transparent; box-shadow:none; overflow:visible;
 }
 .ov20-satellite-symbol {
-  display:block; width:42px; height:42px; background-repeat:no-repeat;
-  background-position:center; background-size:contain;
-  filter:drop-shadow(0 4px 5px rgba(0,11,30,.7)) drop-shadow(0 0 4px rgba(127,226,255,.58));
+  position:relative; display:block; width:42px; height:42px;
+  filter:drop-shadow(0 4px 5px rgba(0,11,30,.7)) drop-shadow(0 0 5px rgba(127,226,255,.72));
   animation:ov20-live-satellite-float 8s ease-in-out infinite;
 }
-.ov20-satellite-symbol b,
-.ov20-satellite-symbol i { display:none; }
+.ov20-satellite-wing{position:absolute;top:17px;width:15px;height:9px;border:1px solid rgba(174,245,255,.9);background:linear-gradient(135deg,#174e96 0 24%,#46bceb 25% 48%,#143f83 49% 73%,#55cdf2 74%);box-shadow:inset 0 0 3px rgba(210,255,255,.75),0 0 5px rgba(55,205,255,.54)}
+.ov20-satellite-wing-left{left:1px;transform:perspective(24px) rotateY(17deg)}
+.ov20-satellite-wing-right{right:1px;transform:perspective(24px) rotateY(-17deg)}
+.ov20-satellite-bus{position:absolute;z-index:2;left:14px;top:12px;width:14px;height:18px;border:1px solid #e8fbff;border-radius:3px;background:linear-gradient(135deg,#fff 0,#c8f6ff 40%,#55bbdc 100%);box-shadow:0 0 6px rgba(158,241,255,.9)}
+.ov20-satellite-bus i{position:absolute;left:3px;top:4px;width:6px;height:6px;border:1px solid #59e5ff;border-radius:50%;background:#1c659a;box-shadow:0 0 4px #8af3ff}
+.ov20-satellite-dish{position:absolute;z-index:3;left:18px;top:7px;width:8px;height:5px;border:2px solid #9bf4ff;border-bottom:0;border-radius:8px 8px 0 0;transform:rotate(-10deg);filter:drop-shadow(0 0 3px #58dfff)}
 .ov20-marker-satellite .ov20-marker-label {
   margin-top:-2px; padding:0; border:0; border-radius:0; background:transparent;
   box-shadow:none; text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 8px rgba(183,239,255,.65);
@@ -363,4 +366,3 @@
   0%,100% { transform:translateY(0) rotate(-4deg); }
   50% { transform:translateY(-4px) rotate(4deg); }
 }
-
