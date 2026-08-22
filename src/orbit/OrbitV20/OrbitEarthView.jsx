@@ -12,12 +12,7 @@ function MarkerIcon({ type }) {
   // a small dish.  Keeping this as DOM/CSS rather than the former 2D sprite makes the
   // labels and the in-globe models look like one consistent live satellite system.
   if (type === 'satellite') return (
-    <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true">
-      <span className="ov20-satellite-wing ov20-satellite-wing-left" />
-      <span className="ov20-satellite-bus"><i /></span>
-      <span className="ov20-satellite-wing ov20-satellite-wing-right" />
-      <span className="ov20-satellite-dish" />
-    </span>
+    <span className="ov20-marker-symbol ov20-satellite-symbol" aria-hidden="true" />
   );
   if (type === 'destination') return <span className="ov20-marker-symbol" aria-hidden="true">⌖</span>;
   return <span className="ov20-marker-symbol" aria-hidden="true">●</span>;

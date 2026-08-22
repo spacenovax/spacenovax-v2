@@ -265,6 +265,8 @@ export default class EarthEngine {
     this._interactionHandlers = null;
     this.markerLayers = new Map();
     this._labelTargets = new Map(); // id -> { lat, lon, onUpdate }
+    this.satelliteVisualTexture = new THREE.TextureLoader().load('/orbit/satellite-observation-3d.png');
+    this.satelliteVisualTexture.colorSpace = THREE.SRGBColorSpace;
     this._buildScene();
     this._bindInteraction();
     // Phase 2: rendering is driven externally by MasterRenderLoop via renderFrame() —
@@ -839,16 +841,31 @@ export default class EarthEngine {
   // Earth rotates.  The palette is mirrored by OrbitEarthView's HTML labels.
   _buildSatelliteModel(color) {
     const group = new THREE.Group();
+    const satelliteVisual = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this.satelliteVisualTexture,
+      color: 0xffffff,
+      transparent: true,
+      depthTest: true,
+      depthWrite: false,
+      opacity: 0.98,
+    }));
+    // One high-detail 3D render shared by every tracked satellite. Kept compact
+    // so the mobile globe stays readable even when 32 public tracks are active.
+    satelliteVisual.scale.set(0.19, 0.127, 1);
+    satelliteVisual.renderOrder = 3;
+    group.add(satelliteVisual);
+
     const bodyMat = new THREE.MeshBasicMaterial({ color: 0xeafaff });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.032, 0.052), bodyMat);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.02, 0.032), bodyMat);
+    body.position.z = -0.012;
     group.add(body);
-    const panelMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.96 });
-    const panelGeo = new THREE.BoxGeometry(0.095, 0.024, 0.006);
+    const panelMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.34 });
+    const panelGeo = new THREE.BoxGeometry(0.055, 0.014, 0.004);
     const panelL = new THREE.Mesh(panelGeo, panelMat);
-    panelL.position.x = -0.066;
+    panelL.position.x = -0.038;
     panelL.rotation.y = 0.16;
     const panelR = new THREE.Mesh(panelGeo, panelMat);
-    panelR.position.x = 0.066;
+    panelR.position.x = 0.038;
     panelR.rotation.y = -0.16;
     group.add(panelL, panelR);
     const mast = new THREE.Mesh(

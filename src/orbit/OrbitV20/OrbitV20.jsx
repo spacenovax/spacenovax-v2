@@ -397,9 +397,9 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         const iss = await satEngine.issNow();
         setIssTracked(iss ? 1 : 0);
         setOtherTracked(positions.length);
-        // Keep the visible telemetry deliberately small. The renderer may track every
-        // valid public TLE, but React only needs a handful of names for the HUD.
-        setSatellites(positions.slice(0, 6));
+        // Track every public TLE in the renderer. Labels use a compact subset so
+        // names remain legible on the mobile globe instead of covering the Earth.
+        setSatellites(positions);
         setIssPosition(iss);
         if (engineRef.current) {
           const markers = positions.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon }));
@@ -492,7 +492,7 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         label: 'ISS', detail: `ISS · ${Math.round(issPosition.altKm)} km`,
       });
     }
-    satellites.slice(0, 3).filter((satellite) => Number.isFinite(satellite.lat)).forEach((satellite) => {
+    satellites.slice(0, 12).filter((satellite) => Number.isFinite(satellite.lat)).forEach((satellite) => {
       targets.push({
         id: `sat-${satellite.id}`, type: 'satellite', lat: satellite.lat, lon: satellite.lon,
         label: String(satellite.name || satellite.id || 'SATELLITE').slice(0, 20),
