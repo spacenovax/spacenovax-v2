@@ -816,21 +816,39 @@ export default class EarthEngine {
     layer.sprites.clear();
   }
 
-  // Lightweight 3D satellite model — a small box "bus" body with two thin solar-panel
-  // wings, all built from primitive Three.js geometry (no external model file to load,
-  // stays cheap). Reused/repositioned across updates the same way sprite markers are.
+  // Shared 3D model for every public satellite position.  Do not fall back to a tiny
+  // billboard at far globe positions: the bus, solar wings, antenna mast and dish are
+  // all geometry, so ISS, stations and satellite families keep the same design as the
+  // Earth rotates.  The palette is mirrored by OrbitEarthView's HTML labels.
   _buildSatelliteModel(color) {
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ec });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.028), bodyMat);
+    const bodyMat = new THREE.MeshBasicMaterial({ color: 0xeafaff });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.032, 0.052), bodyMat);
     group.add(body);
-    const panelMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
-    const panelGeo = new THREE.PlaneGeometry(0.05, 0.016);
+    const panelMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.96 });
+    const panelGeo = new THREE.BoxGeometry(0.095, 0.024, 0.006);
     const panelL = new THREE.Mesh(panelGeo, panelMat);
-    panelL.position.x = -0.034;
+    panelL.position.x = -0.066;
+    panelL.rotation.y = 0.16;
     const panelR = new THREE.Mesh(panelGeo, panelMat);
-    panelR.position.x = 0.034;
+    panelR.position.x = 0.066;
+    panelR.rotation.y = -0.16;
     group.add(panelL, panelR);
+    const mast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.004, 0.004, 0.035, 8),
+      new THREE.MeshBasicMaterial({ color: 0x8ed9ef })
+    );
+    mast.rotation.x = Math.PI / 2;
+    mast.position.z = 0.04;
+    group.add(mast);
+    const dish = new THREE.Mesh(
+      new THREE.SphereGeometry(0.014, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0x8df4ff })
+    );
+    dish.scale.set(1, 0.45, 1);
+    dish.position.set(0, 0.018, 0.061);
+    group.add(dish);
+    group.userData.satellitePhase = Math.random() * Math.PI * 2;
     return group;
   }
 
@@ -940,10 +958,16 @@ export default class EarthEngine {
     this.earthMaterial.uniforms.uTime.value = time * 0.001;
     this.markerLayers.forEach((layer) => {
       layer.sprites.forEach((marker) => {
-        if (!marker.isSprite || !marker.userData.baseSize) return;
-        const pulse = 1 + Math.sin(time * 0.003 + marker.userData.pulseSeed) * 0.12;
-        const markerSize = marker.userData.baseSize * pulse;
-        marker.scale.set(markerSize, markerSize, 1);
+        if (marker.isSprite && marker.userData.baseSize) {
+          const pulse = 1 + Math.sin(time * 0.003 + marker.userData.pulseSeed) * 0.12;
+          const markerSize = marker.userData.baseSize * pulse;
+          marker.scale.set(markerSize, markerSize, 1);
+        }
+        // A restrained panel sweep makes each 3D satellite feel live without changing
+        // its public orbital position or turning it into a distracting animation.
+        if (marker.userData.satellitePhase != null) {
+          marker.rotation.z = Math.sin(time * 0.00055 + marker.userData.satellitePhase) * 0.12;
+        }
       });
     });
     this._stepRouteMarker(time);
