@@ -264,6 +264,7 @@ function normalizeData(data) {
   data.conversionBatches ||= [];
   data.vestingClaims ||= [];
   data.stakingPositions ||= [];
+  data.testnetPointTransfers ||= [];
   data.settings.tonTestnetEnabled ??= true;
   data.settings.tonTestnetPointsEnabled ??= true;
   data.settings.tonMainnetEnabled ??= false;
@@ -4061,12 +4062,33 @@ function walletDisplayName(user) {
 
 const TESTNET_POINT_FAUCET_AMOUNT = 10000;
 const TESTNET_POINT_FAUCET_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const TESTNET_POINT_TRANSFER_HISTORY_LIMIT = 12;
+function testnetPointAddress(user) {
+  return `TSPNX-${String(user?.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase()}`;
+}
+function normalizedTestnetPointAddress(value) {
+  return String(value || '').trim().toUpperCase();
+}
+function publicTestnetPointTransfers(data, user) {
+  return (data.testnetPointTransfers || [])
+    .filter((item) => item.fromUserId === user.id || item.toUserId === user.id)
+    .slice(-TESTNET_POINT_TRANSFER_HISTORY_LIMIT)
+    .reverse()
+    .map((item) => ({
+      id: item.id,
+      direction: item.fromUserId === user.id ? 'sent' : 'received',
+      amount: item.amount,
+      address: item.fromUserId === user.id ? item.toAddress : item.fromAddress,
+      at: item.at,
+    }));
+}
 function publicTestnetPointFaucet(user) {
   const lastClaimedAt = Number(user.testnetPointFaucetLastClaimedAt || 0);
   const nextClaimAt = lastClaimedAt ? lastClaimedAt + TESTNET_POINT_FAUCET_COOLDOWN_MS : 0;
   return {
     balance: Number(user.testnetPoints || 0),
     amountPerRequest: TESTNET_POINT_FAUCET_AMOUNT,
+    virtualAddress: testnetPointAddress(user),
     lastClaimedAt,
     nextClaimAt,
     available: !nextClaimAt || nextClaimAt <= now(),
@@ -4076,7 +4098,7 @@ function publicTestnetPointFaucet(user) {
 app.post('/api/nova-wallet/status', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data);
   if (!requireVerifiedCaptain(user, res)) return;
-  res.json({ ok: true, security: publicWalletSecurity(user), testnetPoints: publicTestnetPointFaucet(user), kycRequiredForTransfers: true, transfersEnabled: false });
+  res.json({ ok: true, security: publicWalletSecurity(user), testnetPoints: publicTestnetPointFaucet(user), testnetTransfers: publicTestnetPointTransfers(data, user), kycRequiredForTransfers: true, transfersEnabled: false });
 });
 app.post('/api/nova-wallet/testnet-points/request', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data);
@@ -4093,6 +4115,40 @@ app.post('/api/nova-wallet/testnet-points/request', (req, res) => {
   data.events.push({ type: 'ton_testnet_points_faucet_claimed', userId: user.id, amount: TESTNET_POINT_FAUCET_AMOUNT, at: now() });
   writeData(data);
   res.json({ ok: true, testnetPoints: updated, message: `${TESTNET_POINT_FAUCET_AMOUNT.toLocaleString()} test points were added.` });
+});
+app.post('/api/nova-wallet/testnet-points/transfer', (req, res) => {
+  const data = readData(); const sender = getSessionUser(req, data);
+  if (!requireVerifiedCaptain(sender, res)) return;
+  if (!data.settings?.tonTestnetEnabled || !data.settings?.tonTestnetPointsEnabled) {
+    return res.status(409).json({ ok: false, message: 'Testnet point transfers are currently unavailable.' });
+  }
+  const requestId = String(req.body?.requestId || '').trim();
+  const amount = Number(req.body?.amount);
+  const recipientAddress = normalizedTestnetPointAddress(req.body?.recipientAddress);
+  const pin = String(req.body?.pin || '');
+  if (!/^[a-zA-Z0-9_-]{12,100}$/.test(requestId)) return res.status(400).json({ ok: false, message: 'Invalid test transfer request.' });
+  if (!Number.isSafeInteger(amount) || amount <= 0) return res.status(400).json({ ok: false, message: 'Enter a whole-number Test Point amount greater than zero.' });
+  if (!/^TSPNX-[A-Z0-9_-]{1,80}$/.test(recipientAddress)) return res.status(400).json({ ok: false, message: 'Enter a valid TSPNX test address.' });
+  const security = novaWalletSecurity(sender);
+  if (!security.pinHash || !validWalletPin(pin) || !crypto.timingSafeEqual(Buffer.from(security.pinHash, 'hex'), Buffer.from(walletPinHash(pin, security.pinSalt), 'hex'))) {
+    return res.status(401).json({ ok: false, message: 'Confirm your six-digit NOVA Wallet PIN to send Test Points.' });
+  }
+  data.testnetPointTransfers ||= [];
+  const existing = data.testnetPointTransfers.find((item) => item.fromUserId === sender.id && item.requestId === requestId);
+  if (existing) return res.json({ ok: true, idempotent: true, transfer: existing, testnetPoints: publicTestnetPointFaucet(sender), testnetTransfers: publicTestnetPointTransfers(data, sender) });
+  const recipient = Object.values(data.users || {}).find((candidate) => normalizedTestnetPointAddress(testnetPointAddress(candidate)) === recipientAddress);
+  if (!recipient || recipient.isGuest || recipient.banned) return res.status(404).json({ ok: false, message: 'The TSPNX test address was not found.' });
+  if (recipient.id === sender.id) return res.status(400).json({ ok: false, message: 'You cannot send Test Points to your own test address.' });
+  if (Number(sender.testnetPoints || 0) < amount) return res.status(409).json({ ok: false, message: 'Insufficient Test Points.' });
+  sender.testnetPoints = Number(sender.testnetPoints || 0) - amount;
+  recipient.testnetPoints = Number(recipient.testnetPoints || 0) + amount;
+  sender.updatedAt = now(); recipient.updatedAt = now();
+  const transfer = { id: crypto.randomUUID(), requestId, fromUserId: sender.id, toUserId: recipient.id, fromAddress: testnetPointAddress(sender), toAddress: testnetPointAddress(recipient), amount, at: now() };
+  data.testnetPointTransfers.push(transfer);
+  data.testnetPointTransfers = data.testnetPointTransfers.slice(-5000);
+  data.events.push({ type: 'ton_testnet_points_transferred', userId: sender.id, recipientId: recipient.id, amount, transferId: transfer.id, at: transfer.at });
+  writeData(data);
+  res.json({ ok: true, transfer, testnetPoints: publicTestnetPointFaucet(sender), testnetTransfers: publicTestnetPointTransfers(data, sender), message: `${amount.toLocaleString()} Test Points were sent to ${transfer.toAddress}.` });
 });
 app.post('/api/nova-wallet/pin/setup', (req, res) => {
   const data = readData(); const user = getSessionUser(req, data);
