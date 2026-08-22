@@ -154,12 +154,12 @@ export default function OrbitScreen({ language, user }) {
         setIssTracked(iss ? 1 : 0);
         setOtherTracked(positions.length);
         if (engineRef.current) {
-          const markers = positions.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, color: 0x53e7ff }));
-          if (iss) markers.push({ id: 'ISS', lat: iss.lat, lon: iss.lon, color: 0xffffff });
+          const markers = positions.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon }));
+          if (iss) markers.push({ id: 'ISS', lat: iss.lat, lon: iss.lon });
           // Legacy screen uses the same full 3D satellite model as Orbit V20. This
           // prevents any route into Orbit from showing the discontinued flat sprites.
           engineRef.current.clearMarkerLayer('satellite');
-          engineRef.current.setSatelliteLayer3D(markers);
+          engineRef.current.setSatelliteLayer3D(markers, { color: 0x178fe5 });
         }
       };
       draw();

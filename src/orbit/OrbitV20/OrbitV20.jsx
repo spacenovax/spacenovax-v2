@@ -402,12 +402,12 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         setSatellites(positions.slice(0, 6));
         setIssPosition(iss);
         if (engineRef.current) {
-          const markers = positions.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, color: 0x53e7ff }));
-          if (iss) markers.push({ id: 'ISS', lat: iss.lat, lon: iss.lon, color: 0xffffff });
+          const markers = positions.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon }));
+          if (iss) markers.push({ id: 'ISS', lat: iss.lat, lon: iss.lon });
           // A prior Orbit renderer used this same layer name for flat sprite markers.
           // Clear it defensively so the live globe contains only the shared 3D model.
           engineRef.current.clearMarkerLayer('satellite');
-          engineRef.current.setSatelliteLayer3D(markers);
+          engineRef.current.setSatelliteLayer3D(markers, { color: 0x178fe5 });
         }
       };
       draw();
