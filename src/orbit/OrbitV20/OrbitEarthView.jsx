@@ -24,11 +24,17 @@ function Marker({ marker, projection }) {
   return (
     <div
       className={`ov20-marker ov20-marker-${marker.type} ${expanded ? 'expanded' : 'compact'}`}
-      style={{ left: projection.x, top: projection.y, '--marker-scale': projection.scale || 1 }}
+      style={{
+        left: projection.x,
+        top: projection.y,
+        '--marker-scale': projection.scale || 1,
+        '--label-nudge-x': `${marker.labelOffset?.x || 0}px`,
+        '--label-nudge-y': `${marker.labelOffset?.y || 0}px`,
+      }}
       aria-label={marker.label}
     >
       <span className="ov20-marker-pulse" />
-      <span className="ov20-marker-pin"><MarkerIcon type={marker.type} /></span>
+      {marker.type !== 'satellite' && <span className="ov20-marker-pin"><MarkerIcon type={marker.type} /></span>}
       <span className="ov20-marker-label">
         <b>{marker.label}</b>
         {expanded && <small>{marker.detail}</small>}

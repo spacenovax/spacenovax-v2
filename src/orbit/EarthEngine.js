@@ -835,10 +835,10 @@ export default class EarthEngine {
     layer.sprites.clear();
   }
 
-  // Shared 3D model for every public satellite position.  Do not fall back to a tiny
-  // billboard at far globe positions: the bus, solar wings, antenna mast and dish are
-  // all geometry, so ISS, stations and satellite families keep the same design as the
-  // Earth rotates.  The palette is mirrored by OrbitEarthView's HTML labels.
+  // One standardized observation-satellite render for every public satellite position.
+  // Do not add a second procedural body, solar-panel or dish behind this render: doing
+  // so makes old and new satellite silhouettes appear mixed together at different
+  // camera angles.  Each public track must use this exact same visual identity.
   _buildSatelliteModel(color) {
     const group = new THREE.Group();
     const satelliteVisual = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -851,37 +851,9 @@ export default class EarthEngine {
     }));
     // One high-detail 3D render shared by every tracked satellite. Kept compact
     // so the mobile globe stays readable even when 32 public tracks are active.
-    satelliteVisual.scale.set(0.19, 0.127, 1);
+    satelliteVisual.scale.set(0.17, 0.113, 1);
     satelliteVisual.renderOrder = 3;
     group.add(satelliteVisual);
-
-    const bodyMat = new THREE.MeshBasicMaterial({ color: 0xeafaff });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.02, 0.032), bodyMat);
-    body.position.z = -0.012;
-    group.add(body);
-    const panelMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.34 });
-    const panelGeo = new THREE.BoxGeometry(0.055, 0.014, 0.004);
-    const panelL = new THREE.Mesh(panelGeo, panelMat);
-    panelL.position.x = -0.038;
-    panelL.rotation.y = 0.16;
-    const panelR = new THREE.Mesh(panelGeo, panelMat);
-    panelR.position.x = 0.038;
-    panelR.rotation.y = -0.16;
-    group.add(panelL, panelR);
-    const mast = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.004, 0.004, 0.035, 8),
-      new THREE.MeshBasicMaterial({ color: 0x8ed9ef })
-    );
-    mast.rotation.x = Math.PI / 2;
-    mast.position.z = 0.04;
-    group.add(mast);
-    const dish = new THREE.Mesh(
-      new THREE.SphereGeometry(0.014, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0x8df4ff })
-    );
-    dish.scale.set(1, 0.45, 1);
-    dish.position.set(0, 0.018, 0.061);
-    group.add(dish);
     group.userData.satellitePhase = Math.random() * Math.PI * 2;
     return group;
   }

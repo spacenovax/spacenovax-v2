@@ -350,7 +350,7 @@
   animation:ov20-live-satellite-float 8s ease-in-out infinite;
 }
 .ov20-marker-satellite .ov20-marker-label {
-  margin-top:-2px; padding:0; border:0; border-radius:0; background:transparent;
+  margin-top:calc(5px + var(--label-nudge-y, 0px)); margin-left:var(--label-nudge-x, 0px); padding:0; border:0; border-radius:0; background:transparent;
   box-shadow:none; text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 8px rgba(183,239,255,.65);
 }
 .ov20-marker-satellite .ov20-marker-label b { color:#eafaff; font-size:6.5px; letter-spacing:.03em; }

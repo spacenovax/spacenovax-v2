@@ -492,10 +492,14 @@ export default function OrbitV20({ language, user, onOpenMining }) {
         label: 'ISS', detail: `ISS · ${Math.round(issPosition.altKm)} km`,
       });
     }
-    satellites.slice(0, 12).filter((satellite) => Number.isFinite(satellite.lat)).forEach((satellite) => {
+    // Every rendered public satellite receives its own name target.  The view takes
+    // care of small label offsets where tracks happen to be close together; silently
+    // cutting this list caused visible satellites with no identifying name.
+    satellites.filter((satellite) => Number.isFinite(satellite.lat)).forEach((satellite, index) => {
       targets.push({
         id: `sat-${satellite.id}`, type: 'satellite', lat: satellite.lat, lon: satellite.lon,
         label: String(satellite.name || satellite.id || 'SATELLITE').slice(0, 20),
+        labelOffset: { x: ((index % 4) - 1.5) * 12, y: (Math.floor(index / 4) % 3) * 8 },
         detail: satellite.estimated ? (t.ko ? '관측 표시 보조 궤도' : 'DISPLAY ORBIT BACKUP') : (t.ko ? '실시간 궤도' : 'LIVE ORBIT'),
       });
     });
