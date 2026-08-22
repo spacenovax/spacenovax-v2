@@ -4592,6 +4592,20 @@ app.get('/api/nova/status', (req, res) => {
 // crewed stations, weather/NOAA, Earth-observation and navigation constellations.
 const ORBIT_TLE_CACHE_MS = 6 * 60 * 60 * 1000;
 const orbitTleCache = { at: 0, satellites: [] };
+const ORBIT_TLE_FALLBACK_PATH = path.join(__dirname, 'public', 'orbit', 'weather-constellation.tle');
+
+function parsePublicTleSet(tleText) {
+  const lines = String(tleText || '').split('\n').map((line) => line.trimEnd()).filter(Boolean);
+  const satellites = [];
+  for (let index = 0; index + 2 < lines.length; index += 3) {
+    const name = lines[index]?.trim();
+    const line1 = lines[index + 1];
+    const line2 = lines[index + 2];
+    if (name && line1?.startsWith('1 ') && line2?.startsWith('2 ')) satellites.push({ name, line1, line2 });
+  }
+  return satellites;
+}
+
 app.get('/api/orbit/satellites', async (req, res) => {
   try {
     if (orbitTleCache.satellites.length && now() - orbitTleCache.at < ORBIT_TLE_CACHE_MS) {
@@ -4601,18 +4615,22 @@ app.get('/api/orbit/satellites', async (req, res) => {
     // reject the burst, leaving the globe stuck on its six-item visual fallback.
     // The public weather group alone provides more than enough independently
     // tracked spacecraft for the mobile constellation and is fetched as one TLE set.
-    const response = await fetch('https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle', {
-      headers: { 'User-Agent': 'Mozilla/5.0 SpaceNovaX-Orbit public TLE relay' },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) throw new Error(`Celestrak responded ${response.status}`);
-    const lines = (await response.text()).split('\n').map((line) => line.trimEnd()).filter(Boolean);
-    const satellites = [];
-    for (let index = 0; index + 2 < lines.length; index += 3) {
-      const name = lines[index]?.trim();
-      const line1 = lines[index + 1];
-      const line2 = lines[index + 2];
-      if (name && line1?.startsWith('1 ') && line2?.startsWith('2 ')) satellites.push({ name, line1, line2 });
+    let satellites = [];
+    let source = 'live';
+    try {
+      const response = await fetch('https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle', {
+        headers: { 'User-Agent': 'Mozilla/5.0 SpaceNovaX-Orbit public TLE relay' },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) throw new Error(`Celestrak responded ${response.status}`);
+      satellites = parsePublicTleSet(await response.text());
+    } catch (liveError) {
+      // Render occasionally blocks this public upstream.  Fall back only to a
+      // bundled, publicly sourced CelesTrak TLE snapshot—never fabricated
+      // coordinates—so the globe still has the complete 3D constellation.
+      source = 'published-tle-snapshot';
+      satellites = parsePublicTleSet(fs.readFileSync(ORBIT_TLE_FALLBACK_PATH, 'utf8'));
+      console.warn('Live CelesTrak TLE unavailable; using published TLE snapshot.', liveError.message);
     }
     if (!satellites.length) throw new Error('Celestrak weather TLE set unavailable');
     // Keep the WebGL layer light, but provide enough real tracked objects for a
@@ -4621,7 +4639,7 @@ app.get('/api/orbit/satellites', async (req, res) => {
     // hemisphere while remaining light enough for mobile WebGL rendering.
     orbitTleCache.satellites = satellites.slice(0, 32);
     orbitTleCache.at = now();
-    return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: false });
+    return res.json({ ok: true, satellites: orbitTleCache.satellites, cached: false, source });
   } catch (error) {
     console.error('Orbit TLE fetch failed', error.message);
     if (orbitTleCache.satellites.length) {
